@@ -20,6 +20,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SectionHeading } from "@/components/landing/section-heading";
+import { api } from "@/lib/api";
+import { useApp } from "@/components/app/context";
 
 const signupSchema = z.object({
   name: z
@@ -86,6 +88,7 @@ const SIGNUP_PERKS = [
 export function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const { setUser, navigate } = useApp();
 
   const {
     register,
@@ -100,28 +103,20 @@ export function Signup() {
   async function onSubmit(values: SignupValues) {
     setSubmitting(true);
     try {
-      const res = await fetch("/api/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+      const { user } = await api.signup({
+        name: values.name,
+        contact: values.contact,
+        password: values.password,
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
-
-      if (!res.ok || !data.ok) {
-        toast.error("Couldn't create your account", {
-          description: data.error ?? "Please try again in a moment.",
-        });
-        return;
-      }
-
-      toast.success("Welcome to DEAL!", {
-        description:
-          "Your account has been created. We'll reach out shortly to get you set up.",
+      setUser(user);
+      toast.success(`Welcome to DEAL, ${user.name.split(" ")[0]}!`, {
+        description: "Let's set up your creator profile.",
       });
       reset();
-    } catch {
-      toast.error("Network error", {
-        description: "Check your connection and try again.",
+      navigate("/onboarding");
+    } catch (err) {
+      toast.error("Couldn't create your account", {
+        description: err instanceof Error ? err.message : "Please try again in a moment.",
       });
     } finally {
       setSubmitting(false);

@@ -7,12 +7,15 @@ import {
   Check,
   Clock3,
   Lock,
+  Play,
   ShieldCheck,
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { quickDemoLogin, useApp } from "@/components/app/context";
+import { toast } from "sonner";
 
 const fadeUp = {
   initial: { opacity: 0, y: 22 },
@@ -114,6 +117,16 @@ function DealMockupCard() {
 }
 
 export function Hero() {
+  const { navigate, setUser } = useApp();
+
+  async function tryDemo() {
+    try {
+      await quickDemoLogin(navigate, setUser);
+    } catch {
+      toast.error("Demo is warming up — try again in a moment.");
+    }
+  }
+
   return (
     <section className="relative overflow-hidden">
       {/* soft mint wash behind hero */}
@@ -169,22 +182,21 @@ export function Hero() {
             className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center"
           >
             <Button
-              asChild
               size="lg"
               className="h-12 px-6 text-[15px] font-bold shadow-md shadow-primary/25"
+              onClick={() => navigate("/signup")}
             >
-              <a href="#signup">
-                Create my free account
-                <ArrowRight className="ml-1 h-4.5 w-4.5" />
-              </a>
+              Create my free account
+              <ArrowRight className="ml-1 h-4.5 w-4.5" />
             </Button>
             <Button
-              asChild
               size="lg"
               variant="outline"
               className="h-12 border-input px-6 text-[15px] font-bold text-foreground hover:bg-muted"
+              onClick={tryDemo}
             >
-              <a href="#how">See how it works</a>
+              <Play className="mr-1.5 h-4 w-4 fill-primary text-primary" />
+              Try the live demo
             </Button>
           </motion.div>
 

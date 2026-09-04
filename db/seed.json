@@ -1,0 +1,384 @@
+{
+  "users": [
+    {
+      "id": "u_tobi",
+      "name": "Tobi A.",
+      "handle": "tobi-a",
+      "email": "tobi@deal.ng",
+      "phone": "+234 801 234 5678",
+      "whatsapp": "+2348012345678",
+      "password": "demo1234",
+      "craft": "Photographer",
+      "location": "Akure, Ondo State",
+      "bio": "Capturing real moments, beautiful stories and visuals that connect.",
+      "verified": true,
+      "onboarded": true,
+      "createdAt": "2025-08-01T09:00:00.000Z"
+    }
+  ],
+  "services": [
+    {
+      "id": "s_pre",
+      "userId": "u_tobi",
+      "title": "Pre-wedding Photography",
+      "desc": "3–4 hour shoot, 2 locations, 40+ edited photos.",
+      "from": 120000,
+      "duration": "3–4 hrs",
+      "popular": true,
+      "includes": [
+        "Pre-shoot consultation",
+        "3–4 hours photoshoot",
+        "2 locations",
+        "40+ high-resolution, professionally edited photos",
+        "Online gallery for easy download and sharing",
+        "1 round of revisions"
+      ]
+    },
+    {
+      "id": "s_portrait",
+      "userId": "u_tobi",
+      "title": "Portrait Session",
+      "desc": "Studio or outdoor portraits for individuals.",
+      "from": 50000,
+      "duration": "1–2 hrs",
+      "popular": false,
+      "includes": [
+        "1–2 hour session",
+        "Studio or outdoor location",
+        "20+ retouched photos",
+        "Online gallery",
+        "1 round of revisions"
+      ]
+    },
+    {
+      "id": "s_event",
+      "userId": "u_tobi",
+      "title": "Event Photography",
+      "desc": "Birthdays, weddings, corporate events and more.",
+      "from": 150000,
+      "duration": "Up to 8 hrs",
+      "popular": false,
+      "includes": [
+        "Full event coverage (up to 8 hours)",
+        "100+ edited photos",
+        "Same-day highlight previews",
+        "Online gallery",
+        "2 rounds of revisions"
+      ]
+    },
+    {
+      "id": "s_video",
+      "userId": "u_tobi",
+      "title": "Short Video Coverage",
+      "desc": "Short-form videos for events, promotions and more.",
+      "from": 80000,
+      "duration": "Up to 4 hrs",
+      "popular": false,
+      "includes": [
+        "Up to 4 hours coverage",
+        "1–3 minute highlight video",
+        "Vertical cuts for social media",
+        "2 rounds of revisions"
+      ]
+    }
+  ],
+  "requests": [
+    {
+      "id": "r_lola",
+      "ref": "REQ-2025-00021",
+      "creatorId": "u_tobi",
+      "serviceId": "s_pre",
+      "clientName": "Lola & Tunde",
+      "clientContact": "lola.tunde@email.com",
+      "eventDate": "2025-08-24",
+      "location": "Ikoyi, Lagos",
+      "budgetMin": 100000,
+      "budgetMax": 150000,
+      "description": "Hi Tobi, we're getting married in August and would love you to capture our special day. We love natural, candid moments and timeless shots.",
+      "notes": "We prefer early morning or golden hour sessions. Outfits: one traditional, one casual.",
+      "status": "new",
+      "createdAt": "2026-09-04T08:42:00.000Z"
+    },
+    {
+      "id": "r_tech",
+      "ref": "REQ-2025-00022",
+      "creatorId": "u_tobi",
+      "serviceId": "s_event",
+      "clientName": "TechConnect Conference",
+      "clientContact": "events@techconnect.africa",
+      "eventDate": "2025-09-05",
+      "location": "Eko Hotel, VI",
+      "budgetMin": 120000,
+      "budgetMax": 200000,
+      "description": "We're hosting our annual tech conference and need coverage for the entire event, including keynote sessions and networking.",
+      "notes": "We'll need same-day highlights for our social media team.",
+      "status": "new",
+      "createdAt": "2026-09-04T09:15:00.000Z"
+    },
+    {
+      "id": "r_glow",
+      "ref": "REQ-2025-00020",
+      "creatorId": "u_tobi",
+      "serviceId": "s_portrait",
+      "clientName": "Glow Skincare",
+      "clientContact": "hello@glowskincare.ng",
+      "eventDate": "2025-08-15",
+      "location": "Studio, Lekki",
+      "budgetMin": 50000,
+      "budgetMax": 90000,
+      "description": "We need clean, high-quality product photos for our new skincare line launch.",
+      "notes": "Minimal, clean aesthetic with soft daylight tones.",
+      "status": "replied",
+      "createdAt": "2026-09-03T14:20:00.000Z"
+    }
+  ],
+  "deals": [
+    {
+      "id": "d_deal002",
+      "ref": "DEAL-002",
+      "creatorId": "u_tobi",
+      "requestId": "r_glow",
+      "shareToken": "tok_glow9",
+      "title": "Product Photography — Glow Skincare",
+      "serviceTitle": "Product Photography",
+      "client": { "name": "Glow Skincare", "contact": "hello@glowskincare.ng" },
+      "summary": "Clean, high-quality product photos for the new skincare line launch — 12 hero shots plus detail images.",
+      "eventDate": "2025-08-15",
+      "location": "Studio, Lekki",
+      "message": "Hi Glow Skincare, I'm excited to shoot your new line. This deal covers the studio session, retouching and final delivery as discussed.",
+      "scope": "Studio product session for 12 SKUs, soft daylight styling, white and lifestyle backdrops, professional retouching.",
+      "deliverables": [
+        "12 hero product photos (high-res)",
+        "24 detail/crop images",
+        "Web-optimized exports",
+        "Online gallery"
+      ],
+      "price": 60000,
+      "depositPercent": 50,
+      "startDate": "2025-08-15",
+      "dueDate": "2025-08-22",
+      "revisions": 2,
+      "status": "sent",
+      "events": [
+        { "at": "2026-09-03T16:05:00.000Z", "type": "created", "label": "Deal created", "actor": "creator" },
+        { "at": "2026-09-03T16:06:00.000Z", "type": "sent", "label": "Deal sent to Glow Skincare", "actor": "creator" }
+      ],
+      "payments": [],
+      "deliveries": [],
+      "finalFiles": [],
+      "createdAt": "2026-09-03T16:05:00.000Z",
+      "sentAt": "2026-09-03T16:06:00.000Z"
+    },
+    {
+      "id": "d_deal001",
+      "ref": "DEAL-001",
+      "creatorId": "u_tobi",
+      "requestId": "r_lola",
+      "shareToken": "tok_lola4",
+      "title": "Pre-wedding Photography",
+      "serviceTitle": "Pre-wedding Photography",
+      "client": { "name": "Lola & Tunde", "contact": "lola.tunde@email.com" },
+      "summary": "Pre-wedding shoot across 2 locations in Ikoyi with 40+ edited photos and an online gallery.",
+      "eventDate": "2025-08-24",
+      "location": "Ikoyi, Lagos",
+      "message": "Hi Lola & Tunde, I'm excited to send you this custom deal for your special day. Please review the details and let me know if you have any questions.",
+      "scope": "3–4 hour pre-wedding photoshoot across Lekki Conservation Centre and Nike Art Gallery. Natural, candid style with lots of greenery.",
+      "deliverables": [
+        "40+ high-resolution edited photos",
+        "2 locations",
+        "Online gallery",
+        "Print release"
+      ],
+      "price": 120000,
+      "depositPercent": 50,
+      "startDate": "2025-08-10",
+      "dueDate": "2025-08-24",
+      "revisions": 2,
+      "status": "active",
+      "events": [
+        { "at": "2026-09-01T10:00:00.000Z", "type": "created", "label": "Deal created", "actor": "creator" },
+        { "at": "2026-09-01T10:02:00.000Z", "type": "sent", "label": "Deal sent to Lola & Tunde", "actor": "creator" },
+        { "at": "2026-09-02T09:14:00.000Z", "type": "accepted", "label": "Deal accepted", "actor": "client" },
+        { "at": "2026-09-02T09:16:00.000Z", "type": "deposit_paid", "label": "Deposit paid — ₦60,000 secured in escrow", "actor": "client" }
+      ],
+      "payments": [
+        { "id": "p1", "type": "deposit", "amount": 60000, "method": "Card", "status": "held", "paidAt": "2026-09-02T09:16:00.000Z" }
+      ],
+      "deliveries": [],
+      "finalFiles": [],
+      "createdAt": "2026-09-01T10:00:00.000Z",
+      "sentAt": "2026-09-01T10:02:00.000Z",
+      "acceptedAt": "2026-09-02T09:14:00.000Z",
+      "depositPaidAt": "2026-09-02T09:16:00.000Z"
+    },
+    {
+      "id": "d_deal003",
+      "ref": "DEAL-003",
+      "creatorId": "u_tobi",
+      "requestId": null,
+      "shareToken": "tok_tech2",
+      "title": "Event Photography — TechConnect",
+      "serviceTitle": "Event Photography",
+      "client": { "name": "TechConnect Conference", "contact": "events@techconnect.africa" },
+      "summary": "Full-day conference coverage with same-day highlights.",
+      "eventDate": "2025-09-05",
+      "location": "Eko Hotel, VI",
+      "message": "Hello, here's the deal for the TechConnect annual conference coverage.",
+      "scope": "Up to 8 hours coverage of keynote sessions, panels and networking. Same-day highlight previews for social media.",
+      "deliverables": ["100+ edited photos", "Same-day highlights", "Online gallery"],
+      "price": 150000,
+      "depositPercent": 50,
+      "startDate": "2025-09-05",
+      "dueDate": "2025-09-12",
+      "revisions": 2,
+      "status": "approved",
+      "events": [
+        { "at": "2026-08-28T11:00:00.000Z", "type": "created", "label": "Deal created", "actor": "creator" },
+        { "at": "2026-08-28T11:05:00.000Z", "type": "sent", "label": "Deal sent to TechConnect", "actor": "creator" },
+        { "at": "2026-08-29T08:00:00.000Z", "type": "accepted", "label": "Deal accepted", "actor": "client" },
+        { "at": "2026-08-29T08:02:00.000Z", "type": "deposit_paid", "label": "Deposit paid — ₦75,000 secured in escrow", "actor": "client" },
+        { "at": "2026-09-06T18:30:00.000Z", "type": "delivered", "label": "Delivery submitted for review", "actor": "creator" },
+        { "at": "2026-09-07T12:00:00.000Z", "type": "approved", "label": "Delivery approved by client", "actor": "client" }
+      ],
+      "payments": [
+        { "id": "p2", "type": "deposit", "amount": 75000, "method": "Bank Transfer", "status": "held", "paidAt": "2026-08-29T08:02:00.000Z" }
+      ],
+      "deliveries": [
+        {
+          "id": "dl1",
+          "note": "Full conference gallery — keynote, panels and networking highlights.",
+          "files": [
+            { "id": "f1", "name": "TechConnect Conference (High Res).zip", "size": "482.1 MB", "kind": "ZIP" },
+            { "id": "f2", "name": "Same-day Highlights (Web).zip", "size": "36.4 MB", "kind": "ZIP" }
+          ],
+          "submittedAt": "2026-09-06T18:30:00.000Z"
+        }
+      ],
+      "finalFiles": [],
+      "createdAt": "2026-08-28T11:00:00.000Z",
+      "sentAt": "2026-08-28T11:05:00.000Z",
+      "acceptedAt": "2026-08-29T08:00:00.000Z",
+      "depositPaidAt": "2026-08-29T08:02:00.000Z",
+      "deliveredAt": "2026-09-06T18:30:00.000Z",
+      "approvedAt": "2026-09-07T12:00:00.000Z"
+    },
+    {
+      "id": "d_deal004",
+      "ref": "DEAL-004",
+      "creatorId": "u_tobi",
+      "requestId": null,
+      "shareToken": "tok_ezie7",
+      "title": "Pre-wedding Photography",
+      "serviceTitle": "Pre-wedding Photography",
+      "client": { "name": "Ezekiel", "contact": "eze.k@gmail.com" },
+      "summary": "Couple shoot (outdoor + studio) with 40+ edited photos.",
+      "eventDate": "2025-08-24",
+      "location": "Ikoyi, Lagos",
+      "message": "Hi Ezekiel, great meeting you. Here's the deal we discussed for your pre-wedding shoot.",
+      "scope": "Couple shoot — outdoor session at Lekki Conservation Centre plus studio portraits.",
+      "deliverables": ["40+ edited photos (high res)", "Web-size exports", "Online gallery"],
+      "price": 120000,
+      "depositPercent": 50,
+      "startDate": "2025-08-14",
+      "dueDate": "2025-08-24",
+      "revisions": 1,
+      "status": "delivered",
+      "events": [
+        { "at": "2026-05-16T09:00:00.000Z", "type": "created", "label": "Deal created", "actor": "creator" },
+        { "at": "2026-05-16T09:05:00.000Z", "type": "sent", "label": "Deal sent to Ezekiel", "actor": "creator" },
+        { "at": "2026-05-16T14:00:00.000Z", "type": "accepted", "label": "Deal accepted", "actor": "client" },
+        { "at": "2026-05-16T14:01:00.000Z", "type": "deposit_paid", "label": "Deposit paid — ₦60,000 secured in escrow", "actor": "client" },
+        { "at": "2026-05-18T10:24:00.000Z", "type": "delivered", "label": "Delivery submitted for review", "actor": "creator" }
+      ],
+      "payments": [
+        { "id": "p3", "type": "deposit", "amount": 60000, "method": "Card", "status": "held", "paidAt": "2026-05-16T14:01:00.000Z" }
+      ],
+      "deliveries": [
+        {
+          "id": "dl2",
+          "note": "Preview selection from both locations — pick your favourites and I'll fine-tune.",
+          "files": [
+            { "id": "f3", "name": "Pre-wedding Photos (High Res).zip", "size": "45.6 MB", "kind": "ZIP" },
+            { "id": "f4", "name": "Pre-wedding Photos (Web Size).zip", "size": "18.9 MB", "kind": "ZIP" }
+          ],
+          "submittedAt": "2026-05-18T10:24:00.000Z"
+        }
+      ],
+      "finalFiles": [],
+      "createdAt": "2026-05-16T09:00:00.000Z",
+      "sentAt": "2026-05-16T09:05:00.000Z",
+      "acceptedAt": "2026-05-16T14:00:00.000Z",
+      "depositPaidAt": "2026-05-16T14:01:00.000Z",
+      "deliveredAt": "2026-05-18T10:24:00.000Z"
+    },
+    {
+      "id": "d_deal005",
+      "ref": "DEAL-005",
+      "creatorId": "u_tobi",
+      "requestId": null,
+      "shareToken": "tok_reale3",
+      "title": "Real Estate Photography",
+      "serviceTitle": "Real Estate Photography",
+      "client": { "name": "Lekki Property", "contact": "sales@lekkiproperty.ng" },
+      "summary": "Interior and exterior photos of a 4-bedroom apartment for listing.",
+      "eventDate": "2025-08-10",
+      "location": "Lekki Phase 1",
+      "message": "Here's the deal for the Lekki property listing shoot.",
+      "scope": "Interior and exterior photography of a 4-bedroom apartment, twilight shots included.",
+      "deliverables": ["25+ edited photos", "Twilight exterior set", "Web-optimized exports"],
+      "price": 80000,
+      "depositPercent": 50,
+      "startDate": "2025-08-10",
+      "dueDate": "2025-08-14",
+      "revisions": 1,
+      "status": "completed",
+      "events": [
+        { "at": "2026-07-28T10:00:00.000Z", "type": "created", "label": "Deal created", "actor": "creator" },
+        { "at": "2026-07-28T10:01:00.000Z", "type": "sent", "label": "Deal sent to Lekki Property", "actor": "creator" },
+        { "at": "2026-07-28T13:00:00.000Z", "type": "accepted", "label": "Deal accepted", "actor": "client" },
+        { "at": "2026-07-28T13:01:00.000Z", "type": "deposit_paid", "label": "Deposit paid — ₦40,000 secured in escrow", "actor": "client" },
+        { "at": "2026-08-11T17:00:00.000Z", "type": "delivered", "label": "Delivery submitted for review", "actor": "creator" },
+        { "at": "2026-08-12T09:00:00.000Z", "type": "approved", "label": "Delivery approved by client", "actor": "client" },
+        { "at": "2026-08-12T09:05:00.000Z", "type": "balance_paid", "label": "Balance paid — ₦40,000 secured", "actor": "client" },
+        { "at": "2026-08-12T09:10:00.000Z", "type": "files_released", "label": "Final files released", "actor": "creator" },
+        { "at": "2026-08-12T09:14:00.000Z", "type": "payment_released", "label": "₦80,000 released to your bank account", "actor": "system" },
+        { "at": "2026-08-12T09:14:01.000Z", "type": "completed", "label": "Deal completed", "actor": "system" }
+      ],
+      "payments": [
+        { "id": "p4", "type": "deposit", "amount": 40000, "method": "Card", "status": "released", "paidAt": "2026-07-28T13:01:00.000Z" },
+        { "id": "p5", "type": "balance", "amount": 40000, "method": "Card", "status": "released", "paidAt": "2026-08-12T09:05:00.000Z" }
+      ],
+      "deliveries": [
+        {
+          "id": "dl3",
+          "note": "Full property set — interiors, exteriors and twilight shots.",
+          "files": [{ "id": "f5", "name": "Lekki Property Shoot.zip", "size": "112.8 MB", "kind": "ZIP" }],
+          "submittedAt": "2026-08-11T17:00:00.000Z"
+        }
+      ],
+      "finalFiles": [
+        { "id": "f6", "name": "Lekki Property — Final Prints.zip", "size": "204.3 MB", "kind": "ZIP" },
+        { "id": "f7", "name": "Lekki Property — Web Exports.zip", "size": "28.9 MB", "kind": "ZIP" }
+      ],
+      "createdAt": "2026-07-28T10:00:00.000Z",
+      "sentAt": "2026-07-28T10:01:00.000Z",
+      "acceptedAt": "2026-07-28T13:00:00.000Z",
+      "depositPaidAt": "2026-07-28T13:01:00.000Z",
+      "deliveredAt": "2026-08-11T17:00:00.000Z",
+      "approvedAt": "2026-08-12T09:00:00.000Z",
+      "balancePaidAt": "2026-08-12T09:05:00.000Z",
+      "filesReleasedAt": "2026-08-12T09:10:00.000Z",
+      "paymentReleasedAt": "2026-08-12T09:14:00.000Z",
+      "completedAt": "2026-08-12T09:14:01.000Z"
+    }
+  ],
+  "settings": {
+    "earningsSeries": [
+      { "month": "Apr", "amount": 320000 },
+      { "month": "May", "amount": 410000 },
+      { "month": "Jun", "amount": 385000 },
+      { "month": "Jul", "amount": 455000 },
+      { "month": "Aug", "amount": 485000 }
+    ]
+  }
+}

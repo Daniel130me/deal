@@ -3,8 +3,10 @@
 import { motion } from "framer-motion";
 import { ArrowRight, BadgePercent } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useApp } from "@/components/app/context";
 
 export function PricingBanner() {
+  const { navigate } = useApp();
   return (
     <section className="pb-16 sm:pb-24">
       <div className="container-page">
@@ -40,14 +42,12 @@ export function PricingBanner() {
           </p>
           <div className="relative mt-8">
             <Button
-              asChild
               size="lg"
               className="h-12 bg-primary px-7 text-[15px] font-bold text-white shadow-lg shadow-primary/30 hover:bg-primary/90"
+              onClick={() => navigate("/signup")}
             >
-              <a href="#signup">
-                Start free
-                <ArrowRight className="ml-1 h-4.5 w-4.5" />
-              </a>
+              Start free
+              <ArrowRight className="ml-1 h-4.5 w-4.5" />
             </Button>
           </div>
         </motion.div>

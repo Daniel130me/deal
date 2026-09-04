@@ -1,23 +1,24 @@
+"use client";
+
 import { Instagram, Linkedin, Twitter } from "lucide-react";
+import { toast } from "sonner";
 import { Logo } from "@/components/landing/logo";
+import { scrollToId } from "@/components/landing/landing";
+import { useApp } from "@/components/app/context";
 
 const PRODUCT_LINKS = [
-  { label: "How it works", href: "#how" },
-  { label: "Why DEAL", href: "#features" },
-  { label: "The flow", href: "#flow" },
-  { label: "Pricing", href: "#signup" },
+  { label: "How it works", id: "how" },
+  { label: "Why DEAL", id: "features" },
+  { label: "The flow", id: "flow" },
+  { label: "Pricing", id: "signup" },
 ];
 
 const COMPANY_LINKS = [
-  { label: "For creatives", href: "#creatives" },
-  { label: "FAQ", href: "#faq" },
-  { label: "Contact", href: "mailto:hello@deal.africa" },
+  { label: "For creatives", id: "creatives" },
+  { label: "FAQ", id: "faq" },
 ];
 
-const LEGAL_LINKS = [
-  { label: "Terms of Service", href: "#" },
-  { label: "Privacy Policy", href: "#" },
-];
+const LEGAL_LINKS = ["Terms of Service", "Privacy Policy"];
 
 const SOCIALS = [
   { label: "DEAL on Instagram", href: "#", icon: Instagram },
@@ -26,6 +27,10 @@ const SOCIALS = [
 ];
 
 export function SiteFooter() {
+  const { user, navigate } = useApp();
+
+  const goSection = (id: string) => () => scrollToId(id);
+
   return (
     <footer className="mt-auto bg-[#0e1f33] pb-[max(1.5rem,env(safe-area-inset-bottom))] text-slate-300">
       <div className="container-page pt-14">
@@ -39,14 +44,15 @@ export function SiteFooter() {
             </p>
             <div className="mt-5 flex items-center gap-2">
               {SOCIALS.map((social) => (
-                <a
+                <button
                   key={social.label}
-                  href={social.href}
+                  type="button"
                   aria-label={social.label}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-white/8 text-slate-300 transition-colors hover:bg-primary hover:text-white"
+                  onClick={() => toast.info("Social pages are coming soon")}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-slate-300 transition-colors hover:bg-primary hover:text-white"
                 >
                   <social.icon className="h-4 w-4" />
-                </a>
+                </button>
               ))}
             </div>
           </div>
@@ -59,14 +65,22 @@ export function SiteFooter() {
             <ul className="mt-4 space-y-2.5">
               {PRODUCT_LINKS.map((link) => (
                 <li key={link.label}>
-                  <a
-                    href={link.href}
+                  <button
+                    onClick={goSection(link.id)}
                     className="text-sm font-semibold text-slate-300 transition-colors hover:text-emerald-400"
                   >
                     {link.label}
-                  </a>
+                  </button>
                 </li>
               ))}
+              <li>
+                <button
+                  onClick={() => navigate(user ? "/dashboard" : "/signup")}
+                  className="text-sm font-semibold text-slate-300 transition-colors hover:text-emerald-400"
+                >
+                  {user ? "Open the app" : "Create free account"}
+                </button>
+              </li>
             </ul>
           </nav>
 
@@ -77,14 +91,22 @@ export function SiteFooter() {
             <ul className="mt-4 space-y-2.5">
               {COMPANY_LINKS.map((link) => (
                 <li key={link.label}>
-                  <a
-                    href={link.href}
+                  <button
+                    onClick={goSection(link.id)}
                     className="text-sm font-semibold text-slate-300 transition-colors hover:text-emerald-400"
                   >
                     {link.label}
-                  </a>
+                  </button>
                 </li>
               ))}
+              <li>
+                <button
+                  onClick={() => toast.info("Reach us at hello@deal.ng")}
+                  className="text-sm font-semibold text-slate-300 transition-colors hover:text-emerald-400"
+                >
+                  Contact
+                </button>
+              </li>
             </ul>
           </nav>
 
@@ -93,14 +115,14 @@ export function SiteFooter() {
               Legal
             </h3>
             <ul className="mt-4 space-y-2.5">
-              {LEGAL_LINKS.map((link) => (
-                <li key={link.label}>
-                  <a
-                    href={link.href}
+              {LEGAL_LINKS.map((label) => (
+                <li key={label}>
+                  <button
+                    onClick={() => toast.info("Legal pages are coming soon")}
                     className="text-sm font-semibold text-slate-300 transition-colors hover:text-emerald-400"
                   >
-                    {link.label}
-                  </a>
+                    {label}
+                  </button>
                 </li>
               ))}
             </ul>
