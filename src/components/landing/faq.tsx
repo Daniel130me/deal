@@ -11,34 +11,34 @@ import {
 
 const FAQS = [
   {
-    question: "Is DEAL a bank?",
+    question: "When do I actually receive my money?",
     answer:
-      "No. DEAL is a deal-management layer for creative work: the agreement, the milestones and the payment record. Payments are processed through licensed payment partners, and settled earnings go straight to your bank account or mobile money.",
+      "The moment your client approves the completed work. Everything they've paid — deposit and installments — is sitting in Payaza escrow, and on approval it releases automatically to your Payaza payout account. No “confirm payout” step, no waiting around.",
   },
   {
-    question: "When do I actually get paid?",
+    question: "Can my client pay in installments?",
     answer:
-      "The client funds the deposit before you start — you see it confirmed in the deal before you deliver anything. The balance is triggered the moment your client approves the work, and final files are released only after it lands.",
+      "Yes. You set the structure: a deposit plus up to 3 installments, or any balance afterwards. Your client can pay the next installment whenever they're ready — and every single payment is secured in Payaza escrow until the work is approved.",
   },
   {
-    question: "What if a client refuses to pay the balance?",
+    question: "What is Payaza?",
     answer:
-      "Final files stay locked until full payment, and DEAL sends automatic reminders on your behalf. Because scope, revisions and approval were agreed upfront, you always have a clear record of what was promised — which makes resolution fast and fair.",
+      "Payaza is a licensed Nigerian payment processor. It handles the checkout — card, bank transfer and USSD — and holds every payment in escrow until the deal is approved, so both sides are protected: clients know the money only moves when they're happy, and you know the money is real before you start.",
   },
   {
-    question: "Does my client need to create an account?",
+    question: "Can clients book a session with me?",
     answer:
-      "No. You send them a single link. They review the agreement, accept, pay the deposit, watch progress, approve the work and pay the balance — all from that link, on any phone.",
+      "Yes. Your public page has a booking calendar — clients pick a service, a date and a time, and the request lands straight in your Bookings. Confirm it and the session is on.",
   },
   {
-    question: "How much does DEAL cost?",
+    question: "Where do I talk to my clients?",
     answer:
-      "Creating deals is free — there are no monthly subscriptions. A small service fee is charged only when a deal completes and you get paid. If you don't get paid, you don't pay.",
+      "Wherever you already do. Each deal carries your preferred channels — WhatsApp, Instagram DM, Telegram, email and more — so clients can always reach you the way you actually use, not the way an app decides.",
   },
   {
-    question: "I work with clients outside my country. Does that work?",
+    question: "What if a client refuses to pay or approve the work?",
     answer:
-      "Yes. DEAL is built for African creatives working with clients anywhere. Payment options expand as we roll out, starting with the channels you already use — bank transfer, mobile money and card payments.",
+      "Final files stay locked until the deal is fully paid, and DEAL sends automatic reminders on your behalf. Because the scope, revisions and approval terms were agreed upfront — and every payment and delivery sits on the record with a timestamp — you have everything you need for a fast, fair resolution, including dispute support.",
   },
 ];
 

@@ -6,7 +6,7 @@ import {
   jsonError,
   readBody,
 } from "@/lib/store";
-import { balanceAmount } from "@/lib/types";
+import { isFullyPaid, remainingBalance } from "@/lib/types";
 import type { Deal, DealFile } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,7 @@ const WIZARD_KEYS: (keyof Deal)[] = [
   "deliverables",
   "price",
   "depositPercent",
+  "installmentsCount",
   "startDate",
   "dueDate",
   "revisions",
@@ -125,8 +126,17 @@ export async function POST(request: Request, { params }: Params) {
     }
 
     case "release-files": {
-      if (deal.status !== "balance_paid") {
-        return jsonError("Final files can only be released after full payment.", 409);
+      if (deal.status !== "approved") {
+        return jsonError(
+          "Final files unlock only after the client approves the completed work.",
+          409
+        );
+      }
+      if (!isFullyPaid(deal)) {
+        return jsonError(
+          `Final files unlock when the deal is fully paid — ${remainingBalance(deal).toLocaleString("en-NG")} is still outstanding.`,
+          409
+        );
       }
       deal.status = "files_released";
       deal.filesReleasedAt = now;
@@ -143,25 +153,6 @@ export async function POST(request: Request, { params }: Params) {
         label: "Final files released to client",
         actor: "creator",
       });
-      break;
-    }
-
-    case "confirm-payout": {
-      if (deal.status !== "files_released") {
-        return jsonError("Payout is only processed after files are released.", 409);
-      }
-      deal.status = "completed";
-      deal.paymentReleasedAt = now;
-      deal.completedAt = now;
-      deal.payments = deal.payments.map((p) => ({ ...p, status: "released" }));
-      const total = deal.payments.reduce((s, p) => s + p.amount, 0);
-      deal.events.push({
-        at: now,
-        type: "payment_released",
-        label: `₦${total.toLocaleString("en-NG")} released to your bank account`,
-        actor: "system",
-      });
-      deal.events.push({ at: now, type: "completed", label: "Deal completed", actor: "system" });
       break;
     }
 

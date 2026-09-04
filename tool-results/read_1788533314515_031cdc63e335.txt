@@ -1,0 +1,666 @@
+    56→    56→  const [sentDeal, setSentDeal] = useState<Deal | null>(null);
+    57→    57→
+    58→    58→  const [form, setForm] = useState<WizardState>({
+    59→    59→    title: "",
+    60→    60→    clientName: "",
+    61→    61→    clientContact: "",
+    62→    62→    summary: "",
+    63→    63→    eventDate: "",
+    64→    64→    location: "",
+    65→    65→    message: "",
+    66→    66→    serviceTitle: "",
+    67→    67→    scope: "",
+    68→    68→    deliverables: [],
+    69→    69→    price: 0,
+    70→    70→    depositPercent: 50,
+    71→    71→    startDate: "",
+    72→    72→    dueDate: "",
+    73→    73→    revisions: 2,
+    74→    74→  });
+    75→    75→
+    76→    76→  const set = <K extends keyof WizardState>(key: K, value: WizardState[K]) =>
+    77→    77→    setForm((prev) => ({ ...prev, [key]: value }));
+    78→    78→
+    79→    79→  useEffect(() => {
+    80→    80→    if (!user) return;
+    81→    81→    api.deals(user.id).catch(() => undefined);
+    82→    82→    fetch(`/api/users/${user.id}/services`)
+    83→    83→      .then((r) => r.json())
+    84→    84→      .then((d) => setServices(d.services ?? []))
+    85→    85→      .catch(() => undefined);
+    86→    86→    if (requestId) {
+    87→    87→      api
+    88→    88→        .requestDetail(requestId)
+    89→    89→        .then(({ request: req, service }) => {
+    90→    90→          setLinkedRequest(req);
+    91→    91→          setForm((prev) => ({
+    92→    92→            ...prev,
+    93→    93→            title: service ? `${service.title}` : "Custom deal",
+    94→    94→            serviceTitle: service?.title ?? "",
+    95→    95→            clientName: req.clientName,
+    96→    96→            clientContact: req.clientContact,
+    97→    97→            eventDate: req.eventDate,
+    98→    98→            location: req.location,
+    99→    99→            price: service?.from ?? req.budgetMax ?? 0,
+   100→   100→            summary: req.description,
+   101→   101→            message: `Hi ${req.clientName},\n\nI'm excited to send you this custom deal. Please review the details and let me know if you have any questions.`,
+   102→   102→            scope: req.description,
+   103→   103→          }));
+   104→   104→        })
+   105→   105→        .catch(() => undefined);
+   106→   106→    }
+   107→   107→  }, [user, requestId]);
+   108→   108→
+   109→   109→  const deposit = useMemo(
+   110→   110→    () => Math.round((form.price * form.depositPercent) / 100),
+   111→   111→    [form.price, form.depositPercent]
+   112→   112→  );
+   113→   113→  const balance = useMemo(() => form.price - deposit, [form.price, deposit]);
+   114→   114→
+   115→   115→  function validateStep(current: number): string | null {
+   116→   116→    if (current === 0) {
+   117→   117→      if (!form.title.trim()) return "Give this deal a clear title.";
+   118→   118→      if (!form.clientName.trim()) return "Who is this deal for? Add the client's name.";
+   119→   119→      if (!form.clientContact.trim()) return "Add an email or phone so the client can be reached.";
+   120→   120→    }
+   121→   121→    if (current === 1) {
+   122→   122→      if (!form.scope.trim()) return "Describe the scope of work.";
+   123→   123→      if (form.deliverables.length === 0) return "Add at least one deliverable.";
+   124→   124→    }
+   125→   125→    if (current === 2) {
+   126→   126→      if (!form.price || form.price <= 0) return "Set a price for this deal.";
+   127→   127→      if (!form.dueDate) return "Add a delivery due date.";
+   128→   128→    }
+   129→   129→    return null;
+   130→   130→  }
+   131→   131→
+   132→   132→  function next() {
+   133→   133→    const problem = validateStep(step);
+   134→   134→    if (problem) {
+   135→   135→      toast.error(problem);
+   136→   136→      return;
+   137→   137→    }
+   138→   138→    setStep((s) => Math.min(s + 1, 3));
+   139→   139→  }
+   140→   140→
+   141→   141→  async function submit(send: boolean) {
+   142→   142→    if (!user) return;
+   143→   143→    const problem = validateStep(0) ?? validateStep(1) ?? validateStep(2);
+   144→   144→    if (problem) {
+   145→   145→      toast.error(problem);
+   146→   146→      return;
+   147→   147→    }
+   148→   148→    setBusy(true);
+   149→   149→    try {
+   150→   150→      const { deal } = await api.createDeal({
+   151→   151→        creatorId: user.id,
+   152→   152→        requestId: linkedRequest?.id ?? null,
+   153→   153→        title: form.title,
+   154→   154→        serviceTitle: form.serviceTitle,
+   155→   155→        clientName: form.clientName,
+   156→   156→        clientContact: form.clientContact,
+   157→   157→      });
+   158→   158→      await api.updateDeal(deal.id, {
+   159→   159→        summary: form.summary,
+   160→   160→        eventDate: form.eventDate,
+   161→   161→        location: form.location,
+   162→   162→        message: form.message,
+   163→   163→        scope: form.scope,
+   164→   164→        deliverables: form.deliverables,
+   165→   165→        price: form.price,
+   166→   166→        depositPercent: form.depositPercent,
+   167→   167→        startDate: form.startDate,
+   168→   168→        dueDate: form.dueDate,
+   169→   169→        revisions: form.revisions,
+   170→   170→      });
+   171→   171→      if (send) {
+   172→   172→        const { deal: sent } = await api.dealAction(deal.id, { action: "send" });
+   173→   173→        setSentDeal(sent);
+   174→   174→        toast.success("Deal sent!");
+   175→   175→      } else {
+   176→   176→        toast.success("Draft saved", {
+   177→   177→          description: "Find it under Projects — you can finish and send it anytime.",
+   178→   178→        });
+   179→   179→        navigate("/deals");
+   180→   180→      }
+   181→   181→    } catch (err) {
+   182→   182→      toast.error(err instanceof Error ? err.message : "Couldn't save this deal.");
+   183→   183→    } finally {
+   184→   184→      setBusy(false);
+   185→   185→    }
+   186→   186→  }
+   187→   187→
+   188→   188→  /* ---------------- sent confirmation ---------------- */
+   189→   189→  if (sentDeal) {
+   190→   190→    const shareUrl = `${window.location.origin}/#/c/${sentDeal.shareToken}`;
+   191→   191→    const waText = encodeURIComponent(
+   192→   192→      `Hi ${sentDeal.client.name}! I've sent you a deal on DEAL for "${sentDeal.title}" (${formatNaira(sentDeal.price)}). Review and accept here: ${shareUrl}`
+   193→   193→    );
+   194→   194→    return (
+   195→   195→      <AppCanvas backHref="/dashboard">
+   196→   196→        <div className="flex flex-1 flex-col px-5 pb-10 pt-8">
+   197→   197→          <div className="flex justify-center">
+   198→   198→            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-accent ring-8 ring-accent/40">
+   199→   199→              <Check className="h-9 w-9 text-primary" strokeWidth={3} />
+   200→   200→            </span>
+   201→   201→          </div>
+   202→   202→          <h1 className="mt-5 text-center text-2xl font-extrabold tracking-tight text-foreground">
+   203→   203→            Your deal has been <span className="text-primary">sent!</span>
+   204→   204→          </h1>
+   205→   205→          <p className="mx-auto mt-2 max-w-xs text-center text-[15px] font-medium text-muted-foreground">
+   206→   206→            {sentDeal.client.name} will review and accept. You'll be notified once they pay the
+   207→   207→            deposit.
+   208→   208→          </p>
+   209→   209→
+   210→   210→          <div className="mt-6 rounded-2xl border border-border bg-card p-4">
+   211→   211→            <p className="text-[13px] font-extrabold text-foreground">Client link</p>
+   212→   212→            <div className="mt-2 flex items-center gap-2 rounded-xl border border-border bg-muted/60 p-2 pl-3">
+   213→   213→              <p className="min-w-0 flex-1 truncate text-[13px] font-bold text-foreground">{shareUrl}</p>
+   214→   214→              <Button
+   215→   215→                type="button"
+   216→   216→                size="sm"
+   217→   217→                className="shrink-0 rounded-lg font-bold"
+   218→   218→                onClick={() => {
+   219→   219→                  navigator.clipboard?.writeText(shareUrl).catch(() => undefined);
+   220→   220→                  toast.success("Link copied!");
+   221→   221→                }}
+   222→   222→              >
+   223→   223→                <Copy className="mr-1 h-3.5 w-3.5" /> Copy
+   224→   224→              </Button>
+   225→   225→            </div>
+   226→   226→            <a
+   227→   227→              href={`https://wa.me/?text=${waText}`}
+   228→   228→              target="_blank"
+   229→   229→              rel="noreferrer"
+   230→   230→              className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-accent text-sm font-extrabold text-accent-foreground transition-colors hover:bg-primary hover:text-white"
+   231→   231→            >
+   232→   232→              <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current">
+   233→   233→                <path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm5.5 14.1c-.2.7-1.3 1.3-1.9 1.4-.5.1-1.1.2-3.4-.7-2.9-1.2-4.7-4.1-4.9-4.3-.1-.2-1.1-1.5-1.1-2.9s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.4l.9 2.1c.1.2.1.4 0 .6l-.4.6-.5.5c-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.4 2.4 1.5.3.1.5.1.7-.1l1-1.2c.2-.3.4-.2.7-.1l2 1c.3.1.5.2.6.4 0 .1 0 .7-.5 1.7Z" />
+   234→   234→              </svg>
+   235→   235→              Share deal on WhatsApp
+   236→   236→            </a>
+   237→   237→          </div>
+   238→   238→
+   239→   239→          <Button
+   240→   240→            type="button"
+   241→   241→            onClick={() => navigate(`/deals/${sentDeal.id}`)}
+   242→   242→            className="mt-6 h-13 w-full rounded-xl font-bold"
+   243→   243→          >
+   244→   244→            View deal <ArrowRight className="ml-1 h-4.5 w-4.5" />
+   245→   245→          </Button>
+   246→   246→          <Button
+   247→   247→            type="button"
+   248→   248→            variant="outline"
+   249→   249→            onClick={() => navigate("/dashboard")}
+   250→   250→            className="mt-3 h-13 w-full rounded-xl font-bold"
+   251→   251→          >
+   252→   252→            Back to dashboard
+   253→   253→          </Button>
+   254→   254→        </div>
+   255→   255→      </AppCanvas>
+   256→   256→    );
+   257→   257→  }
+   258→   258→
+   259→   259→  /* ---------------- wizard ---------------- */
+   260→   260→  return (
+   261→   261→    <AppCanvas backHref="/dashboard">
+   262→   262→      <div className="flex-1 px-5 pb-10 pt-5">
+   263→   263→        <div className="flex items-center justify-between">
+   264→   264→          <h1 className="text-xl font-extrabold tracking-tight text-foreground">Create DEAL</h1>
+   265→   265→          <p className="text-[13px] font-bold text-muted-foreground">
+   266→   266→            Step {step + 1} of 4
+   267→   267→          </p>
+   268→   268→        </div>
+   269→   269→
+   270→   270→        {/* progress */}
+   271→   271→        <ol className="mt-4 flex items-center">
+   272→   272→          {WIZARD_STEPS.map((label, i) => (
+   273→   273→            <li key={label} className={cn("flex items-center", i < WIZARD_STEPS.length - 1 && "flex-1")}>
+   274→   274→              <div className="flex flex-col items-center">
+   275→   275→                <span
+   276→   276→                  className={cn(
+   277→   277→                    "flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-extrabold",
+   278→   278→                    i < step && "border-primary bg-primary text-white",
+   279→   279→                    i === step && "border-primary bg-white text-primary",
+   280→   280→                    i > step && "border-border bg-white text-muted-foreground"
+   281→   281→                  )}
+   282→   282→                >
+   283→   283→                  {i < step ? <Check className="h-4 w-4" strokeWidth={3} /> : i + 1}
+   284→   284→                </span>
+   285→   285→                <span
+   286→   286→                  className={cn(
+   287→   287→                    "mt-1.5 whitespace-nowrap text-[11px] font-extrabold",
+   288→   288→                    i === step ? "text-primary" : "text-muted-foreground"
+   289→   289→                  )}
+   290→   290→                >
+   291→   291→                  {label}
+   292→   292→                </span>
+   293→   293→              </div>
+   294→   294→              {i < WIZARD_STEPS.length - 1 && (
+   295→   295→                <span className={cn("mx-2 mb-5 h-0.5 flex-1", i < step ? "bg-primary" : "bg-border")} />
+   296→   296→              )}
+   297→   297→            </li>
+   298→   298→          ))}
+   299→   299→        </ol>
+   300→   300→
+   301→   301→        {/* STEP 1 — deal details */}
+   302→   302→        {step === 0 && (
+   303→   303→          <div className="mt-6 space-y-4">
+   304→   304→            {linkedRequest && (
+   305→   305→              <p className="rounded-xl border border-primary/20 bg-accent/60 px-4 py-3 text-[13px] font-bold text-accent-foreground">
+   306→   306→                Creating a proposal for {linkedRequest.clientName}'s request ({linkedRequest.ref})
+   307→   307→              </p>
+   308→   308→            )}
+   309→   309→            <div>
+   310→   310→              <label className="text-[13px] font-extrabold text-foreground">
+   311→   311→                Deal title <span className="text-red-500">*</span>
+   312→   312→              </label>
+   313→   313→              <Input
+   314→   314→                value={form.title}
+   315→   315→                onChange={(e) => set("title", e.target.value)}
+   316→   316→                placeholder="e.g. Pre-wedding Photography Package"
+   317→   317→                className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   318→   318→              />
+   319→   319→            </div>
+   320→   320→            <div className="grid grid-cols-2 gap-3">
+   321→   321→              <div>
+   322→   322→                <label className="text-[13px] font-extrabold text-foreground">
+   323→   323→                  Client name <span className="text-red-500">*</span>
+   324→   324→                </label>
+   325→   325→                <Input
+   326→   326→                  value={form.clientName}
+   327→   327→                  onChange={(e) => set("clientName", e.target.value)}
+   328→   328→                  placeholder="e.g. Lola & Tunde"
+   329→   329→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   330→   330→                />
+   331→   331→              </div>
+   332→   332→              <div>
+   333→   333→                <label className="text-[13px] font-extrabold text-foreground">
+   334→   334→                  Client contact <span className="text-red-500">*</span>
+   335→   335→                </label>
+   336→   336→                <Input
+   337→   337→                  value={form.clientContact}
+   338→   338→                  onChange={(e) => set("clientContact", e.target.value)}
+   339→   339→                  placeholder="Email or phone"
+   340→   340→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   341→   341→                />
+   342→   342→              </div>
+   343→   343→            </div>
+   344→   344→            <div>
+   345→   345→              <label className="text-[13px] font-extrabold text-foreground">Short summary</label>
+   346→   346→              <Textarea
+   347→   347→                value={form.summary}
+   348→   348→                onChange={(e) => set("summary", e.target.value.slice(0, 300))}
+   349→   349→                placeholder="Briefly describe this deal and what it covers…"
+   350→   350→                className="mt-1.5 min-h-20 rounded-xl bg-muted/60 font-semibold"
+   351→   351→              />
+   352→   352→            </div>
+   353→   353→            <div className="grid grid-cols-2 gap-3">
+   354→   354→              <div>
+   355→   355→                <label className="text-[13px] font-extrabold text-foreground">Event date</label>
+   356→   356→                <Input
+   357→   357→                  value={form.eventDate}
+   358→   358→                  onChange={(e) => set("eventDate", e.target.value)}
+   359→   359→                  type="date"
+   360→   360→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   361→   361→                />
+   362→   362→              </div>
+   363→   363→              <div>
+   364→   364→                <label className="text-[13px] font-extrabold text-foreground">Location</label>
+   365→   365→                <Input
+   366→   366→                  value={form.location}
+   367→   367→                  onChange={(e) => set("location", e.target.value)}
+   368→   368→                  placeholder="e.g. Ikoyi, Lagos"
+   369→   369→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   370→   370→                />
+   371→   371→              </div>
+   372→   372→            </div>
+   373→   373→            <div>
+   374→   374→              <label className="text-[13px] font-extrabold text-foreground">
+   375→   375→                Message to client <span className="font-semibold text-muted-foreground">(optional)</span>
+   376→   376→              </label>
+   377→   377→              <Textarea
+   378→   378→                value={form.message}
+   379→   379→                onChange={(e) => set("message", e.target.value.slice(0, 1000))}
+   380→   380→                placeholder={`Hi ${form.clientName || "there"}, I'm excited to send you this deal…`}
+   381→   381→                className="mt-1.5 min-h-24 rounded-xl bg-muted/60 font-semibold"
+   382→   382→              />
+   383→   383→            </div>
+   384→   384→          </div>
+   385→   385→        )}
+   386→   386→
+   387→   387→        {/* STEP 2 — scope & deliverables */}
+   388→   388→        {step === 1 && (
+   389→   389→          <div className="mt-6 space-y-4">
+   390→   390→            <div>
+   391→   391→              <label className="text-[13px] font-extrabold text-foreground">Service</label>
+   392→   392→              <div className="mt-2 flex flex-wrap gap-2">
+   393→   393→                {services.map((svc) => (
+   394→   394→                  <button
+   395→   395→                    key={svc.id}
+   396→   396→                    type="button"
+   397→   397→                    onClick={() => {
+   398→   398→                      set("serviceTitle", svc.title);
+   399→   399→                      if (!form.price) set("price", svc.from);
+   400→   400→                      if (form.deliverables.length === 0 && svc.includes.length) {
+   401→   401→                        set("deliverables", svc.includes.slice(0, 4));
+   402→   402→                      }
+   403→   403→                    }}
+   404→   404→                    className={cn(
+   405→   405→                      "rounded-full border px-3.5 py-2 text-[13px] font-bold transition-colors",
+   406→   406→                      form.serviceTitle === svc.title
+   407→   407→                        ? "border-primary bg-accent text-accent-foreground"
+   408→   408→                        : "border-border bg-card text-muted-foreground hover:bg-muted"
+   409→   409→                    )}
+   410→   410→                  >
+   411→   411→                    {svc.title}
+   412→   412→                  </button>
+   413→   413→                ))}
+   414→   414→                <button
+   415→   415→                  type="button"
+   416→   416→                  onClick={() => set("serviceTitle", "Custom service")}
+   417→   417→                  className={cn(
+   418→   418→                    "rounded-full border px-3.5 py-2 text-[13px] font-bold transition-colors",
+   419→   419→                    form.serviceTitle === "Custom service"
+   420→   420→                      ? "border-primary bg-accent text-accent-foreground"
+   421→   421→                      : "border-dashed border-primary/40 text-primary hover:bg-accent/50"
+   422→   422→                  )}
+   423→   423→                >
+   424→   424→                  + Custom
+   425→   425→                </button>
+   426→   426→              </div>
+   427→   427→            </div>
+   428→   428→            <div>
+   429→   429→              <label className="text-[13px] font-extrabold text-foreground">
+   430→   430→                Scope of work <span className="text-red-500">*</span>
+   431→   431→              </label>
+   432→   432→              <Textarea
+   433→   433→                value={form.scope}
+   434→   434→                onChange={(e) => set("scope", e.target.value)}
+   435→   435→                placeholder="Describe exactly what you'll do — hours, locations, styles, what's included…"
+   436→   436→                className="mt-1.5 min-h-28 rounded-xl bg-muted/60 font-semibold"
+   437→   437→              />
+   438→   438→            </div>
+   439→   439→            <div>
+   440→   440→              <label className="text-[13px] font-extrabold text-foreground">
+   441→   441→                Deliverables <span className="text-red-500">*</span>
+   442→   442→              </label>
+   443→   443→              <div className="mt-2 space-y-2">
+   444→   444→                {form.deliverables.map((d, i) => (
+   445→   445→                  <div
+   446→   446→                    key={`${d}-${i}`}
+   447→   447→                    className="flex items-center justify-between gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5"
+   448→   448→                  >
+   449→   449→                    <p className="min-w-0 flex-1 truncate text-[13px] font-bold text-foreground">{d}</p>
+   450→   450→                    <button
+   451→   451→                      type="button"
+   452→   452→                      aria-label={`Remove ${d}`}
+   453→   453→                      onClick={() => set("deliverables", form.deliverables.filter((_, j) => j !== i))}
+   454→   454→                      className="rounded-md p-1 text-muted-foreground hover:bg-muted"
+   455→   455→                    >
+   456→   456→                      <X className="h-4 w-4" />
+   457→   457→                    </button>
+   458→   458→                  </div>
+   459→   459→                ))}
+   460→   460→                <div className="flex gap-2">
+   461→   461→                  <Input
+   462→   462→                    value={deliverableDraft}
+   463→   463→                    onChange={(e) => setDeliverableDraft(e.target.value)}
+   464→   464→                    onKeyDown={(e) => {
+   465→   465→                      if (e.key === "Enter" && deliverableDraft.trim()) {
+   466→   466→                        e.preventDefault();
+   467→   467→                        set("deliverables", [...form.deliverables, deliverableDraft.trim()]);
+   468→   468→                        setDeliverableDraft("");
+   469→   469→                      }
+   470→   470→                    }}
+   471→   471→                    placeholder="e.g. 40+ high-resolution edited photos"
+   472→   472→                    className="h-11 flex-1 rounded-xl bg-muted/60 font-semibold"
+   473→   473→                  />
+   474→   474→                  <Button
+   475→   475→                    type="button"
+   476→   476→                    variant="outline"
+   477→   477→                    className="h-11 rounded-xl border-primary/40 px-4 font-bold text-primary"
+   478→   478→                    onClick={() => {
+   479→   479→                      if (!deliverableDraft.trim()) return;
+   480→   480→                      set("deliverables", [...form.deliverables, deliverableDraft.trim()]);
+   481→   481→                      setDeliverableDraft("");
+   482→   482→                    }}
+   483→   483→                  >
+   484→   484→                    <Plus className="h-4.5 w-4.5" />
+   485→   485→                  </Button>
+   486→   486→                </div>
+   487→   487→              </div>
+   488→   488→            </div>
+   489→   489→          </div>
+   490→   490→        )}
+   491→   491→
+   492→   492→        {/* STEP 3 — terms */}
+   493→   493→        {step === 2 && (
+   494→   494→          <div className="mt-6 space-y-4">
+   495→   495→            <div>
+   496→   496→              <label className="text-[13px] font-extrabold text-foreground">
+   497→   497→                Price (₦) <span className="text-red-500">*</span>
+   498→   498→              </label>
+   499→   499→              <Input
+   500→   500→                value={form.price ? String(form.price) : ""}
+   501→   501→                onChange={(e) => set("price", Number(e.target.value.replace(/[^0-9]/g, "")))}
+   502→   502→                placeholder="120000"
+   503→   503→                inputMode="numeric"
+   504→   504→                className="mt-1.5 h-12 rounded-xl bg-muted/60 text-lg font-extrabold"
+   505→   505→              />
+   506→   506→              <div className="mt-2 flex flex-wrap gap-2">
+   507→   507→                {[50000, 80000, 120000, 150000].map((amount) => (
+   508→   508→                  <button
+   509→   509→                    key={amount}
+   510→   510→                    type="button"
+   511→   511→                    onClick={() => set("price", amount)}
+   512→   512→                    className={cn(
+   513→   513→                      "rounded-full border px-3 py-1.5 text-xs font-bold transition-colors",
+   514→   514→                      form.price === amount
+   515→   515→                        ? "border-primary bg-accent text-accent-foreground"
+   516→   516→                        : "border-border bg-card text-muted-foreground"
+   517→   517→                    )}
+   518→   518→                  >
+   519→   519→                    {formatNaira(amount)}
+   520→   520→                  </button>
+   521→   521→                ))}
+   522→   522→              </div>
+   523→   523→            </div>
+   524→   524→
+   525→   525→            <div>
+   526→   526→              <label className="text-[13px] font-extrabold text-foreground">Payment structure</label>
+   527→   527→              <div className="mt-2 grid grid-cols-3 gap-2">
+   528→   528→                {[
+   529→   529→                  { pct: 50, label: "50 / 50", sub: "Deposit first" },
+   530→   530→                  { pct: 70, label: "70 / 30", sub: "Deposit first" },
+   531→   531→                  { pct: 100, label: "100%", sub: "Upfront" },
+   532→   532→                ].map((opt) => (
+   533→   533→                  <button
+   534→   534→                    key={opt.pct}
+   535→   535→                    type="button"
+   536→   536→                    onClick={() => set("depositPercent", opt.pct)}
+   537→   537→                    className={cn(
+   538→   538→                      "rounded-xl border p-3 text-center transition-colors",
+   539→   539→                      form.depositPercent === opt.pct
+   540→   540→                        ? "border-primary bg-accent"
+   541→   541→                        : "border-border bg-card hover:bg-muted"
+   542→   542→                    )}
+   543→   543→                  >
+   544→   544→                    <p className="text-sm font-extrabold text-foreground">{opt.label}</p>
+   545→   545→                    <p className="text-[10px] font-bold text-muted-foreground">{opt.sub}</p>
+   546→   546→                  </button>
+   547→   547→                ))}
+   548→   548→              </div>
+   549→   549→              <div className="mt-2.5 rounded-xl bg-secondary p-3.5 text-[13px] font-semibold leading-relaxed text-secondary-foreground">
+   550→   550→                Client pays <span className="font-extrabold text-primary">{formatNaira(deposit)}</span>{" "}
+   551→   551→                deposit to start · balance{" "}
+   552→   552→                <span className="font-extrabold text-foreground">{formatNaira(balance)}</span> due on
+   553→   553→                approval. Final files are released only after full payment.
+   554→   554→              </div>
+   555→   555→            </div>
+   556→   556→
+   557→   557→            <div className="grid grid-cols-2 gap-3">
+   558→   558→              <div>
+   559→   559→                <label className="text-[13px] font-extrabold text-foreground">Work starts</label>
+   560→   560→                <Input
+   561→   561→                  value={form.startDate}
+   562→   562→                  onChange={(e) => set("startDate", e.target.value)}
+   563→   563→                  type="date"
+   564→   564→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   565→   565→                />
+   566→   566→              </div>
+   567→   567→              <div>
+   568→   568→                <label className="text-[13px] font-extrabold text-foreground">
+   569→   569→                  Delivery due <span className="text-red-500">*</span>
+   570→   570→                </label>
+   571→   571→                <Input
+   572→   572→                  value={form.dueDate}
+   573→   573→                  onChange={(e) => set("dueDate", e.target.value)}
+   574→   574→                  type="date"
+   575→   575→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   576→   576→                />
+   577→   577→              </div>
+   578→   578→            </div>
+   579→   579→
+   580→   580→            <div>
+   581→   581→              <label className="text-[13px] font-extrabold text-foreground">Revisions included</label>
+   582→   582→              <div className="mt-2 flex items-center gap-4 rounded-xl border border-border bg-card px-4 py-3">
+   583→   583→                <button
+   584→   584→                  type="button"
+   585→   585→                  aria-label="Fewer revisions"
+   586→   586→                  onClick={() => set("revisions", Math.max(0, form.revisions - 1))}
+   587→   587→                  className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-foreground hover:bg-muted"
+   588→   588→                >
+   589→   589→                  <Minus className="h-4 w-4" />
+   590→   590→                </button>
+   591→   591→                <p className="flex-1 text-center text-[15px] font-extrabold text-foreground">
+   592→   592→                  {form.revisions} round{form.revisions === 1 ? "" : "s"}
+   593→   593→                </p>
+   594→   594→                <button
+   595→   595→                  type="button"
+   596→   596→                  aria-label="More revisions"
+   597→   597→                  onClick={() => set("revisions", Math.min(5, form.revisions + 1))}
+   598→   598→                  className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-foreground hover:bg-muted"
+   599→   599→                >
+   600→   600→                  <Plus className="h-4 w-4" />
+   601→   601→                </button>
+   602→   602→              </div>
+   603→   603→            </div>
+   604→   604→          </div>
+   605→   605→        )}
+   606→   606→
+   607→   607→        {/* STEP 4 — review & send */}
+   608→   608→        {step === 3 && (
+   609→   609→          <div className="mt-6 space-y-4">
+   610→   610→            <div className="rounded-2xl border border-border bg-card p-4">
+   611→   611→              <p className="text-[11px] font-extrabold uppercase tracking-wide text-primary">
+   612→   612→                What your client will see
+   613→   613→              </p>
+   614→   614→              <h2 className="mt-2 text-lg font-extrabold leading-snug text-foreground">{form.title}</h2>
+   615→   615→              <p className="text-[13px] font-semibold text-muted-foreground">
+   616→   616→                For {form.clientName} · {form.clientContact}
+   617→   617→              </p>
+   618→   618→              {form.summary ? (
+   619→   619→                <p className="mt-2 text-[13px] font-medium leading-relaxed text-foreground">{form.summary}</p>
+   620→   620→              ) : null}
+   621→   621→              <div className="mt-3 grid grid-cols-2 gap-2 text-[13px] font-semibold text-muted-foreground">
+   622→   622→                {form.eventDate ? (
+   623→   623→                  <span className="inline-flex items-center gap-1.5">
+   624→   624→                    <CalendarDays className="h-3.5 w-3.5" /> {formatDate(form.eventDate)}
+   625→   625→                  </span>
+   626→   626→                ) : null}
+   627→   627→                {form.location ? (
+   628→   628→                  <span className="inline-flex items-center gap-1.5">
+   629→   629→                    <MapPin className="h-3.5 w-3.5" /> {form.location}
+   630→   630→                  </span>
+   631→   631→                ) : null}
+   632→   632→              </div>
+   633→   633→            </div>
+   634→   634→
+   635→   635→            <div className="rounded-2xl border border-border bg-card p-4">
+   636→   636→              <p className="text-[13px] font-extrabold text-foreground">Scope</p>
+   637→   637→              <p className="mt-1 text-[13px] font-medium leading-relaxed text-muted-foreground">{form.scope}</p>
+   638→   638→              <p className="mt-3 text-[13px] font-extrabold text-foreground">Deliverables</p>
+   639→   639→              <ul className="mt-1.5 space-y-1.5">
+   640→   640→                {form.deliverables.map((d, i) => (
+   641→   641→                  <li key={`${d}-${i}`} className="flex items-start gap-2 text-[13px] font-semibold text-foreground">
+   642→   642→                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" strokeWidth={3} />
+   643→   643→                    {d}
+   644→   644→                  </li>
+   645→   645→                ))}
+   646→   646→              </ul>
+   647→   647→              <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border pt-3 text-[13px]">
+   648→   648→                <div>
+   649→   649→                  <p className="font-bold text-muted-foreground">Timeline</p>
+   650→   650→                  <p className="mt-0.5 font-extrabold text-foreground">
+   651→   651→                    {form.startDate ? formatDate(form.startDate) : "On deposit"} → {formatDate(form.dueDate)}
+   652→   652→                  </p>
+   653→   653→                </div>
+   654→   654→                <div>
+   655→   655→                  <p className="font-bold text-muted-foreground">Revisions</p>
+   656→   656→                  <p className="mt-0.5 font-extrabold text-foreground">
+   657→   657→                    {form.revisions} round{form.revisions === 1 ? "" : "s"}
+   658→   658→                  </p>
+   659→   659→                </div>
+   660→   660→              </div>
+   661→   661→            </div>
+   662→   662→
+   663→   663→            <div className="rounded-2xl border border-primary/20 bg-accent/60 p-4">
+   664→   664→              <div className="flex items-center justify-between">
+   665→   665→                <p className="text-[13px] font-extrabold text-accent-foreground">Total price</p>
+   666→   666→                <p className="text-lg font-extrabold text-foreground">{formatNaira(form.price)}</p>
+   667→   667→              </div>
+   668→   668→              <div className="mt-1 flex items-center justify-between text-[13px] font-semibold text-muted-foreground">
+   669→   669→                <span>Deposit to start</span>
+   670→   670→                <span className="font-extrabold text-primary">{formatNaira(deposit)}</span>
+   671→   671→              </div>
+   672→   672→              <div className="mt-0.5 flex items-center justify-between text-[13px] font-semibold text-muted-foreground">
+   673→   673→                <span>Balance on approval</span>
+   674→   674→                <span className="font-extrabold text-foreground">{formatNaira(balance)}</span>
+   675→   675→              </div>
+   676→   676→            </div>
+   677→   677→
+   678→   678→            <div className="flex gap-3">
+   679→   679→              <Button
+   680→   680→                type="button"
+   681→   681→                variant="outline"
+   682→   682→                disabled={busy}
+   683→   683→                onClick={() => submit(false)}
+   684→   684→                className="h-13 flex-1 rounded-xl font-bold"
+   685→   685→              >
+   686→   686→                Save as draft
+   687→   687→              </Button>
+   688→   688→              <Button type="button" disabled={busy} onClick={() => submit(true)} className="h-13 flex-[1.4] rounded-xl font-bold">
+   689→   689→                {busy ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <>Send deal <PartyPopper className="ml-1 hidden h-4.5 w-4.5" /> <ArrowRight className="ml-1 h-4.5 w-4.5" /></>}
+   690→   690→              </Button>
+   691→   691→            </div>
+   692→   692→            <p className="flex items-center justify-center gap-1.5 text-center text-xs font-semibold text-muted-foreground">
+   693→   693→              <ArrowLeft className="hidden h-3.5 w-3.5" />
+   694→   694→              You can always edit and resend the deal before the client accepts it.
+   695→   695→            </p>
+   696→   696→          </div>
+   697→   697→        )}
+   698→   698→
+   699→   699→        {/* nav buttons for steps 0-2 */}
+   700→   700→        {step < 3 && (
+   701→   701→          <div className="mt-6 flex gap-3">
+   702→   702→            {step > 0 && (
+   703→   703→              <Button
+   704→   704→                type="button"
+   705→   705→                variant="outline"
+   706→   706→                onClick={() => setStep((s) => s - 1)}
+   707→   707→                className="h-13 flex-1 rounded-xl font-bold"
+   708→   708→              >
+   709→   709→                ← Back
+   710→   710→              </Button>
+   711→   711→            )}
+   712→   712→            <Button type="button" onClick={next} className="h-13 flex-[1.6] rounded-xl font-bold">
+   713→   713→              Continue <ArrowRight className="ml-1 h-4.5 w-4.5" />
+   714→   714→            </Button>
+   715→   715→          </div>
+   716→   716→        )}
+   717→   717→      </div>
+   718→   718→    </AppCanvas>
+   719→   719→  );
+   720→   720→}
+   721→   721→

@@ -1,0 +1,1094 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useEffect, useState } from "react";
+     4→     4→import {
+     5→     5→  BadgeCheck,
+     6→     6→  CalendarDays,
+     7→     7→  Check,
+     8→     8→  CheckCircle2,
+     9→     9→  Download,
+    10→    10→  FileText,
+    11→    11→  Loader2,
+    12→    12→  MapPin,
+    13→    13→  MessageCircle,
+    14→    14→  PartyPopper,
+    15→    15→  ShieldCheck,
+    16→    16→  Star,
+    17→    17→  Wallet,
+    18→    18→} from "lucide-react";
+    19→    19→import { toast } from "sonner";
+    20→    20→import { Logo } from "@/components/landing/logo";
+    21→    21→import { Button } from "@/components/ui/button";
+    22→    22→import { Input } from "@/components/ui/input";
+    23→    23→import { Textarea } from "@/components/ui/textarea";
+    24→    24→import {
+    25→    25→  Dialog,
+    26→    26→  DialogContent,
+    27→    27→  DialogHeader,
+    28→    28→  DialogTitle,
+    29→    29→} from "@/components/ui/dialog";
+    30→    30→import {
+    31→    31→  AgreementSummary,
+    32→    32→  EscrowBanner,
+    33→    33→  FileRow,
+    34→    34→  PaymentSummary,
+    35→    35→  RecordTimeline,
+    36→    36→  SectionCard,
+    37→    37→  Stepper,
+    38→    38→  type Step,
+    39→    39→} from "@/components/app/kit";
+    40→    40→import { api } from "@/lib/api";
+    41→    41→import {
+    42→    42→  balanceAmount,
+    43→    43→  depositAmount,
+    44→    44→  formatNaira,
+    45→    45→  formatDate,
+    46→    46→  type Deal,
+    47→    47→} from "@/lib/types";
+    48→    48→import { cn } from "@/lib/utils";
+    49→    49→
+    50→    50→interface SharedData {
+    51→    51→  deal: Deal;
+    52→    52→  creator: {
+    53→    53→    id: string;
+    54→    54→    name: string;
+    55→    55→    handle: string;
+    56→    56→    craft: string;
+    57→    57→    location: string;
+    58→    58→    verified: boolean;
+    59→    59→    whatsapp: string;
+    60→    60→  };
+    61→    61→  amounts: { total: number; deposit: number; balance: number; paid: number; due: number };
+    62→    62→}
+    63→    63→
+    64→    64→export default function ClientDealScreen({ token }: { token: string }) {
+    65→    65→  const [data, setData] = useState<SharedData | null>(null);
+    66→    66→  const [error, setError] = useState<string | null>(null);
+    67→    67→  const [payOpen, setPayOpen] = useState(false);
+    68→    68→  const [payKind, setPayKind] = useState<"deposit" | "balance">("deposit");
+    69→    69→  const [changesOpen, setChangesOpen] = useState(false);
+    70→    70→  const [changesNote, setChangesNote] = useState("");
+    71→    71→  const [reviewOpen, setReviewOpen] = useState(false);
+    72→    72→  const [rating, setRating] = useState(5);
+    73→    73→  const [busy, setBusy] = useState(false);
+    74→    74→  const [justPaid, setJustPaid] = useState<"deposit" | "balance" | null>(null);
+    75→    75→
+    76→    76→  useEffect(() => {
+    77→    77→    let alive = true;
+    78→    78→    api
+    79→    79→      .sharedDeal(token)
+    80→    80→      .then((d) => alive && setData(d))
+    81→    81→      .catch((err) => alive && setError(err instanceof Error ? err.message : "Deal not found."));
+    82→    82→    return () => {
+    83→    83→      alive = false;
+    84→    84→    };
+    85→    85→  }, [token]);
+    86→    86→
+    87→    87→  if (error) {
+    88→    88→    return (
+    89→    89→      <ClientFrame>
+    90→    90→        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+    91→    91→          <span className="text-4xl">🔗</span>
+    92→    92→          <p className="text-lg font-extrabold text-foreground">Deal not found</p>
+    93→    93→          <p className="text-sm text-muted-foreground">{error}</p>
+    94→    94→        </div>
+    95→    95→      </ClientFrame>
+    96→    96→    );
+    97→    97→  }
+    98→    98→
+    99→    99→  if (!data) {
+   100→   100→    return (
+   101→   101→      <ClientFrame>
+   102→   102→        <div className="flex flex-1 items-center justify-center">
+   103→   103→          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+   104→   104→        </div>
+   105→   105→      </ClientFrame>
+   106→   106→    );
+   107→   107→  }
+   108→   108→
+   109→   109→  const { deal, creator, amounts } = data;
+   110→   110→  const deposit = depositAmount(deal);
+   111→   111→  const balance = balanceAmount(deal);
+   112→   112→
+   113→   113→  async function act(body: Parameters<typeof api.sharedAction>[1]) {
+   114→   114→    setBusy(true);
+   115→   115→    try {
+   116→   116→      const { deal: updated } = await api.sharedAction(token, body);
+   117→   117→      setData((prev) => (prev ? { ...prev, deal: updated } : prev));
+   118→   118→      return updated;
+   119→   119→    } catch (err) {
+   120→   120→      toast.error(err instanceof Error ? err.message : "Action failed.");
+   121→   121→      return null;
+   122→   122→    } finally {
+   123→   123→      setBusy(false);
+   124→   124→    }
+   125→   125→  }
+   126→   126→
+   127→   127→  /* ---------------- stepper ---------------- */
+   128→   128→  const steps: Step[] = [
+   129→   129→    {
+   130→   130→      label: "Deal accepted",
+   131→   131→      sub: formatDate(deal.acceptedAt),
+   132→   132→      state: deal.acceptedAt ? "done" : "todo",
+   133→   133→    },
+   134→   134→    {
+   135→   135→      label: "Deposit secured",
+   136→   136→      sub: "In escrow",
+   137→   137→      state: deal.payments.some((p) => p.type === "deposit") ? "done" : "todo",
+   138→   138→    },
+   139→   139→    {
+   140→   140→      label: "Delivery approved",
+   141→   141→      sub: formatDate(deal.approvedAt),
+   142→   142→      state: deal.approvedAt ? "done" : "todo",
+   143→   143→    },
+   144→   144→    {
+   145→   145→      label: "Balance paid",
+   146→   146→      sub: formatDate(deal.balancePaidAt),
+   147→   147→      state: deal.payments.some((p) => p.type === "balance") ? "done" : "todo",
+   148→   148→    },
+   149→   149→    {
+   150→   150→      label: "Completed",
+   151→   151→      sub: deal.status === "completed" ? formatDate(deal.completedAt) : "Pending",
+   152→   152→      state: deal.status === "completed" ? "done" : "todo",
+   153→   153→    },
+   154→   154→  ];
+   155→   155→
+   156→   156→  const latestDelivery = deal.deliveries.at(-1);
+   157→   157→
+   158→   158→  /* ---------------- success screen after payment ---------------- */
+   159→   159→  if (justPaid) {
+   160→   160→    return (
+   161→   161→      <ClientFrame>
+   162→   162→        <div className="flex flex-1 flex-col px-5 pb-10 pt-10">
+   163→   163→          <div className="flex justify-center">
+   164→   164→            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary ring-8 ring-accent">
+   165→   165→              <Check className="h-9 w-9 text-white" strokeWidth={3} />
+   166→   166→            </span>
+   167→   167→          </div>
+   168→   168→          <h1 className="mt-5 text-center text-2xl font-extrabold tracking-tight text-foreground">
+   169→   169→            Payment successful!
+   170→   170→          </h1>
+   171→   171→          <p className="mx-auto mt-2 max-w-xs text-center text-[15px] font-medium text-muted-foreground">
+   172→   172→            {justPaid === "deposit"
+   173→   173→              ? `You've paid and accepted the deal. ${creator.name} has been notified.`
+   174→   174→              : "Balance received. The creator will now release your final files."}
+   175→   175→          </p>
+   176→   176→          <div className="mx-auto mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5">
+   177→   177→            <ShieldCheck className="h-4 w-4 text-primary" />
+   178→   178→            <span className="text-[13px] font-extrabold text-accent-foreground">
+   179→   179→              Your payment is protected
+   180→   180→            </span>
+   181→   181→          </div>
+   182→   182→
+   183→   183→          <div className="mt-6 rounded-2xl border border-border bg-card p-4">
+   184→   184→            <p className="text-[15px] font-extrabold text-foreground">{deal.title}</p>
+   185→   185→            <p className="text-[13px] font-semibold text-muted-foreground">
+   186→   186→              {deal.ref} · {creator.name} ({creator.craft || "Creator"})
+   187→   187→            </p>
+   188→   188→            <div className="mt-2 flex items-center justify-between border-t border-border pt-3">
+   189→   189→              <p className="text-sm font-bold text-muted-foreground">
+   190→   190→                {justPaid === "deposit" ? "Deposit paid" : "Balance paid"}
+   191→   191→              </p>
+   192→   192→              <p className="text-lg font-extrabold text-primary">
+   193→   193→                {formatNaira(justPaid === "deposit" ? deposit : balance)}
+   194→   194→              </p>
+   195→   195→            </div>
+   196→   196→          </div>
+   197→   197→
+   198→   198→          <Button
+   199→   199→            className="mt-6 h-13 w-full rounded-xl font-bold"
+   200→   200→            onClick={() => setJustPaid(null)}
+   201→   201→          >
+   202→   202→            View my deal <CheckCircle2 className="ml-1 h-4.5 w-4.5" />
+   203→   203→          </Button>
+   204→   204→        </div>
+   205→   205→      </ClientFrame>
+   206→   206→    );
+   207→   207→  }
+   208→   208→
+   209→   209→  /* ---------------- status-driven body ---------------- */
+   210→   210→
+   211→   211→  let body: React.ReactNode = null;
+   212→   212→
+   213→   213→  switch (deal.status) {
+   214→   214→    case "sent":
+   215→   215→    case "changes_requested":
+   216→   216→      body = (
+   217→   217→        <>
+   218→   218→          <div className="rounded-2xl border border-primary/20 bg-secondary p-5 text-center">
+   219→   219→            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white ring-8 ring-accent/60">
+   220→   220→              <FileText className="h-8 w-8 text-primary" />
+   221→   221→            </span>
+   222→   222→            <p className="mt-3 text-lg font-extrabold text-foreground">You received a DEAL!</p>
+   223→   223→            <p className="mx-auto mt-1 max-w-xs text-[13px] font-medium text-muted-foreground">
+   224→   224→              {creator.name} has sent you a deal for your project. Review the details and take your
+   225→   225→              next step.
+   226→   226→            </p>
+   227→   227→            <span className="mt-3 inline-flex items-center rounded-full bg-amber-50 px-3 py-1.5 text-[12px] font-extrabold text-amber-700">
+   228→   228→              Waiting for your response
+   229→   229→            </span>
+   230→   230→          </div>
+   231→   231→
+   232→   232→          <SectionCard title="What happens next?">
+   233→   233→            <ol className="space-y-4">
+   234→   234→              {[
+   235→   235→                ["1. Review the deal", "Check the services, terms, deliverables and price below."],
+   236→   236→                ["2. Accept, request changes or decline", "Accept to lock the booking, or ask for changes first."],
+   237→   237→                ["3. Sign & pay (when accepted)", "Pay the deposit to secure your date — funds are held safely."],
+   238→   238→                ["4. Project starts", "Work begins and you'll get updates until final delivery."],
+   239→   239→              ].map(([title, desc]) => (
+   240→   240→                <li key={title} className="flex gap-3">
+   241→   241→                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-extrabold text-primary">
+   242→   242→                    {title.slice(0, 1)}
+   243→   243→                  </span>
+   244→   244→                  <div>
+   245→   245→                    <p className="text-[13px] font-extrabold text-foreground">{title.slice(3)}</p>
+   246→   246→                    <p className="text-[13px] font-medium leading-relaxed text-muted-foreground">{desc}</p>
+   247→   247→                  </div>
+   248→   248→                </li>
+   249→   249→              ))}
+   250→   250→            </ol>
+   251→   251→            <div className="mt-4 flex items-center gap-2.5 rounded-xl bg-accent/70 p-3">
+   252→   252→              <ShieldCheck className="h-5 w-5 shrink-0 text-primary" />
+   253→   253→              <p className="text-[13px] font-bold text-accent-foreground">
+   254→   254→                Your payment is protected — held securely and only released when both parties are
+   255→   255→                satisfied.
+   256→   256→              </p>
+   257→   257→            </div>
+   258→   258→          </SectionCard>
+   259→   259→
+   260→   260→          <AgreementSummary deal={deal} />
+   261→   261→
+   262→   262→          <div className="grid grid-cols-2 gap-3">
+   263→   263→            <Button
+   264→   264→              variant="outline"
+   265→   265→              className="h-12 rounded-xl text-[13px] font-bold"
+   266→   266→              onClick={() =>
+   267→   267→                creator.whatsapp
+   268→   268→                  ? window.open(`https://wa.me/${creator.whatsapp.replace(/\D/g, "")}`, "_blank")
+   269→   269→                  : toast.info("Messaging coming soon")
+   270→   270→              }
+   271→   271→            >
+   272→   272→              <MessageCircle className="mr-1.5 h-4 w-4" /> Message
+   273→   273→            </Button>
+   274→   274→            <Button
+   275→   275→              variant="outline"
+   276→   276→              className="h-12 rounded-xl text-[13px] font-bold"
+   277→   277→              onClick={() => setChangesOpen(true)}
+   278→   278→            >
+   279→   279→              Request changes
+   280→   280→            </Button>
+   281→   281→            <Button
+   282→   282→              className="col-span-2 h-13 rounded-xl text-[15px] font-bold shadow-md shadow-primary/25"
+   283→   283→              disabled={busy}
+   284→   284→              onClick={() => {
+   285→   285→                setPayKind("deposit");
+   286→   286→                setPayOpen(true);
+   287→   287→              }}
+   288→   288→            >
+   289→   289→              <Check className="mr-1.5 h-4.5 w-4.5" /> Accept deal — pay {formatNaira(deposit)} deposit
+   290→   290→            </Button>
+   291→   291→          </div>
+   292→   292→          <p className="text-center text-xs font-semibold text-muted-foreground">
+   293→   293→            You'll review everything before any payment leaves your account.
+   294→   294→          </p>
+   295→   295→        </>
+   296→   296→      );
+   297→   297→      break;
+   298→   298→
+   299→   299→    case "active":
+   300→   300→      body = (
+   301→   301→        <>
+   302→   302→          <EscrowBanner amount={deposit} paidOn={deal.depositPaidAt} />
+   303→   303→          <SectionCard title="Deal progress">
+   304→   304→            <Stepper
+   305→   305→              steps={[
+   306→   306→                { label: "Deal accepted", sub: formatDate(deal.acceptedAt), state: "done" },
+   307→   307→                { label: "Payment secured", sub: formatNaira(deposit), state: "done" },
+   308→   308→                { label: "In progress", sub: "Creator working", state: "current" },
+   309→   309→                { label: "Awaiting approval", sub: "You review", state: "todo" },
+   310→   310→              ]}
+   311→   311→            />
+   312→   312→          </SectionCard>
+   313→   313→          <div className="flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 p-4">
+   314→   314→            <div className="min-w-0 pr-3">
+   315→   315→              <p className="text-[14px] font-extrabold text-amber-800">What's next?</p>
+   316→   316→              <p className="mt-0.5 text-[13px] font-medium text-amber-700">
+   317→   317→                {creator.name} is working on your project and will deliver the final output for your
+   318→   318→                review.
+   319→   319→              </p>
+   320→   320→            </div>
+   321→   321→            <div className="shrink-0 text-right">
+   322→   322→              <p className="text-[11px] font-bold text-amber-700">Estimated delivery</p>
+   323→   323→              <p className="text-[13px] font-extrabold text-amber-800">{formatDate(deal.dueDate)}</p>
+   324→   324→            </div>
+   325→   325→          </div>
+   326→   326→          <PeopleCard deal={deal} creatorName={creator.name} creatorCraft={creator.craft} />
+   327→   327→        </>
+   328→   328→      );
+   329→   329→      break;
+   330→   330→
+   331→   331→    case "delivered":
+   332→   332→      body = (
+   333→   333→        <>
+   334→   334→          <EscrowBanner amount={deposit} paidOn={deal.depositPaidAt} />
+   335→   335→          <div className="flex items-start gap-3 rounded-2xl border border-violet-200 bg-violet-50 p-4">
+   336→   336→            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white">
+   337→   337→              <FileText className="h-5 w-5 text-violet-600" />
+   338→   338→            </span>
+   339→   339→            <div className="min-w-0 flex-1">
+   340→   340→              <p className="text-[14px] font-extrabold text-foreground">
+   341→   341→                {creator.name} has submitted the delivery
+   342→   342→              </p>
+   343→   343→              <p className="mt-0.5 text-[13px] font-medium text-violet-700">
+   344→   344→                Please review the work and decide if it meets the agreed requirements.
+   345→   345→              </p>
+   346→   346→              <p className="mt-1 text-xs font-bold text-muted-foreground">
+   347→   347→                Submitted {formatDate(deal.deliveredAt)}
+   348→   348→              </p>
+   349→   349→            </div>
+   350→   350→          </div>
+   351→   351→
+   352→   352→          <SectionCard title="What was delivered">
+   353→   353→            <div className="space-y-2.5">
+   354→   354→              <p className="text-[13px] font-medium text-muted-foreground">{latestDelivery?.note}</p>
+   355→   355→              {latestDelivery?.files.map((file) => (
+   356→   356→                <FileRow
+   357→   357→                  key={file.id}
+   358→   358→                  name={file.name}
+   359→   359→                  size={file.size}
+   360→   360→                  kind={file.kind}
+   361→   361→                  onPreview={() =>
+   362→   362→                    toast.info("Preview is simulated in this demo", {
+   363→   363→                      description: "In production, watermarked previews open here.",
+   364→   364→                    })
+   365→   365→                  }
+   366→   366→                />
+   367→   367→              ))}
+   368→   368→            </div>
+   369→   369→          </SectionCard>
+   370→   370→
+   371→   371→          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+   372→   372→            <p className="text-[14px] font-extrabold text-amber-800">
+   373→   373→              Review the work to release payment
+   374→   374→            </p>
+   375→   375→            <p className="mt-1 text-[13px] font-medium leading-relaxed text-amber-700">
+   376→   376→              If the work meets the agreement, approve it and {formatNaira(balance)} will be released
+   377→   377→              to {creator.name}. Not satisfied? Request changes or raise a dispute.
+   378→   378→            </p>
+   379→   379→          </div>
+   380→   380→
+   381→   381→          <SectionCard title="Review & next steps">
+   382→   382→            <div className="space-y-1">
+   383→   383→              <button
+   384→   384→                type="button"
+   385→   385→                disabled={busy}
+   386→   386→                onClick={async () => {
+   387→   387→                  const updated = await act({ action: "approve" });
+   388→   388→                  if (updated) toast.success("Delivery approved!");
+   389→   389→                }}
+   390→   390→                className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-accent"
+   391→   391→              >
+   392→   392→                <div>
+   393→   393→                  <p className="text-[14px] font-extrabold text-foreground">
+   394→   394→                    Approve & release payment
+   395→   395→                  </p>
+   396→   396→                  <p className="text-[12px] font-semibold text-muted-foreground">
+   397→   397→                    You're satisfied with the work.
+   398→   398→                  </p>
+   399→   399→                </div>
+   400→   400→                <CheckCircle2 className="h-5 w-5 shrink-0 text-primary" />
+   401→   401→              </button>
+   402→   402→              <button
+   403→   403→                type="button"
+   404→   404→                onClick={() => setChangesOpen(true)}
+   405→   405→                className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-muted"
+   406→   406→              >
+   407→   407→                <div>
+   408→   408→                  <p className="text-[14px] font-extrabold text-foreground">Request changes</p>
+   409→   409→                  <p className="text-[12px] font-semibold text-muted-foreground">
+   410→   410→                    Request revisions or additional tweaks.
+   411→   411→                  </p>
+   412→   412→                </div>
+   413→   413→                <span className="text-muted-foreground">›</span>
+   414→   414→              </button>
+   415→   415→              <button
+   416→   416→                type="button"
+   417→   417→                disabled={busy}
+   418→   418→                onClick={async () => {
+   419→   419→                  const updated = await act({
+   420→   420→                    action: "dispute",
+   421→   421→                    note: "Work doesn't match the agreed scope",
+   422→   422→                  });
+   423→   423→                  if (updated) toast.warning("Dispute raised — our team will step in.");
+   424→   424→                }}
+   425→   425→                className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-red-50"
+   426→   426→              >
+   427→   427→                <div>
+   428→   428→                  <p className="text-[14px] font-extrabold text-red-600">Raise a dispute</p>
+   429→   429→                  <p className="text-[12px] font-semibold text-muted-foreground">
+   430→   430→                    Something isn't right? Our team will step in to help.
+   431→   431→                  </p>
+   432→   432→                </div>
+   433→   433→                <span className="text-red-400">›</span>
+   434→   434→              </button>
+   435→   435→            </div>
+   436→   436→          </SectionCard>
+   437→   437→        </>
+   438→   438→      );
+   439→   439→      break;
+   440→   440→
+   441→   441→    case "revision":
+   442→   442→      body = (
+   443→   443→        <>
+   444→   444→          <EscrowBanner amount={deposit} paidOn={deal.depositPaidAt} />
+   445→   445→          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+   446→   446→            <p className="text-[14px] font-extrabold text-amber-800">Changes requested</p>
+   447→   447→            <p className="mt-1 text-[13px] font-medium text-amber-700">
+   448→   448→              {deal.events.find((e) => e.type === "changes_requested")?.label ??
+   449→   449→                "You requested changes to this delivery."}
+   450→   450→            </p>
+   451→   451→            <p className="mt-2 text-[13px] font-semibold text-amber-700">
+   452→   452→              {creator.name} will submit an updated delivery soon.
+   453→   453→            </p>
+   454→   454→          </div>
+   455→   455→          <PeopleCard deal={deal} creatorName={creator.name} creatorCraft={creator.craft} />
+   456→   456→        </>
+   457→   457→      );
+   458→   458→      break;
+   459→   459→
+   460→   460→    case "approved":
+   461→   461→      body = (
+   462→   462→        <>
+   463→   463→          <div className="rounded-2xl border border-primary/20 bg-secondary p-5">
+   464→   464→            <div className="flex items-start justify-between gap-4">
+   465→   465→              <div className="min-w-0">
+   466→   466→                <p className="text-lg font-extrabold text-foreground">Delivery approved! 🎉</p>
+   467→   467→                <p className="mt-1 text-[13px] font-medium text-muted-foreground">
+   468→   468→                  The preview meets the agreed requirements. Great work, {creator.name}.
+   469→   469→                </p>
+   470→   470→              </div>
+   471→   471→              <div className="shrink-0 rounded-xl bg-amber-50 p-3 text-center">
+   472→   472→                <p className="text-[11px] font-bold text-amber-700">Next step</p>
+   473→   473→                <p className="text-[13px] font-extrabold text-amber-800">Complete payment</p>
+   474→   474→              </div>
+   475→   475→            </div>
+   476→   476→          </div>
+   477→   477→          <SectionCard title="Deal progress">
+   478→   478→            <Stepper steps={steps} />
+   479→   479→          </SectionCard>
+   480→   480→          <PaymentSummary deal={deal} deposit={deposit} balance={balance} />
+   481→   481→          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+   482→   482→            <p className="text-[14px] font-extrabold text-amber-800">
+   483→   483→              Why we need the final payment
+   484→   484→            </p>
+   485→   485→            <p className="mt-1 text-[13px] font-medium leading-relaxed text-amber-700">
+   486→   486→              Your initial {formatNaira(deposit)} deposit is held securely. Pay the remaining{" "}
+   487→   487→              {formatNaira(balance)} to secure the full {formatNaira(deal.price)} — once secured,{" "}
+   488→   488→              {creator.name} will upload the final, high-resolution files.
+   489→   489→            </p>
+   490→   490→          </div>
+   491→   491→          <div className="rounded-2xl border border-border bg-card p-4">
+   492→   492→            <div className="flex items-center justify-between gap-3">
+   493→   493→              <div>
+   494→   494→                <p className="text-[11px] font-bold uppercase text-muted-foreground">Amount due</p>
+   495→   495→                <p className="text-xl font-extrabold text-amber-600">{formatNaira(balance)}</p>
+   496→   496→              </div>
+   497→   497→              <Button
+   498→   498→                className="h-12 rounded-xl px-5 font-bold"
+   499→   499→                disabled={busy}
+   500→   500→                onClick={() => {
+   501→   501→                  setPayKind("balance");
+   502→   502→                  setPayOpen(true);
+   503→   503→                }}
+   504→   504→              >
+   505→   505→                <Wallet className="mr-2 h-4.5 w-4.5" /> Pay {formatNaira(balance)} balance
+   506→   506→              </Button>
+   507→   507→            </div>
+   508→   508→            <p className="mt-2 text-center text-[11px] font-semibold text-muted-foreground">
+   509→   509→              100% secure · Encrypted by DEAL · Your money is protected
+   510→   510→            </p>
+   511→   511→          </div>
+   512→   512→        </>
+   513→   513→      );
+   514→   514→      break;
+   515→   515→
+   516→   516→    case "balance_paid":
+   517→   517→      body = (
+   518→   518→        <>
+   519→   519→          <div className="rounded-2xl border border-primary/20 bg-secondary p-5 text-center">
+   520→   520→            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent ring-8 ring-accent/50">
+   521→   521→              <ShieldCheck className="h-8 w-8 text-primary" />
+   522→   522→            </span>
+   523→   523→            <p className="mt-3 text-lg font-extrabold text-foreground">Full payment secured! 🎉</p>
+   524→   524→            <p className="text-[15px] font-extrabold text-primary">{formatNaira(deal.price)}</p>
+   525→   525→            <p className="mx-auto mt-1 max-w-xs text-[13px] font-medium text-muted-foreground">
+   526→   526→              We'll hold the full payment securely until {creator.name} releases your final files.
+   527→   527→            </p>
+   528→   528→            <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-[12px] font-extrabold text-accent-foreground">
+   529→   529→              <ShieldCheck className="h-3.5 w-3.5 text-primary" /> Your money is 100% safe with DEAL
+   530→   530→            </p>
+   531→   531→          </div>
+   532→   532→          <SectionCard title="Deal progress">
+   533→   533→            <Stepper steps={steps} />
+   534→   534→          </SectionCard>
+   535→   535→          <PaymentSummary deal={deal} deposit={deposit} balance={balance} />
+   536→   536→          <div className="flex items-start gap-3 rounded-2xl border border-border bg-muted/60 p-4">
+   537→   537→            <span className="text-xl">⏳</span>
+   538→   538→            <div>
+   539→   539→              <p className="text-[14px] font-extrabold text-foreground">Waiting for final delivery</p>
+   540→   540→              <p className="mt-0.5 text-[13px] font-medium text-muted-foreground">
+   541→   541→                {creator.name} has been notified that the full payment is secured. Once they upload
+   542→   542→                and release the final files, we'll release the payment to them.
+   543→   543→              </p>
+   544→   544→            </div>
+   545→   545→          </div>
+   546→   546→        </>
+   547→   547→      );
+   548→   548→      break;
+   549→   549→
+   550→   550→    case "files_released":
+   551→   551→      body = (
+   552→   552→        <>
+   553→   553→          <div className="rounded-2xl border border-primary/20 bg-secondary p-5 text-center">
+   554→   554→            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent ring-8 ring-accent/50">
+   555→   555→              <PartyPopper className="h-8 w-8 text-primary" />
+   556→   556→            </span>
+   557→   557→            <p className="mt-3 text-lg font-extrabold text-foreground">Final files released!</p>
+   558→   558→            <p className="mx-auto mt-1 max-w-xs text-[13px] font-medium text-muted-foreground">
+   559→   559→              {creator.name} has delivered the final files. Download them below — they're yours
+   560→   560→              forever.
+   561→   561→            </p>
+   562→   562→          </div>
+   563→   563→          <SectionCard title="Final files">
+   564→   564→            <div className="space-y-2.5">
+   565→   565→              {deal.finalFiles.map((file) => (
+   566→   566→                <FileRow
+   567→   567→                  key={file.id}
+   568→   568→                  name={file.name}
+   569→   569→                  size={file.size}
+   570→   570→                  kind={file.kind}
+   571→   571→                  onPreview={() => toast.success("Download started (simulated)")}
+   572→   572→                />
+   573→   573→              ))}
+   574→   574→            </div>
+   575→   575→          </SectionCard>
+   576→   576→          <Button
+   577→   577→            variant="outline"
+   578→   578→            className="h-12 w-full rounded-xl font-bold"
+   579→   579→            onClick={() => toast.success("Download started (simulated)")}
+   580→   580→          >
+   581→   581→            <Download className="mr-2 h-4.5 w-4.5" /> Download all files
+   582→   582→          </Button>
+   583→   583→        </>
+   584→   584→      );
+   585→   585→      break;
+   586→   586→
+   587→   587→    case "completed":
+   588→   588→      body = (
+   589→   589→        <>
+   590→   590→          <div className="rounded-2xl border border-primary/20 bg-secondary p-6 text-center">
+   591→   591→            <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary ring-8 ring-accent">
+   592→   592→              <Check className="h-10 w-10 text-white" strokeWidth={3} />
+   593→   593→            </span>
+   594→   594→            <p className="mt-4 text-xl font-extrabold text-foreground">DEAL completed! 🎉</p>
+   595→   595→            <p className="mx-auto mt-1 max-w-xs text-[13px] font-medium text-muted-foreground">
+   596→   596→              The project is complete and payment has been released to {creator.name}.
+   597→   597→            </p>
+   598→   598→            <p className="mt-2 text-[13px] font-extrabold text-primary">Thanks for using DEAL. 💚</p>
+   599→   599→          </div>
+   600→   600→          <SectionCard title="Deal progress">
+   601→   601→            <Stepper steps={steps} />
+   602→   602→          </SectionCard>
+   603→   603→          <SectionCard title="Final files delivered">
+   604→   604→            <div className="space-y-2.5">
+   605→   605→              {deal.finalFiles.map((file) => (
+   606→   606→                <FileRow
+   607→   607→                  key={file.id}
+   608→   608→                  name={file.name}
+   609→   609→                  size={file.size}
+   610→   610→                  kind={file.kind}
+   611→   611→                  onPreview={() => toast.success("Download started (simulated)")}
+   612→   612→                />
+   613→   613→              ))}
+   614→   614→            </div>
+   615→   615→            <Button
+   616→   616→              variant="outline"
+   617→   617→              className="mt-3 h-11 w-full rounded-xl font-bold"
+   618→   618→              onClick={() => toast.success("Download started (simulated)")}
+   619→   619→            >
+   620→   620→              <Download className="mr-2 h-4 w-4" /> Download again
+   621→   621→            </Button>
+   622→   622→          </SectionCard>
+   623→   623→          <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+   624→   624→            <div>
+   625→   625→              <p className="text-[14px] font-extrabold text-foreground">Payment released</p>
+   626→   626→              <p className="text-[13px] font-medium text-muted-foreground">
+   627→   627→                {formatNaira(deal.price)} has been released to {creator.name}.
+   628→   628→              </p>
+   629→   629→            </div>
+   630→   630→            <span className="rounded-full bg-accent px-2.5 py-1 text-[11px] font-extrabold text-accent-foreground">
+   631→   631→              Released
+   632→   632→            </span>
+   633→   633→          </div>
+   634→   634→          <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-accent/60 p-4">
+   635→   635→            <div className="min-w-0">
+   636→   636→              <p className="text-[14px] font-extrabold text-foreground">How was your experience?</p>
+   637→   637→              <p className="text-[13px] font-medium text-muted-foreground">
+   638→   638→                Support amazing creatives like {creator.name}.
+   639→   639→              </p>
+   640→   640→            </div>
+   641→   641→            <Button className="h-10 shrink-0 rounded-xl px-4 text-[13px] font-bold" onClick={() => setReviewOpen(true)}>
+   642→   642→              Leave a review
+   643→   643→            </Button>
+   644→   644→          </div>
+   645→   645→        </>
+   646→   646→      );
+   647→   647→      break;
+   648→   648→
+   649→   649→    default:
+   650→   650→      body = (
+   651→   651→        <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+   652→   652→          <p className="text-[15px] font-extrabold text-red-700">
+   653→   653→            {deal.status === "declined" ? "Deal declined" : "Dispute in review"}
+   654→   654→          </p>
+   655→   655→          <p className="mt-1 text-[13px] font-medium text-red-600">
+   656→   656→            {deal.status === "declined"
+   657→   657→              ? "This deal was declined. Reach out to the creator on WhatsApp to discuss alternatives."
+   658→   658→              : "Our team is reviewing this case and will contact both sides shortly. Your money is safe."}
+   659→   659→          </p>
+   660→   660→        </div>
+   661→   661→      );
+   662→   662→  }
+   663→   663→
+   664→   664→  return (
+   665→   665→    <ClientFrame>
+   666→   666→      <div className="flex-1 px-5 pb-12 pt-4">
+   667→   667→        {/* deal header */}
+   668→   668→        <div className="flex items-start justify-between gap-3">
+   669→   669→          <div className="min-w-0">
+   670→   670→            <h1 className="truncate text-xl font-extrabold tracking-tight text-foreground">
+   671→   671→              {deal.title}
+   672→   672→            </h1>
+   673→   673→            <p className="mt-0.5 text-[13px] font-semibold text-muted-foreground">
+   674→   674→              {deal.ref} · {creator.name} ({creator.craft || "Creator"})
+   675→   675→              {creator.verified ? (
+   676→   676→                <BadgeCheck className="ml-1 inline h-3.5 w-3.5 text-primary" />
+   677→   677→              ) : null}
+   678→   678→            </p>
+   679→   679→            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold text-muted-foreground">
+   680→   680→              <span className="inline-flex items-center gap-1.5">
+   681→   681→                <CalendarDays className="h-3.5 w-3.5" /> {formatDate(deal.eventDate) || "Date TBD"}
+   682→   682→              </span>
+   683→   683→              <span className="inline-flex items-center gap-1.5">
+   684→   684→                <MapPin className="h-3.5 w-3.5" /> {deal.location || "—"}
+   685→   685→              </span>
+   686→   686→            </div>
+   687→   687→          </div>
+   688→   688→          <div className="shrink-0 rounded-2xl border border-border bg-card px-3.5 py-2 text-right">
+   689→   689→            <p className="text-[10px] font-bold uppercase text-muted-foreground">Total price</p>
+   690→   690→            <p className="text-[15px] font-extrabold text-foreground">{formatNaira(deal.price)}</p>
+   691→   691→          </div>
+   692→   692→        </div>
+   693→   693→
+   694→   694→        {deal.message && deal.status === "sent" ? (
+   695→   695→          <div className="mt-4 rounded-xl border border-border bg-muted/60 p-3.5 text-[13px] font-medium leading-relaxed text-foreground">
+   696→   696→            “{deal.message}”
+   697→   697→          </div>
+   698→   698→        ) : null}
+   699→   699→
+   700→   700→        <div className="mt-5 space-y-4">{body}</div>
+   701→   701→
+   702→   702→        {/* record */}
+   703→   703→        {deal.events.length > 1 && deal.status !== "sent" ? (
+   704→   704→          <div className="mt-4">
+   705→   705→            <RecordTimeline events={deal.events} />
+   706→   706→          </div>
+   707→   707→        ) : null}
+   708→   708→
+   709→   709→        <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-xs font-semibold text-muted-foreground">
+   710→   710→          <ShieldCheck className="h-4 w-4 text-primary" />
+   711→   711→          All projects on DEAL are protected by clear agreements and secure payments.
+   712→   712→        </p>
+   713→   713→      </div>
+   714→   714→
+   715→   715→      {/* payment sheet */}
+   716→   716→      <Dialog open={payOpen} onOpenChange={setPayOpen}>
+   717→   717→        <DialogContent aria-describedby={undefined} className="max-w-md rounded-2xl p-0">
+   718→   718→          <div className="max-h-[85vh] overflow-y-auto p-6">
+   719→   719→            <DialogHeader>
+   720→   720→              <DialogTitle className="text-center text-base font-extrabold">
+   721→   721→                🔒 Secure checkout
+   722→   722→              </DialogTitle>
+   723→   723→              <p className="mt-1 text-center text-[13px] font-bold text-primary">
+   724→   724→                Your payment is protected by DEAL
+   725→   725→              </p>
+   726→   726→            </DialogHeader>
+   727→   727→
+   728→   728→            <div className="mt-4 rounded-2xl border border-border bg-card p-4">
+   729→   729→              <div className="flex items-start justify-between gap-3">
+   730→   730→                <div className="min-w-0">
+   731→   731→                  <p className="text-[15px] font-extrabold text-foreground">{deal.title}</p>
+   732→   732→                  <p className="text-[13px] font-semibold text-muted-foreground">
+   733→   733→                    {deal.ref} · {creator.name}
+   734→   734→                  </p>
+   735→   735→                </div>
+   736→   736→              </div>
+   737→   737→              <div className="mt-3 space-y-1.5 border-t border-border pt-3 text-[13px] font-semibold">
+   738→   738→                <div className="flex justify-between text-muted-foreground">
+   739→   739→                  <span>Total project price</span>
+   740→   740→                  <span className="font-extrabold text-foreground">{formatNaira(deal.price)}</span>
+   741→   741→                </div>
+   742→   742→                {payKind === "deposit" ? (
+   743→   743→                  <>
+   744→   744→                    <div className="flex justify-between text-muted-foreground">
+   745→   745→                      <span>Deposit you're paying now</span>
+   746→   746→                      <span className="font-extrabold text-primary">{formatNaira(deposit)}</span>
+   747→   747→                    </div>
+   748→   748→                    <div className="flex justify-between text-muted-foreground">
+   749→   749→                      <span>Due later (on approval)</span>
+   750→   750→                      <span className="font-bold">{formatNaira(balance)}</span>
+   751→   751→                    </div>
+   752→   752→                  </>
+   753→   753→                ) : (
+   754→   754→                  <div className="flex justify-between text-muted-foreground">
+   755→   755→                    <span>Balance you're paying now</span>
+   756→   756→                    <span className="font-extrabold text-primary">{formatNaira(balance)}</span>
+   757→   757→                  </div>
+   758→   758→                )}
+   759→   759→              </div>
+   760→   760→            </div>
+   761→   761→
+   762→   762→            {payKind === "deposit" && (
+   763→   763→              <div className="mt-4 rounded-2xl border border-border bg-card p-4">
+   764→   764→                <p className="text-[13px] font-extrabold text-foreground">
+   765→   765→                  How our escrow protection works
+   766→   766→                </p>
+   767→   767→                <ol className="mt-3 grid grid-cols-4 gap-1.5 text-center">
+   768→   768→                  {[
+   769→   769→                    ["You pay", "Funds protected"],
+   770→   770→                    ["Held securely", "In escrow"],
+   771→   771→                    ["Work done", "You review"],
+   772→   772→                    ["You approve", "Then release"],
+   773→   773→                  ].map(([t, s], i) => (
+   774→   774→                    <li key={t} className="flex flex-col items-center gap-1">
+   775→   775→                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-[10px] font-extrabold text-primary">
+   776→   776→                        {i + 1}
+   777→   777→                      </span>
+   778→   778→                      <p className="text-[10px] font-extrabold leading-tight text-foreground">{t}</p>
+   779→   779→                      <p className="text-[9px] font-semibold leading-tight text-muted-foreground">{s}</p>
+   780→   780→                    </li>
+   781→   781→                  ))}
+   782→   782→                </ol>
+   783→   783→              </div>
+   784→   784→            )}
+   785→   785→
+   786→   786→            <PayMethods
+   787→   787→              amount={payKind === "deposit" ? deposit : balance}
+   788→   788→              busy={busy}
+   789→   789→              onPay={async (method) => {
+   790→   790→                const updated =
+   791→   791→                  payKind === "deposit"
+   792→   792→                    ? await act({ action: "pay-deposit", method })
+   793→   793→                    : await act({ action: "pay-balance", method });
+   794→   794→                if (updated) {
+   795→   795→                  setPayOpen(false);
+   796→   796→                  setJustPaid(payKind);
+   797→   797→                }
+   798→   798→              }}
+   799→   799→            />
+   800→   800→          </div>
+   801→   801→        </DialogContent>
+   802→   802→      </Dialog>
+   803→   803→
+   804→   804→      {/* request changes dialog */}
+   805→   805→      <Dialog open={changesOpen} onOpenChange={setChangesOpen}>
+   806→   806→        <DialogContent aria-describedby={undefined} className="max-w-md rounded-2xl">
+   807→   807→          <DialogHeader>
+   808→   808→            <DialogTitle className="text-lg font-extrabold">Request changes</DialogTitle>
+   809→   809→          </DialogHeader>
+   810→   810→          <p className="text-sm font-medium text-muted-foreground">
+   811→   811→            Tell {creator.name} what you'd like adjusted — they'll update the deal or delivery.
+   812→   812→          </p>
+   813→   813→          <Textarea
+   814→   814→            value={changesNote}
+   815→   815→            onChange={(e) => setChangesNote(e.target.value)}
+   816→   816→            placeholder="e.g. Can we move the shoot to the morning? Also add one extra location."
+   817→   817→            className="min-h-24 rounded-xl bg-muted/60 font-semibold"
+   818→   818→          />
+   819→   819→          <Button
+   820→   820→            className="h-12 w-full rounded-xl font-bold"
+   821→   821→            disabled={busy}
+   822→   822→            onClick={async () => {
+   823→   823→              const updated = await act({ action: "request-changes", note: changesNote });
+   824→   824→              setChangesOpen(false);
+   825→   825→              setChangesNote("");
+   826→   826→              if (updated) toast.success("Changes requested");
+   827→   827→            }}
+   828→   828→          >
+   829→   829→            {busy ? <Loader2 className="mr-2 h-4.5 w-4.5 animate-spin" /> : null}
+   830→   830→            Send change request
+   831→   831→          </Button>
+   832→   832→        </DialogContent>
+   833→   833→      </Dialog>
+   834→   834→
+   835→   835→      {/* review dialog */}
+   836→   836→      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+   837→   837→        <DialogContent aria-describedby={undefined} className="max-w-md rounded-2xl">
+   838→   838→          <DialogHeader>
+   839→   839→            <DialogTitle className="text-lg font-extrabold">How was your experience?</DialogTitle>
+   840→   840→          </DialogHeader>
+   841→   841→          <div className="flex justify-center gap-2 py-2">
+   842→   842→            {[1, 2, 3, 4, 5].map((n) => (
+   843→   843→              <button
+   844→   844→                key={n}
+   845→   845→                type="button"
+   846→   846→                onClick={() => setRating(n)}
+   847→   847→                aria-label={`${n} star${n === 1 ? "" : "s"}`}
+   848→   848→              >
+   849→   849→                <Star
+   850→   850→                  className={cn(
+   851→   851→                    "h-9 w-9 transition-colors",
+   852→   852→                    n <= rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40"
+   853→   853→                  )}
+   854→   854→                />
+   855→   855→              </button>
+   856→   856→            ))}
+   857→   857→          </div>
+   858→   858→          <Button
+   859→   859→            className="h-12 w-full rounded-xl font-bold"
+   860→   860→            disabled={busy}
+   861→   861→            onClick={async () => {
+   862→   862→              await act({ action: "review", rating });
+   863→   863→              setReviewOpen(false);
+   864→   864→              toast.success("Review sent — thank you!");
+   865→   865→            }}
+   866→   866→          >
+   867→   867→            Submit {rating}-star review
+   868→   868→          </Button>
+   869→   869→        </DialogContent>
+   870→   870→      </Dialog>
+   871→   871→    </ClientFrame>
+   872→   872→  );
+   873→   873→}
+   874→   874→
+   875→   875→/* ---------------- chrome ---------------- */
+   876→   876→
+   877→   877→function ClientFrame({ children }: { children: React.ReactNode }) {
+   878→   878→  return (
+   879→   879→    <div className="min-h-screen bg-[#edf3ef]">
+   880→   880→      <div className="mx-auto flex min-h-screen w-full max-w-lg flex-col bg-background pb-[env(safe-area-inset-bottom)] shadow-[0_0_60px_rgba(14,31,51,0.10)]">
+   881→   881→        <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-white/90 px-5 backdrop-blur-md">
+   882→   882→          <button
+   883→   883→            type="button"
+   884→   884→            onClick={() => {
+   885→   885→              window.location.hash = "#/";
+   886→   886→            }}
+   887→   887→            aria-label="Back"
+   888→   888→            className="rounded-lg p-1 hover:bg-muted"
+   889→   889→          >
+   890→   890→            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5">
+   891→   891→              <path d="M19 12H5m0 0 6 6m-6-6 6-6" />
+   892→   892→            </svg>
+   893→   893→          </button>
+   894→   894→          <Logo />
+   895→   895→          <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-1.5 text-[11px] font-extrabold text-accent-foreground">
+   896→   896→            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+   897→   897→            Protected
+   898→   898→          </span>
+   899→   899→        </header>
+   900→   900→        <main className="flex flex-1 flex-col">{children}</main>
+   901→   901→      </div>
+   902→   902→    </div>
+   903→   903→  );
+   904→   904→}
+   905→   905→
+   906→   906→function PeopleCard({
+   907→   907→  deal,
+   908→   908→  creatorName,
+   909→   909→  creatorCraft,
+   910→   910→}: {
+   911→   911→  deal: Deal;
+   912→   912→  creatorName: string;
+   913→   913→  creatorCraft: string;
+   914→   914→}) {
+   915→   915→  return (
+   916→   916→    <SectionCard title="People on this deal">
+   917→   917→      <div className="space-y-3">
+   918→   918→        <div className="flex items-center gap-3">
+   919→   919→          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-sm font-extrabold text-primary">
+   920→   920→            {deal.client.name.slice(0, 1).toUpperCase()}
+   921→   921→          </span>
+   922→   922→          <div className="min-w-0 flex-1">
+   923→   923→            <p className="text-sm font-extrabold text-foreground">
+   924→   924→              You <span className="ml-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-extrabold text-amber-700">Client</span>
+   925→   925→            </p>
+   926→   926→            <p className="truncate text-xs font-semibold text-muted-foreground">{deal.client.contact}</p>
+   927→   927→          </div>
+   928→   928→          <span className="text-xs font-semibold text-muted-foreground">Started this deal</span>
+   929→   929→        </div>
+   930→   930→        <div className="flex items-center gap-3 border-t border-border pt-3">
+   931→   931→          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-sm font-extrabold text-white">
+   932→   932→            {creatorName.slice(0, 1).toUpperCase()}
+   933→   933→          </span>
+   934→   934→          <div className="min-w-0 flex-1">
+   935→   935→            <p className="text-sm font-extrabold text-foreground">
+   936→   936→              {creatorName}{" "}
+   937→   937→              <span className="ml-1 rounded-full bg-accent px-2 py-0.5 text-[10px] font-extrabold text-accent-foreground">
+   938→   938→                Creator
+   939→   939→              </span>
+   940→   940→            </p>
+   941→   941→            <p className="truncate text-xs font-semibold text-muted-foreground">{creatorCraft}</p>
+   942→   942→          </div>
+   943→   943→          <span className="text-xs font-semibold text-muted-foreground">Working on it</span>
+   944→   944→        </div>
+   945→   945→      </div>
+   946→   946→    </SectionCard>
+   947→   947→  );
+   948→   948→}
+   949→   949→
+   950→   950→/* ---------------- payment methods ---------------- */
+   951→   951→
+   952→   952→function PayMethods({
+   953→   953→  amount,
+   954→   954→  busy,
+   955→   955→  onPay,
+   956→   956→}: {
+   957→   957→  amount: number;
+   958→   958→  busy: boolean;
+   959→   959→  onPay: (method: string) => void;
+   960→   960→}) {
+   961→   961→  const [method, setMethod] = useState<"card" | "bank" | "ussd" | "wallet">("card");
+   962→   962→  const [card, setCard] = useState({ number: "", expiry: "", cvv: "", name: "" });
+   963→   963→
+   964→   964→  const methods = [
+   965→   965→    { key: "card", label: "Card", sub: "Visa, Mastercard, Verve", badge: "VISA" },
+   966→   966→    { key: "bank", label: "Bank Transfer", sub: "Transfer from your bank", badge: "🏦" },
+   967→   967→    { key: "ussd", label: "USSD", sub: "Pay securely with USSD", badge: "*#" },
+   968→   968→    { key: "wallet", label: "Digital Wallet", sub: "OPay, PalmPay, Moniepoint & more", badge: "M" },
+   969→   969→  ] as const;
+   970→   970→
+   971→   971→  return (
+   972→   972→    <div className="mt-4">
+   973→   973→      <p className="text-[13px] font-extrabold text-foreground">Choose how to pay</p>
+   974→   974→      <div className="mt-2 space-y-2">
+   975→   975→        {methods.map((m) => (
+   976→   976→          <button
+   977→   977→            key={m.key}
+   978→   978→            type="button"
+   979→   979→            onClick={() => setMethod(m.key)}
+   980→   980→            className={cn(
+   981→   981→              "flex w-full items-center justify-between gap-3 rounded-xl border p-3.5 text-left transition-colors",
+   982→   982→              method === m.key ? "border-primary bg-accent/50" : "border-border bg-card hover:bg-muted/60"
+   983→   983→            )}
+   984→   984→          >
+   985→   985→            <div className="flex items-center gap-3">
+   986→   986→              <span
+   987→   987→                className={cn(
+   988→   988→                  "flex h-4.5 w-4.5 items-center justify-center rounded-full border-2",
+   989→   989→                  method === m.key ? "border-primary" : "border-muted-foreground/40"
+   990→   990→                )}
+   991→   991→              >
+   992→   992→                {method === m.key && <span className="h-2 w-2 rounded-full bg-primary" />}
+   993→   993→              </span>
+   994→   994→              <div>
+   995→   995→                <p className="text-[14px] font-extrabold text-foreground">{m.label}</p>
+   996→   996→                <p className="text-[12px] font-semibold text-muted-foreground">{m.sub}</p>
+   997→   997→              </div>
+   998→   998→            </div>
+   999→   999→            <span className="shrink-0 text-[10px] font-extrabold text-muted-foreground">{m.badge}</span>
+  1000→  1000→          </button>
+  1001→  1001→        ))}
+  1002→  1002→      </div>
+  1003→  1003→
+  1004→  1004→      {method === "card" && (
+  1005→  1005→        <div className="mt-4 space-y-3">
+  1006→  1006→          <div>
+  1007→  1007→            <label className="text-[12px] font-extrabold text-foreground">Card number</label>
+  1008→  1008→            <Input
+  1009→  1009→              value={card.number}
+  1010→  1010→              onChange={(e) => setCard({ ...card, number: e.target.value })}
+  1011→  1011→              placeholder="1234 5678 9012 3456"
+  1012→  1012→              inputMode="numeric"
+  1013→  1013→              className="mt-1 h-11 rounded-xl bg-muted/60 font-semibold"
+  1014→  1014→            />
+  1015→  1015→          </div>
+  1016→  1016→          <div className="grid grid-cols-2 gap-3">
+  1017→  1017→            <div>
+  1018→  1018→              <label className="text-[12px] font-extrabold text-foreground">Expiry date</label>
+  1019→  1019→              <Input
+  1020→  1020→                value={card.expiry}
+  1021→  1021→                onChange={(e) => setCard({ ...card, expiry: e.target.value })}
+  1022→  1022→                placeholder="MM / YY"
+  1023→  1023→                className="mt-1 h-11 rounded-xl bg-muted/60 font-semibold"
+  1024→  1024→              />
+  1025→  1025→            </div>
+  1026→  1026→            <div>
+  1027→  1027→              <label className="text-[12px] font-extrabold text-foreground">CVV</label>
+  1028→  1028→              <Input
+  1029→  1029→                value={card.cvv}
+  1030→  1030→                onChange={(e) => setCard({ ...card, cvv: e.target.value })}
+  1031→  1031→                placeholder="123"
+  1032→  1032→                inputMode="numeric"
+  1033→  1033→                className="mt-1 h-11 rounded-xl bg-muted/60 font-semibold"
+  1034→  1034→              />
+  1035→  1035→            </div>
+  1036→  1036→          </div>
+  1037→  1037→          <div>
+  1038→  1038→            <label className="text-[12px] font-extrabold text-foreground">Cardholder name</label>
+  1039→  1039→            <Input
+  1040→  1040→              value={card.name}
+  1041→  1041→              onChange={(e) => setCard({ ...card, name: e.target.value })}
+  1042→  1042→              placeholder="Name on card"
+  1043→  1043→              className="mt-1 h-11 rounded-xl bg-muted/60 font-semibold"
+  1044→  1044→            />
+  1045→  1045→          </div>
+  1046→  1046→        </div>
+  1047→  1047→      )}
+  1048→  1048→
+  1049→  1049→      {method === "bank" && (
+  1050→  1050→        <div className="mt-4 rounded-xl border border-border bg-muted/60 p-4 text-[13px] font-semibold text-muted-foreground">
+  1051→  1051→          <p className="font-extrabold text-foreground">DEAL Secure Account</p>
+  1052→  1052→          <p className="mt-1">999 123 4567 · Wema Bank</p>
+  1053→  1053→          <p className="mt-0.5">Transfer expires in 30:00 after you tap pay.</p>
+  1054→  1054→        </div>
+  1055→  1055→      )}
+  1056→  1056→
+  1057→  1057→      {method === "ussd" && (
+  1058→  1058→        <div className="mt-4 rounded-xl border border-border bg-muted/60 p-4 text-[13px] font-semibold text-muted-foreground">
+  1059→  1059→          <p className="font-extrabold text-foreground">Dial *919*86#</p>
+  1060→  1060→          <p className="mt-1">Complete the prompt with your bank to approve {formatNaira(amount)}.</p>
+  1061→  1061→        </div>
+  1062→  1062→      )}
+  1063→  1063→
+  1064→  1064→      {method === "wallet" && (
+  1065→  1065→        <div className="mt-4 rounded-xl border border-border bg-muted/60 p-4 text-[13px] font-semibold text-muted-foreground">
+  1066→  1066→          <p className="font-extrabold text-foreground">You'll be redirected</p>
+  1067→  1067→          <p className="mt-1">Choose OPay, PalmPay or Moniepoint to approve the payment.</p>
+  1068→  1068→        </div>
+  1069→  1069→      )}
+  1070→  1070→
+  1071→  1071→      <Button
+  1072→  1072→        className="mt-5 h-13 w-full rounded-xl text-[15px] font-bold shadow-md shadow-primary/25"
+  1073→  1073→        disabled={busy}
+  1074→  1074→        onClick={() => onPay(methods.find((m) => m.key === method)?.label ?? "Card")}
+  1075→  1075→      >
+  1076→  1076→        {busy ? (
+  1077→  1077→          <>
+  1078→  1078→            <Loader2 className="mr-2 h-4.5 w-4.5 animate-spin" />
+  1079→  1079→            Processing payment…
+  1080→  1080→          </>
+  1081→  1081→        ) : (
+  1082→  1082→          <>
+  1083→  1083→            <ShieldCheck className="mr-2 h-4.5 w-4.5" />
+  1084→  1084→            Pay {formatNaira(amount)} securely
+  1085→  1085→          </>
+  1086→  1086→        )}
+  1087→  1087→      </Button>
+  1088→  1088→      <p className="mt-2.5 text-center text-[11px] font-semibold text-muted-foreground">
+  1089→  1089→        🔒 Encrypted and secure · Your data is safe with us
+  1090→  1090→      </p>
+  1091→  1091→    </div>
+  1092→  1092→  );
+  1093→  1093→}
+  1094→  1094→

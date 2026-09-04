@@ -1,12 +1,12 @@
 import { getDB, jsonOk, jsonError } from "@/lib/store";
-import { depositAmount, balanceAmount } from "@/lib/types";
-import type { Deal, DealStatus } from "@/lib/types";
+import { remainingBalance } from "@/lib/types";
+import type { DealStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
-const ONGOING: DealStatus[] = ["active", "delivered", "revision", "approved"];
+const ONGOING: DealStatus[] = ["active", "delivered", "revision", "approved", "balance_paid"];
 const PENDING: DealStatus[] = ["sent", "changes_requested"];
 
 export async function GET(_request: Request, { params }: Params) {
@@ -20,11 +20,14 @@ export async function GET(_request: Request, { params }: Params) {
   const requests = db.requests.filter(
     (r) => r.creatorId === id && r.status !== "archived" && r.status !== "declined"
   );
+  const bookings = db.bookings
+    .filter((b) => b.creatorId === id)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
   const now = Date.now();
   const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
 
-  const earned = deals.reduce(
+  const released = deals.reduce(
     (sum, d) =>
       sum +
       d.payments
@@ -39,14 +42,13 @@ export async function GET(_request: Request, { params }: Params) {
     0
   );
   const expected = deals
-    .filter((d) => ONGOING.includes(d.status) || d.status === "balance_paid")
-    .reduce((sum, d) => sum + balanceAmount(d), 0);
+    .filter((d) => ONGOING.includes(d.status) && d.status !== "completed")
+    .reduce((sum, d) => sum + remainingBalance(d), 0);
+
+  const { password: _pw, ...safeCreator } = creator;
 
   const overview = {
-    creator: (() => {
-      const { password: _pw, ...safe } = creator;
-      return safe;
-    })(),
+    creator: safeCreator,
     stats: {
       totalRequests: requests.length,
       newRequests: requests.filter((r) => r.status === "new").length,
@@ -54,18 +56,15 @@ export async function GET(_request: Request, { params }: Params) {
       ongoingDeals: deals.filter((d) => ONGOING.includes(d.status)).length,
       completedDeals: deals.filter((d) => d.status === "completed").length,
       newThisWeek: requests.filter((r) => Date.parse(r.createdAt) > weekAgo).length,
+      upcomingBookings: bookings.filter(
+        (b) => b.status === "requested" || b.status === "confirmed"
+      ).length,
     },
     money: {
-      earnedThisMonth: earned,
+      releasedAllTime: released,
+      earnedThisMonth: released,
       inEscrow,
       expectedBalance: expected,
-      depositHeld: deals.reduce(
-        (sum, d) =>
-          d.payments.some((p) => p.status === "held")
-            ? sum + depositAmount(d)
-            : sum,
-        0
-      ),
     },
     earningsSeries: db.settings.earningsSeries,
     requests: [...requests]
@@ -85,10 +84,14 @@ export async function GET(_request: Request, { params }: Params) {
         client: d.client.name,
         status: d.status,
         price: d.price,
-        balance: balanceAmount(d),
+        balance: remainingBalance(d),
         dueDate: d.dueDate,
         updatedAt: d.events.at(-1)?.at ?? d.createdAt,
       })),
+    bookings: bookings.slice(0, 3),
+    bookingsUpcoming: bookings.filter(
+      (b) => b.status === "requested" || b.status === "confirmed"
+    ).length,
   };
 
   return jsonOk(overview);

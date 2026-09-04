@@ -15,18 +15,23 @@ import type { DB } from "@/lib/types";
  */
 const DB_PATH = path.join(process.cwd(), "db", "db.json");
 
-let cache: DB | null = null;
+/**
+ * The parsed DB lives on globalThis so hot-module reloads (which re-evaluate
+ * this module) always share ONE in-memory database instead of forking a
+ * second, stale copy that could clobber the file on save.
+ */
+const globalStore = globalThis as unknown as { __dealDb?: DB };
 
 export function getDB(): DB {
-  if (!cache) {
-    cache = JSON.parse(fs.readFileSync(DB_PATH, "utf8")) as DB;
+  if (!globalStore.__dealDb) {
+    globalStore.__dealDb = JSON.parse(fs.readFileSync(DB_PATH, "utf8")) as DB;
   }
-  return cache;
+  return globalStore.__dealDb;
 }
 
 export function reloadDB(): DB {
-  cache = JSON.parse(fs.readFileSync(DB_PATH, "utf8")) as DB;
-  return cache;
+  globalStore.__dealDb = JSON.parse(fs.readFileSync(DB_PATH, "utf8")) as DB;
+  return globalStore.__dealDb;
 }
 
 export function saveDB(): void {
@@ -44,7 +49,7 @@ export function newToken(): string {
 }
 
 export function nextRef(
-  prefix: "DEAL" | "REQ",
+  prefix: "DEAL" | "REQ" | "BKG",
   items: { ref: string }[]
 ): string {
   const max = items.reduce((acc, item) => {
@@ -54,12 +59,18 @@ export function nextRef(
   return `${prefix}-${String(max + 1).padStart(3, "0")}`;
 }
 
+export function newPayazaRef(): string {
+  return `PZ-${randomBytes(4).toString("hex").toUpperCase()}`;
+}
+
+const NO_CACHE = { "Cache-Control": "no-store, no-cache, must-revalidate" } as const;
+
 export function jsonOk(data: unknown, status = 200) {
-  return Response.json(data, { status });
+  return Response.json(data, { status, headers: NO_CACHE });
 }
 
 export function jsonError(error: string, status = 400) {
-  return Response.json({ error }, { status });
+  return Response.json({ error }, { status, headers: NO_CACHE });
 }
 
 export async function readBody<T>(request: Request): Promise<T | null> {

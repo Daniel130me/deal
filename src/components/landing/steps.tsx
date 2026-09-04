@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import {
-  CheckCircle2,
+  BadgeCheck,
   Image as ImageIcon,
   MessageCircle,
   Wallet,
@@ -13,7 +13,8 @@ const STEPS = [
   {
     number: "1",
     title: "Agree",
-    description: "Discuss and confirm the job — scope, price and timeline.",
+    description:
+      "Send the agreement — scope, price and timeline. Your client accepts with one tap.",
     icon: MessageCircle,
     iconClass: "text-primary",
     circleClass: "bg-accent",
@@ -21,7 +22,8 @@ const STEPS = [
   {
     number: "2",
     title: "Pay",
-    description: "Client pays a deposit into DEAL to start the work.",
+    description:
+      "Client accepts & pays the deposit — then installments anytime. Every payment is locked in Payaza escrow.",
     icon: Wallet,
     iconClass: "text-amber-500",
     circleClass: "bg-amber-50",
@@ -29,16 +31,18 @@ const STEPS = [
   {
     number: "3",
     title: "Create",
-    description: "You deliver and the client reviews your work.",
+    description:
+      "You do the work in peace — files stay locked until the deal is fully paid.",
     icon: ImageIcon,
     iconClass: "text-primary",
     circleClass: "bg-accent",
   },
   {
     number: "4",
-    title: "Complete",
-    description: "Approve, get paid the balance and close the deal.",
-    icon: CheckCircle2,
+    title: "Approve & Deliver",
+    description:
+      "Client approves → escrow releases your money automatically. Final files unlock once fully paid.",
+    icon: BadgeCheck,
     iconClass: "text-violet-600",
     circleClass: "bg-violet-50",
   },
@@ -55,7 +59,7 @@ export function Steps() {
               From chat to cash, in four steps
             </>
           }
-          subtitle="The familiar “pay half, do the work, pay the balance” arrangement — finally structured, tracked and protected."
+          subtitle="The familiar pay-in-parts arrangement — deposits and installments held in escrow, released only when the work is approved."
         />
 
         <div className="relative mt-12 sm:mt-14">

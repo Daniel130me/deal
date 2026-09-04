@@ -14,6 +14,8 @@ const DealDetailScreen = lazy(() => import("@/components/app/screens/deal-detail
 const DealsListScreen = lazy(() => import("@/components/app/screens/deals-list"));
 const ClientDealScreen = lazy(() => import("@/components/app/screens/client-deal"));
 const PublicPageScreen = lazy(() => import("@/components/app/screens/public-page"));
+const BookingsScreen = lazy(() => import("@/components/app/screens/bookings"));
+const MoneyScreen = lazy(() => import("@/components/app/screens/money"));
 
 function ScreenLoading() {
   return (
@@ -117,6 +119,22 @@ function Router() {
     return (
       <Suspense fallback={<ScreenLoading />}>
         <RequestsScreen requestId={parts[1] ?? null} />
+      </Suspense>
+    );
+  }
+
+  if (parts[0] === "bookings") {
+    return (
+      <Suspense fallback={<ScreenLoading />}>
+        <BookingsScreen />
+      </Suspense>
+    );
+  }
+
+  if (parts[0] === "money") {
+    return (
+      <Suspense fallback={<ScreenLoading />}>
+        <MoneyScreen />
       </Suspense>
     );
   }

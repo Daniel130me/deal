@@ -68,6 +68,7 @@ export async function POST(request: Request) {
     deliverables: [],
     price: 0,
     depositPercent: 50,
+    installmentsCount: 2,
     startDate: "",
     dueDate: "",
     revisions: 2,

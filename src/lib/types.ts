@@ -1,3 +1,20 @@
+export type ChannelType =
+  | "whatsapp"
+  | "telegram"
+  | "instagram"
+  | "email"
+  | "phone_call"
+  | "sms"
+  | "x_twitter"
+  | "linkedin"
+  | "tiktok";
+
+export interface CreatorChannel {
+  type: ChannelType;
+  value: string;
+  primary?: boolean;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -5,6 +22,7 @@ export interface User {
   email: string;
   phone: string;
   whatsapp: string;
+  channels: CreatorChannel[];
   password: string;
   craft: string;
   location: string;
@@ -42,6 +60,21 @@ export interface ClientRequest {
   createdAt: string;
 }
 
+export interface Booking {
+  id: string;
+  ref: string;
+  creatorId: string;
+  serviceId?: string;
+  sessionType: string;
+  clientName: string;
+  clientContact: string;
+  date: string; // yyyy-mm-dd
+  time: string; // "10:00"
+  note: string;
+  status: "requested" | "confirmed" | "completed" | "declined" | "cancelled";
+  createdAt: string;
+}
+
 export interface DealEvent {
   at: string;
   type:
@@ -62,13 +95,20 @@ export interface DealEvent {
   actor: "creator" | "client" | "system";
 }
 
+export type PaymentMethod = "card" | "transfer" | "ussd";
+
 export interface DealPayment {
   id: string;
-  type: "deposit" | "balance";
+  type: "deposit" | "installment" | "balance";
+  label: string;
   amount: number;
-  method: string;
+  method: PaymentMethod;
+  methodLabel: string;
+  provider: "payaza";
+  reference: string; // PZ-XXXXXXXX
   status: "held" | "released";
   paidAt: string;
+  releasedAt?: string;
 }
 
 export interface DealFile {
@@ -116,6 +156,7 @@ export interface Deal {
   deliverables: string[];
   price: number;
   depositPercent: number;
+  installmentsCount: number;
   startDate: string;
   dueDate: string;
   revisions: number;
@@ -141,6 +182,7 @@ export interface DB {
   services: Service[];
   requests: ClientRequest[];
   deals: Deal[];
+  bookings: Booking[];
   settings: { earningsSeries: { month: string; amount: number }[] };
 }
 
@@ -156,7 +198,7 @@ export const STATUS_LABELS: Record<DealStatus, string> = {
   active: "Active",
   delivered: "Awaiting review",
   revision: "Revision requested",
-  approved: "Awaiting balance",
+  approved: "Approved · Funds released",
   balance_paid: "Payment secured",
   files_released: "Files released",
   completed: "Completed",
@@ -171,23 +213,116 @@ export const STATUS_CHIP_CLASS: Record<DealStatus, string> = {
   active: "bg-accent text-accent-foreground",
   delivered: "bg-violet-50 text-violet-700",
   revision: "bg-amber-50 text-amber-700",
-  approved: "bg-sky-50 text-teal-700",
+  approved: "bg-teal-50 text-teal-700",
   balance_paid: "bg-accent text-accent-foreground",
   files_released: "bg-accent text-accent-foreground",
   completed: "bg-accent text-accent-foreground",
   disputed: "bg-red-50 text-red-600",
 };
 
+export const BOOKING_STATUS_LABELS: Record<Booking["status"], string> = {
+  requested: "Needs confirmation",
+  confirmed: "Confirmed",
+  completed: "Completed",
+  declined: "Declined",
+  cancelled: "Cancelled",
+};
+
+export const BOOKING_STATUS_CHIP_CLASS: Record<Booking["status"], string> = {
+  requested: "bg-amber-50 text-amber-700",
+  confirmed: "bg-accent text-accent-foreground",
+  completed: "bg-muted text-muted-foreground",
+  declined: "bg-red-50 text-red-600",
+  cancelled: "bg-muted text-muted-foreground",
+};
+
 export function depositAmount(deal: Pick<Deal, "price" | "depositPercent">) {
   return Math.round((deal.price * deal.depositPercent) / 100);
 }
 
+/** @deprecated legacy helper — prefer remainingBalance() which accounts for payments made. */
 export function balanceAmount(deal: Pick<Deal, "price" | "depositPercent">) {
   return deal.price - depositAmount(deal);
 }
 
+/** Everything still unpaid on the deal. */
+export function remainingBalance(deal: Deal) {
+  return Math.max(0, deal.price - paidTotal(deal));
+}
+
+export function isFullyPaid(deal: Deal) {
+  return remainingBalance(deal) === 0;
+}
+
+/** Work has been approved by the client — new payments release instantly. */
+export function isApproved(deal: Deal) {
+  return (
+    deal.status === "approved" ||
+    deal.status === "files_released" ||
+    deal.status === "completed"
+  );
+}
+
 export function paidTotal(deal: Deal) {
   return deal.payments.reduce((sum, p) => sum + p.amount, 0);
+}
+
+export interface ScheduleSlot {
+  type: DealPayment["type"];
+  label: string;
+  amount: number;
+  status: "paid" | "due";
+}
+
+/** Ideal payment plan with each slot marked paid/due by consuming payments in order. */
+export function paymentSchedule(deal: Deal): ScheduleSlot[] {
+  const slots: Omit<ScheduleSlot, "status">[] = [];
+
+  if (deal.depositPercent >= 100) {
+    slots.push({ type: "deposit", label: "Full payment", amount: deal.price });
+  } else {
+    const deposit = depositAmount(deal);
+    slots.push({
+      type: "deposit",
+      label: `Deposit (${deal.depositPercent}%)`,
+      amount: deposit,
+    });
+    const balance = deal.price - deposit;
+    const n = Math.max(0, deal.installmentsCount ?? 0);
+    if (n === 0) {
+      slots.push({ type: "balance", label: "Balance payment", amount: balance });
+    } else {
+      const each = Math.floor(balance / n);
+      for (let i = 1; i <= n; i++) {
+        const amount = i === n ? balance - each * (n - 1) : each;
+        slots.push({
+          type: "installment",
+          label: n === 1 ? "Balance installment" : `Installment ${i} of ${n}`,
+          amount,
+        });
+      }
+    }
+  }
+
+  let pool = paidTotal(deal);
+  const out: ScheduleSlot[] = [];
+  for (const slot of slots) {
+    if (pool >= slot.amount) {
+      out.push({ ...slot, status: "paid" });
+      pool -= slot.amount;
+    } else {
+      out.push({ ...slot, status: "due" });
+    }
+  }
+  // Leftover money (e.g. a merged "pay all remaining" payment) clears everything.
+  if (pool > 0) {
+    for (const slot of out) slot.status = "paid";
+  }
+  return out;
+}
+
+export function nextDueSlot(deal: Deal): ScheduleSlot | null {
+  return paymentSchedule(deal).find((s) => s.status === "due") ?? null;
 }
 
 export function formatNaira(amount: number) {
@@ -212,4 +347,11 @@ export function formatDateTime(iso: string | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** "Fri, 12 Feb" for a yyyy-mm-dd booking date. */
+export function formatBookingDate(date: string) {
+  const d = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return date;
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 }

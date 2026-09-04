@@ -2,20 +2,48 @@ import {
   getDB,
   saveDB,
   newId,
+  newPayazaRef,
   jsonOk,
   jsonError,
   readBody,
 } from "@/lib/store";
-import { balanceAmount, depositAmount } from "@/lib/types";
-import type { Deal } from "@/lib/types";
+import {
+  depositAmount,
+  isApproved,
+  nextDueSlot,
+  paymentSchedule,
+  remainingBalance,
+} from "@/lib/types";
+import type { Deal, DealPayment, PaymentMethod } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ token: string }> };
 
-function clientDeal(deal: Deal) {
-  // strip anything the client shouldn't see
-  return deal;
+const METHOD_LABELS: Record<PaymentMethod, string> = {
+  card: "Card payment",
+  transfer: "Bank transfer",
+  ussd: "USSD payment",
+};
+
+function makePayment(
+  deal: Deal,
+  args: { type: DealPayment["type"]; label: string; amount: number; method: PaymentMethod; now: string }
+): DealPayment {
+  const released = isApproved(deal);
+  return {
+    id: newId("p"),
+    type: args.type,
+    label: args.label,
+    amount: args.amount,
+    method: args.method,
+    methodLabel: METHOD_LABELS[args.method] ?? "Card payment",
+    provider: "payaza",
+    reference: newPayazaRef(),
+    status: released ? "released" : "held",
+    paidAt: args.now,
+    ...(released ? { releasedAt: args.now } : {}),
+  };
 }
 
 export async function GET(_request: Request, { params }: Params) {
@@ -27,8 +55,13 @@ export async function GET(_request: Request, { params }: Params) {
   const creator = db.users.find((u) => u.id === deal.creatorId);
   const { password: _pw, ...safeCreator } = creator!;
 
+  const paid = deal.payments.reduce((s, p) => s + p.amount, 0);
+  const remaining = Math.max(0, deal.price - paid);
+  const schedule = paymentSchedule(deal);
+  const nextDue = schedule.find((s) => s.status === "due") ?? null;
+
   return jsonOk({
-    deal: clientDeal(deal),
+    deal,
     creator: {
       id: safeCreator.id,
       name: safeCreator.name,
@@ -37,13 +70,20 @@ export async function GET(_request: Request, { params }: Params) {
       location: safeCreator.location,
       verified: safeCreator.verified,
       whatsapp: safeCreator.whatsapp,
+      channels: safeCreator.channels ?? [],
     },
     amounts: {
       total: deal.price,
       deposit: depositAmount(deal),
-      balance: balanceAmount(deal),
-      paid: deal.payments.reduce((s, p) => s + p.amount, 0),
-      due: Math.max(0, deal.price - deal.payments.reduce((s, p) => s + p.amount, 0)),
+      paid,
+      due: remaining,
+      held: deal.payments
+        .filter((p) => p.status === "held")
+        .reduce((s, p) => s + p.amount, 0),
+      schedule,
+      nextDue,
+      fullyPaid: remaining === 0,
+      approved: isApproved(deal),
     },
   });
 }
@@ -51,9 +91,8 @@ export async function GET(_request: Request, { params }: Params) {
 interface ActionBody {
   action?: string;
   note?: string;
-  method?: string;
+  method?: PaymentMethod;
   rating?: number;
-  reviewText?: string;
 }
 
 export async function POST(request: Request, { params }: Params) {
@@ -64,32 +103,116 @@ export async function POST(request: Request, { params }: Params) {
   if (!deal) return jsonError("Deal not found. Check your link.", 404);
 
   const now = new Date().toISOString();
+  const method: PaymentMethod =
+    body?.method === "transfer" || body?.method === "ussd" ? body.method : "card";
+  const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
 
   switch (body?.action) {
     case "pay-deposit": {
       if (deal.status !== "sent" && deal.status !== "changes_requested") {
         return jsonError("This deal is not awaiting acceptance.", 409);
       }
+      const amount = depositAmount(deal);
       deal.status = "active";
       deal.acceptedAt = now;
       deal.depositPaidAt = now;
-      deal.payments.push({
-        id: newId("p"),
+      const payment = makePayment(deal, {
         type: "deposit",
-        amount: depositAmount(deal),
-        method: body.method ?? "Card",
-        status: "held",
-        paidAt: now,
+        label: `Deposit (${deal.depositPercent}%)`,
+        amount,
+        method,
+        now,
       });
+      deal.payments.push(payment);
       deal.events.push(
         { at: now, type: "accepted", label: "Deal accepted", actor: "client" },
         {
           at: now,
           type: "deposit_paid",
-          label: `Deposit paid — ₦${depositAmount(deal).toLocaleString("en-NG")} secured in escrow`,
+          label: `Deposit paid — ${naira(amount)} secured in Payaza escrow (ref ${payment.reference})`,
           actor: "client",
         }
       );
+      break;
+    }
+
+    case "pay-next": {
+      if (
+        deal.status !== "active" &&
+        deal.status !== "delivered" &&
+        deal.status !== "revision" &&
+        deal.status !== "approved" &&
+        deal.status !== "files_released" &&
+        deal.status !== "completed"
+      ) {
+        return jsonError("Payments can only be made after the deal is accepted.", 409);
+      }
+      const remaining = remainingBalance(deal);
+      if (remaining <= 0) return jsonError("This deal is already fully paid.", 409);
+      const slot = nextDueSlot(deal);
+      const amount = slot ? Math.min(slot.amount, remaining) : remaining;
+      const payment = makePayment(deal, {
+        type: slot?.type ?? "balance",
+        label: slot?.label ?? "Balance payment",
+        amount,
+        method,
+        now,
+      });
+      deal.payments.push(payment);
+      if (isApproved(deal)) {
+        deal.events.push({
+          at: now,
+          type: "payment_released",
+          label: `${payment.label} paid — ${naira(amount)} received by creator (work already approved, ref ${payment.reference})`,
+          actor: "client",
+        });
+      } else {
+        deal.events.push({
+          at: now,
+          type: "balance_paid",
+          label: `${payment.label} paid — ${naira(amount)} secured in Payaza escrow (ref ${payment.reference})`,
+          actor: "client",
+        });
+      }
+      break;
+    }
+
+    case "pay-remaining": {
+      if (
+        deal.status !== "active" &&
+        deal.status !== "delivered" &&
+        deal.status !== "revision" &&
+        deal.status !== "approved" &&
+        deal.status !== "files_released" &&
+        deal.status !== "completed"
+      ) {
+        return jsonError("Payments can only be made after the deal is accepted.", 409);
+      }
+      const amount = remainingBalance(deal);
+      if (amount <= 0) return jsonError("This deal is already fully paid.", 409);
+      const payment = makePayment(deal, {
+        type: "balance",
+        label: "Balance payment",
+        amount,
+        method,
+        now,
+      });
+      deal.payments.push(payment);
+      if (isApproved(deal)) {
+        deal.events.push({
+          at: now,
+          type: "payment_released",
+          label: `Balance paid in full — ${naira(amount)} received by creator (work already approved, ref ${payment.reference})`,
+          actor: "client",
+        });
+      } else {
+        deal.events.push({
+          at: now,
+          type: "balance_paid",
+          label: `Balance paid in full — ${naira(amount)} secured in Payaza escrow (ref ${payment.reference})`,
+          actor: "client",
+        });
+      }
       break;
     }
 
@@ -119,30 +242,50 @@ export async function POST(request: Request, { params }: Params) {
       deal.events.push({
         at: now,
         type: "approved",
-        label: "Delivery approved by client",
+        label: "Work approved by client — completed",
+        actor: "client",
+      });
+      // Escrow releases to the creator ONLY now.
+      const held = deal.payments.filter((p) => p.status === "held");
+      const releasedTotal = held.reduce((s, p) => s + p.amount, 0);
+      if (held.length > 0) {
+        deal.payments = deal.payments.map((p) =>
+          p.status === "held" ? { ...p, status: "released", releasedAt: now } : p
+        );
+        deal.paymentReleasedAt = now;
+        deal.events.push({
+          at: now,
+          type: "payment_released",
+          label: `${naira(releasedTotal)} released from escrow to the creator's Payaza payout account`,
+          actor: "system",
+        });
+      }
+      break;
+    }
+
+    case "complete": {
+      if (deal.status !== "files_released") {
+        return jsonError("Final files have not been released yet.", 409);
+      }
+      deal.status = "completed";
+      deal.completedAt = now;
+      deal.events.push({
+        at: now,
+        type: "completed",
+        label:
+          body.rating != null
+            ? `Client downloaded final files and left a ${body.rating}-star review`
+            : "Deal completed — client confirmed delivery",
         actor: "client",
       });
       break;
     }
 
-    case "pay-balance": {
-      if (deal.status !== "approved") {
-        return jsonError("Balance is not due yet.", 409);
-      }
-      deal.status = "balance_paid";
-      deal.balancePaidAt = now;
-      deal.payments.push({
-        id: newId("p"),
-        type: "balance",
-        amount: balanceAmount(deal),
-        method: body.method ?? "Card",
-        status: "held",
-        paidAt: now,
-      });
+    case "review": {
       deal.events.push({
         at: now,
-        type: "balance_paid",
-        label: `Balance paid — ₦${balanceAmount(deal).toLocaleString("en-NG")} secured`,
+        type: "completed",
+        label: `Client left a ${body.rating ?? 5}-star review`,
         actor: "client",
       });
       break;
@@ -157,16 +300,6 @@ export async function POST(request: Request, { params }: Params) {
         at: now,
         type: "disputed",
         label: `Dispute raised${body.note ? `: “${body.note.trim()}”` : ""} — our team will step in`,
-        actor: "client",
-      });
-      break;
-    }
-
-    case "review": {
-      deal.events.push({
-        at: now,
-        type: "completed",
-        label: `Client left a ${body.rating ?? 5}-star review`,
         actor: "client",
       });
       break;

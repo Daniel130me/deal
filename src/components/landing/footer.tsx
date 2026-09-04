@@ -38,9 +38,18 @@ export function SiteFooter() {
           {/* Brand */}
           <div className="max-w-xs">
             <Logo wordmarkClassName="text-white" />
+            <p className="mt-4 flex items-center gap-2 text-[11px] font-semibold text-slate-400">
+              Payments powered by
+              <img
+                src="/payaza/payaza-logo.svg"
+                alt="Payaza"
+                className="h-4 w-auto rounded-full bg-white px-2 py-1"
+              />
+            </p>
             <p className="mt-4 text-sm leading-relaxed text-slate-400">
               The business side of creative work. Agree on the job, get paid in
-              milestones, deliver with confidence — built for African creatives.
+              deposits and installments, deliver with confidence — built for
+              African creatives.
             </p>
             <div className="mt-5 flex items-center gap-2">
               {SOCIALS.map((social) => (

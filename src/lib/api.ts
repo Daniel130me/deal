@@ -1,10 +1,14 @@
 "use client";
 
 import type {
+  Booking,
   ClientRequest,
   Deal,
+  DealStatus,
   Service,
   User,
+  CreatorChannel,
+  ScheduleSlot,
 } from "@/lib/types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -20,6 +24,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export type SafeUser = Omit<User, "password">;
+
+export type PayMethod = "card" | "transfer" | "ussd";
 
 export const api = {
   signup: (body: { name: string; contact: string; password: string }) =>
@@ -59,8 +65,14 @@ export const api = {
         ongoingDeals: number;
         completedDeals: number;
         newThisWeek: number;
+        upcomingBookings: number;
       };
-      money: { earnedThisMonth: number; inEscrow: number; expectedBalance: number };
+      money: {
+        releasedAllTime: number;
+        earnedThisMonth: number;
+        inEscrow: number;
+        expectedBalance: number;
+      };
       earningsSeries: { month: string; amount: number }[];
       requests: (ClientRequest & { service: Service | null })[];
       deals: {
@@ -68,12 +80,14 @@ export const api = {
         ref: string;
         title: string;
         client: string;
-        status: Deal["status"];
+        status: DealStatus;
         price: number;
         balance: number;
         dueDate: string;
         updatedAt: string;
       }[];
+      bookings: Booking[];
+      bookingsUpcoming: number;
     }>(`/api/creators/${id}/overview`),
 
   creatorRequests: (id: string) =>
@@ -117,12 +131,45 @@ export const api = {
 
   dealAction: (
     id: string,
-    body: { action: "send" | "deliver" | "release-files" | "confirm-payout"; note?: string }
+    body: { action: "send" | "deliver" | "release-files"; note?: string }
   ) =>
     request<{ deal: Deal }>(`/api/deals/${id}`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  // ---- Bookings ----
+
+  bookings: (creatorId: string) =>
+    request<{ bookings: Booking[] }>(`/api/creators/${creatorId}/bookings`),
+
+  bookingAction: (
+    id: string,
+    action: "confirm" | "decline" | "complete" | "cancel"
+  ) =>
+    request<{ booking: Booking }>(`/api/bookings/${id}`, {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    }),
+
+  bookSession: (
+    handle: string,
+    body: {
+      sessionType: string;
+      serviceId?: string;
+      date: string;
+      time: string;
+      clientName: string;
+      clientContact: string;
+      note?: string;
+    }
+  ) =>
+    request<{ booking: Booking }>(`/api/public/${handle}/bookings`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  // ---- Public creator page ----
 
   publicCreator: (handle: string) =>
     request<{ creator: SafeUser; services: Service[] }>(`/api/public/${handle}`),
@@ -146,6 +193,8 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  // ---- Client (shared deal link) ----
+
   sharedDeal: (token: string) =>
     request<{
       deal: Deal;
@@ -157,8 +206,19 @@ export const api = {
         location: string;
         verified: boolean;
         whatsapp: string;
+        channels: CreatorChannel[];
       };
-      amounts: { total: number; deposit: number; balance: number; paid: number; due: number };
+      amounts: {
+        total: number;
+        deposit: number;
+        paid: number;
+        due: number;
+        held: number;
+        schedule: ScheduleSlot[];
+        nextDue: ScheduleSlot | null;
+        fullyPaid: boolean;
+        approved: boolean;
+      };
     }>(`/api/shared/${token}`),
 
   sharedAction: (
@@ -166,13 +226,15 @@ export const api = {
     body: {
       action:
         | "pay-deposit"
+        | "pay-next"
+        | "pay-remaining"
         | "request-changes"
         | "approve"
-        | "pay-balance"
-        | "dispute"
-        | "review";
+        | "complete"
+        | "review"
+        | "dispute";
       note?: string;
-      method?: string;
+      method?: PayMethod;
       rating?: number;
     }
   ) =>

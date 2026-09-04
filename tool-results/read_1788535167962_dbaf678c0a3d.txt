@@ -1,0 +1,764 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useEffect, useRef, useState } from "react";
+     4→     4→import Link from "next/link";
+     5→     5→import { motion } from "framer-motion";
+     6→     6→import {
+     7→     7→  CalendarDays,
+     8→     8→  CheckCircle2,
+     9→     9→  Copy,
+    10→    10→  Eye,
+    11→    11→  FileUp,
+    12→    12→  FileWarning,
+    13→    13→  Loader2,
+    14→    14→  MapPin,
+    15→    15→  PartyPopper,
+    16→    16→  Plus,
+    17→    17→  RefreshCw,
+    18→    18→  Send,
+    19→    19→  ShieldCheck,
+    20→    20→  Wallet,
+    21→    21→} from "lucide-react";
+    22→    22→import { toast } from "sonner";
+    23→    23→import { AppCanvas } from "@/components/app/chrome";
+    24→    24→import {
+    25→    25→  AgreementSummary,
+    26→    26→  AppPage,
+    27→    27→  ChannelButtons,
+    28→    28→  EscrowBanner,
+    29→    29→  FileRow,
+    30→    30→  MetaRow,
+    31→    31→  PaymentSummary,
+    32→    32→  PayazaMark,
+    33→    33→  RecordTimeline,
+    34→    34→  SectionCard,
+    35→    35→  StatusChip,
+    36→    36→  Stepper,
+    37→    37→  type Step,
+    38→    38→} from "@/components/app/kit";
+    39→    39→import { Button } from "@/components/ui/button";
+    40→    40→import {
+    41→    41→  Dialog,
+    42→    42→  DialogContent,
+    43→    43→  DialogHeader,
+    44→    44→  DialogTitle,
+    45→    45→} from "@/components/ui/dialog";
+    46→    46→import { Progress } from "@/components/ui/progress";
+    47→    47→import { Textarea } from "@/components/ui/textarea";
+    48→    48→import { api, type SafeUser } from "@/lib/api";
+    49→    49→import {
+    50→    50→  formatNaira,
+    51→    51→  formatDate,
+    52→    52→  formatDateTime,
+    53→    53→  isApproved,
+    54→    54→  paidTotal,
+    55→    55→  remainingBalance,
+    56→    56→  type Deal,
+    57→    57→} from "@/lib/types";
+    58→    58→
+    59→    59→const DELIVERY_FILES = [
+    60→    60→  { name: "Preview photos (High Res).zip", size: "45.6 MB" },
+    61→    61→  { name: "Preview photos (Web Size).zip", size: "18.9 MB" },
+    62→    62→];
+    63→    63→
+    64→    64→const FINAL_FILES = [
+    65→    65→  { name: "Final files — High Res.zip", size: "204.3 MB" },
+    66→    66→  { name: "Final files — Web Exports.zip", size: "28.9 MB" },
+    67→    67→];
+    68→    68→
+    69→    69→const HELD_STATUSES: Deal["status"][] = [
+    70→    70→  "active",
+    71→    71→  "delivered",
+    72→    72→  "revision",
+    73→    73→  "approved",
+    74→    74→  "files_released",
+    75→    75→  "completed",
+    76→    76→];
+    77→    77→
+    78→    78→function heldTotal(deal: Deal) {
+    79→    79→  return deal.payments
+    80→    80→    .filter((p) => p.status === "held")
+    81→    81→    .reduce((sum, p) => sum + p.amount, 0);
+    82→    82→}
+    83→    83→
+    84→    84→function lifecycleSteps(deal: Deal): Step[] {
+    85→    85→  const delivery: Step["state"] =
+    86→    86→    deal.status === "active" || deal.status === "revision" ? "current" : "done";
+    87→    87→  const approval: Step["state"] =
+    88→    88→    deal.status === "delivered" ? "current" : isApproved(deal) ? "done" : "todo";
+    89→    89→  const files: Step["state"] =
+    90→    90→    deal.status === "files_released" || deal.status === "completed"
+    91→    91→      ? "done"
+    92→    92→      : isApproved(deal)
+    93→    93→        ? "current"
+    94→    94→        : "todo";
+    95→    95→  return [
+    96→    96→    { label: "Accepted", state: "done" },
+    97→    97→    { label: "Payment", sub: "In Payaza escrow", state: "done" },
+    98→    98→    { label: "Delivery", sub: deal.status === "revision" ? "Revision" : undefined, state: delivery },
+    99→    99→    { label: "Approval", state: approval },
+   100→   100→    {
+   101→   101→      label: "Final files",
+   102→   102→      sub:
+   103→   103→        deal.status === "approved" && remainingBalance(deal) > 0 ? "Awaiting balance" : undefined,
+   104→   104→      state: files,
+   105→   105→    },
+   106→   106→  ];
+   107→   107→}
+   108→   108→
+   109→   109→function MiniFileRow({ name, size }: { name: string; size: string }) {
+   110→   110→  return (
+   111→   111→    <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/50 p-3">
+   112→   112→      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-[9px] font-extrabold text-primary">
+   113→   113→        ZIP
+   114→   114→      </span>
+   115→   115→      <div className="min-w-0">
+   116→   116→        <p className="truncate text-[13px] font-bold text-foreground">{name}</p>
+   117→   117→        <p className="text-xs font-semibold text-muted-foreground">{size}</p>
+   118→   118→      </div>
+   119→   119→    </div>
+   120→   120→  );
+   121→   121→}
+   122→   122→
+   123→   123→function UploadDialog({
+   124→   124→  open,
+   125→   125→  onOpenChange,
+   126→   126→  title,
+   127→   127→  hint,
+   128→   128→  files,
+   129→   129→  submitLabel,
+   130→   130→  progress,
+   131→   131→  submitting,
+   132→   132→  onSubmit,
+   133→   133→  children,
+   134→   134→}: {
+   135→   135→  open: boolean;
+   136→   136→  onOpenChange: (open: boolean) => void;
+   137→   137→  title: string;
+   138→   138→  hint?: string;
+   139→   139→  files: { name: string; size: string }[];
+   140→   140→  submitLabel: string;
+   141→   141→  progress: number;
+   142→   142→  submitting: boolean;
+   143→   143→  onSubmit: () => void;
+   144→   144→  children?: React.ReactNode;
+   145→   145→}) {
+   146→   146→  return (
+   147→   147→    <Dialog
+   148→   148→      open={open}
+   149→   149→      onOpenChange={(next) => {
+   150→   150→        if (!submitting && progress === 0) onOpenChange(next);
+   151→   151→      }}
+   152→   152→    >
+   153→   153→      <DialogContent aria-describedby={undefined} className="max-w-md rounded-2xl">
+   154→   154→        <DialogHeader>
+   155→   155→          <DialogTitle className="text-lg font-extrabold">{title}</DialogTitle>
+   156→   156→        </DialogHeader>
+   157→   157→        {progress > 0 ? (
+   158→   158→          <div className="py-6 text-center">
+   159→   159→            <p className="text-sm font-extrabold text-foreground">Uploading files… {progress}%</p>
+   160→   160→            <Progress value={progress} className="mx-auto mt-4 h-2.5 max-w-xs" />
+   161→   161→            <p className="mt-2 text-xs font-semibold text-muted-foreground">
+   162→   162→              Simulated upload for this demo
+   163→   163→            </p>
+   164→   164→          </div>
+   165→   165→        ) : (
+   166→   166→          <div className="space-y-4">
+   167→   167→            {hint ? (
+   168→   168→              <p className="text-[13px] font-medium leading-relaxed text-muted-foreground">{hint}</p>
+   169→   169→            ) : null}
+   170→   170→            <div className="space-y-2.5">
+   171→   171→              {files.map((file) => (
+   172→   172→                <MiniFileRow key={file.name} name={file.name} size={file.size} />
+   173→   173→              ))}
+   174→   174→            </div>
+   175→   175→            {children}
+   176→   176→            <Button
+   177→   177→              className="h-12 w-full rounded-xl font-bold"
+   178→   178→              disabled={submitting}
+   179→   179→              onClick={onSubmit}
+   180→   180→            >
+   181→   181→              {submitting ? (
+   182→   182→                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+   183→   183→              ) : (
+   184→   184→                <FileUp className="mr-2 h-4 w-4" />
+   185→   185→              )}
+   186→   186→              {submitLabel}
+   187→   187→            </Button>
+   188→   188→          </div>
+   189→   189→        )}
+   190→   190→      </DialogContent>
+   191→   191→    </Dialog>
+   192→   192→  );
+   193→   193→}
+   194→   194→
+   195→   195→export default function DealDetailScreen({ dealId }: { dealId: string }) {
+   196→   196→  const [deal, setDeal] = useState<Deal | null>(null);
+   197→   197→  const [creator, setCreator] = useState<SafeUser | null>(null);
+   198→   198→  const [loadError, setLoadError] = useState<string | null>(null);
+   199→   199→  const [busy, setBusy] = useState(false);
+   200→   200→  const [deliverOpen, setDeliverOpen] = useState(false);
+   201→   201→  const [finalOpen, setFinalOpen] = useState(false);
+   202→   202→  const [note, setNote] = useState("");
+   203→   203→  const [progress, setProgress] = useState(0);
+   204→   204→  const agreementRef = useRef<HTMLDivElement | null>(null);
+   205→   205→
+   206→   206→  useEffect(() => {
+   207→   207→    let alive = true;
+   208→   208→    api
+   209→   209→      .deal(dealId)
+   210→   210→      .then((d) => {
+   211→   211→        if (!alive) return;
+   212→   212→        setDeal(d.deal);
+   213→   213→        setCreator(d.creator);
+   214→   214→      })
+   215→   215→      .catch((err) => {
+   216→   216→        if (alive) setLoadError(err instanceof Error ? err.message : "Deal not found.");
+   217→   217→      });
+   218→   218→    return () => {
+   219→   219→      alive = false;
+   220→   220→    };
+   221→   221→  }, [dealId]);
+   222→   222→
+   223→   223→  if (loadError) {
+   224→   224→    return (
+   225→   225→      <AppCanvas activeTab="deals" backHref="/deals">
+   226→   226→        <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-center">
+   227→   227→          <FileWarning className="h-8 w-8 text-muted-foreground" />
+   228→   228→          <p className="text-[15px] font-extrabold text-foreground">{loadError}</p>
+   229→   229→          <Button asChild variant="outline" className="rounded-xl font-bold">
+   230→   230→            <Link href="#/deals">Back to projects</Link>
+   231→   231→          </Button>
+   232→   232→        </div>
+   233→   233→      </AppCanvas>
+   234→   234→    );
+   235→   235→  }
+   236→   236→
+   237→   237→  if (!deal || !creator) {
+   238→   238→    return (
+   239→   239→      <AppCanvas activeTab="deals" backHref="/deals">
+   240→   240→        <div className="flex min-h-[50vh] items-center justify-center">
+   241→   241→          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+   242→   242→        </div>
+   243→   243→      </AppCanvas>
+   244→   244→    );
+   245→   245→  }
+   246→   246→
+   247→   247→  const remaining = remainingBalance(deal);
+   248→   248→  const paid = paidTotal(deal);
+   249→   249→  const pct = deal.price > 0 ? Math.min(100, Math.round((paid / deal.price) * 100)) : 0;
+   250→   250→  const escrowed = heldTotal(deal);
+   251→   251→  const fullyPaid = remaining === 0;
+   252→   252→  const shareUrl =
+   253→   253→    typeof window !== "undefined" ? `${window.location.origin}/#/c/${deal.shareToken}` : "";
+   254→   254→
+   255→   255→  async function simulateUpload() {
+   256→   256→    for (const step of [10, 26, 44, 62, 78, 90, 100]) {
+   257→   257→      setProgress(step);
+   258→   258→      await new Promise((r) => setTimeout(r, 150));
+   259→   259→    }
+   260→   260→  }
+   261→   261→
+   262→   262→  async function sendDeal() {
+   263→   263→    setBusy(true);
+   264→   264→    try {
+   265→   265→      const { deal: updated } = await api.dealAction(deal!.id, { action: "send" });
+   266→   266→      setDeal(updated);
+   267→   267→      toast.success(`Deal sent to ${updated.client.name}!`);
+   268→   268→    } catch (err) {
+   269→   269→      toast.error(err instanceof Error ? err.message : "Couldn't send the deal.");
+   270→   270→    } finally {
+   271→   271→      setBusy(false);
+   272→   272→    }
+   273→   273→  }
+   274→   274→
+   275→   275→  async function submitDelivery() {
+   276→   276→    if (!deal) return;
+   277→   277→    const wasRevision = deal.status === "revision";
+   278→   278→    setBusy(true);
+   279→   279→    try {
+   280→   280→      await simulateUpload();
+   281→   281→      const { deal: updated } = await api.dealAction(deal.id, {
+   282→   282→        action: "deliver",
+   283→   283→        note: note.trim() || undefined,
+   284→   284→      });
+   285→   285→      setDeal(updated);
+   286→   286→      setDeliverOpen(false);
+   287→   287→      setNote("");
+   288→   288→      toast.success(wasRevision ? "Revised delivery submitted!" : "Delivery submitted for review!");
+   289→   289→    } catch (err) {
+   290→   290→      toast.error(err instanceof Error ? err.message : "Couldn't submit the delivery.");
+   291→   291→    } finally {
+   292→   292→      setProgress(0);
+   293→   293→      setBusy(false);
+   294→   294→    }
+   295→   295→  }
+   296→   296→
+   297→   297→  async function submitRelease() {
+   298→   298→    if (!deal) return;
+   299→   299→    setBusy(true);
+   300→   300→    try {
+   301→   301→      await simulateUpload();
+   302→   302→      const { deal: updated } = await api.dealAction(deal.id, { action: "release-files" });
+   303→   303→      setDeal(updated);
+   304→   304→      setFinalOpen(false);
+   305→   305→      toast.success("Final files released to client!");
+   306→   306→    } catch (err) {
+   307→   307→      toast.error(err instanceof Error ? err.message : "Couldn't release the final files.");
+   308→   308→    } finally {
+   309→   309→      setProgress(0);
+   310→   310→      setBusy(false);
+   311→   311→    }
+   312→   312→  }
+   313→   313→
+   314→   314→  function copyClientLink() {
+   315→   315→    navigator.clipboard
+   316→   316→      ?.writeText(shareUrl)
+   317→   317→      .then(() => toast.success("Client link copied"))
+   318→   318→      .catch(() => toast.error("Couldn't copy — long-press the link to copy it."));
+   319→   319→  }
+   320→   320→
+   321→   321→  function remindClient() {
+   322→   322→    toast.success(`Reminder sent to ${deal!.client.name}!`);
+   323→   323→  }
+   324→   324→
+   325→   325→  function nudgeClient() {
+   326→   326→    toast.success(`Nudge sent to ${deal!.client.name} — they'll review it now.`);
+   327→   327→  }
+   328→   328→
+   329→   329→  const latestRevisionNote =
+   330→   330→    [...deal.events].reverse().find((e) => e.type === "changes_requested")?.label ??
+   331→   331→    "The client requested some changes.";
+   332→   332→
+   333→   333→  /* ---------------- status-driven hero block ---------------- */
+   334→   334→
+   335→   335→  let banner: React.ReactNode = null;
+   336→   336→  let actions: React.ReactNode = null;
+   337→   337→
+   338→   338→  switch (deal.status) {
+   339→   339→    case "draft":
+   340→   340→      banner = (
+   341→   341→        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 lg:p-5">
+   342→   342→          <p className="text-[15px] font-extrabold text-amber-800">
+   343→   343→            Draft — only you can see this deal
+   344→   344→          </p>
+   345→   345→          <p className="mt-0.5 text-[13px] font-medium leading-relaxed text-amber-700">
+   346→   346→            Review the agreement below, then send it to {deal.client.name || "your client"} whenever
+   347→   347→            you're ready.
+   348→   348→          </p>
+   349→   349→        </div>
+   350→   350→      );
+   351→   351→      actions = (
+   352→   352→        <div className="space-y-2">
+   353→   353→          <Button className="h-12 w-full rounded-xl font-bold" onClick={() => agreementRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+   354→   354→            <Eye className="mr-2 h-4 w-4" /> Review &amp; send
+   355→   355→          </Button>
+   356→   356→          <p className="flex items-center justify-center gap-1.5 text-center text-xs font-semibold text-muted-foreground">
+   357→   357→            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+   358→   358→            Check every line below — clients see exactly what you see.
+   359→   359→          </p>
+   360→   360→        </div>
+   361→   361→      );
+   362→   362→      break;
+   363→   363→
+   364→   364→    case "sent":
+   365→   365→    case "changes_requested":
+   366→   366→      banner = (
+   367→   367→        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 lg:p-5">
+   368→   368→          <p className="text-[15px] font-extrabold text-amber-800">
+   369→   369→            {deal.status === "sent"
+   370→   370→              ? `Waiting for ${deal.client.name} to accept`
+   371→   371→              : `${deal.client.name} requested changes`}
+   372→   372→          </p>
+   373→   373→          <p className="mt-0.5 text-[13px] font-medium leading-relaxed text-amber-700">
+   374→   374→            {deal.status === "sent"
+   375→   375→              ? "They'll accept and make the first payment from their link — you'll see it here the moment it happens."
+   376→   376→              : latestRevisionNote}
+   377→   377→          </p>
+   378→   378→        </div>
+   379→   379→      );
+   380→   380→      actions = (
+   381→   381→        <div className="space-y-3 rounded-2xl border border-border bg-muted/40 p-4">
+   382→   382→          <div>
+   383→   383→            <p className="text-[13px] font-extrabold text-foreground">Client link</p>
+   384→   384→            <div className="mt-2 flex items-center gap-2 rounded-xl border border-border bg-white p-2 pl-3">
+   385→   385→              <p className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">{shareUrl}</p>
+   386→   386→              <Button
+   387→   387→                type="button"
+   388→   388→                size="sm"
+   389→   389→                className="shrink-0 rounded-lg font-bold"
+   390→   390→                onClick={copyClientLink}
+   391→   391→              >
+   392→   392→                <Copy className="mr-1 h-3.5 w-3.5" /> Copy
+   393→   393→              </Button>
+   394→   394→            </div>
+   395→   395→          </div>
+   396→   396→          {creator.channels.length > 0 ? (
+   397→   397→            <div>
+   398→   398→              <p className="text-[13px] font-extrabold text-foreground">Share via</p>
+   399→   399→              <ChannelButtons channels={creator.channels} size="sm" className="mt-2" />
+   400→   400→            </div>
+   401→   401→          ) : null}
+   402→   402→          <div>
+   403→   403→            <Button variant="outline" size="sm" className="rounded-lg font-bold" onClick={remindClient}>
+   404→   404→              <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Send reminder
+   405→   405→            </Button>
+   406→   406→          </div>
+   407→   407→          <p className="flex items-start gap-1.5 text-xs font-medium leading-relaxed text-muted-foreground">
+   408→   408→            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+   409→   409→            Clients can also pay installments before delivery — everything sits in Payaza escrow
+   410→   410→            until they approve the completed work.
+   411→   411→          </p>
+   412→   412→        </div>
+   413→   413→      );
+   414→   414→      break;
+   415→   415→
+   416→   416→    case "active":
+   417→   417→      banner = (
+   418→   418→        <EscrowBanner
+   419→   419→          amount={escrowed}
+   420→   420→          paidOn={deal.depositPaidAt}
+   421→   421→          note={`Held by Payaza escrow — released to you the moment ${deal.client.name} approves the completed work. They can pay installments anytime.`}
+   422→   422→        />
+   423→   423→      );
+   424→   424→      actions = (
+   425→   425→        <Button className="h-12 w-full rounded-xl font-bold" onClick={() => setDeliverOpen(true)}>
+   426→   426→          <FileUp className="mr-2 h-4 w-4" /> Deliver work for review
+   427→   427→        </Button>
+   428→   428→      );
+   429→   429→      break;
+   430→   430→
+   431→   431→    case "delivered":
+   432→   432→      banner = (
+   433→   433→        <div className="flex items-start gap-3 rounded-2xl border border-violet-200 bg-violet-50 p-4 lg:p-5">
+   434→   434→          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white">
+   435→   435→            <FileUp className="h-5 w-5 text-violet-600" />
+   436→   436→          </span>
+   437→   437→          <div className="min-w-0">
+   438→   438→            <p className="text-[15px] font-extrabold text-violet-900">Awaiting client review</p>
+   439→   439→            <p className="mt-0.5 text-[13px] font-medium leading-relaxed text-violet-700">
+   440→   440→              {escrowed > 0
+   441→   441→                ? `${formatNaira(escrowed)} is in escrow and releases the moment they approve.`
+   442→   442→                : "The client is reviewing your delivery now."}
+   443→   443→            </p>
+   444→   444→          </div>
+   445→   445→        </div>
+   446→   446→      );
+   447→   447→      actions = (
+   448→   448→        <Button variant="outline" className="h-12 w-full rounded-xl font-bold" onClick={nudgeClient}>
+   449→   449→          <RefreshCw className="mr-2 h-4 w-4" /> Nudge client
+   450→   450→        </Button>
+   451→   451→      );
+   452→   452→      break;
+   453→   453→
+   454→   454→    case "revision":
+   455→   455→      banner = (
+   456→   456→        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 lg:p-5">
+   457→   457→          <p className="text-[15px] font-extrabold text-amber-800">Revision requested</p>
+   458→   458→          <p className="mt-0.5 text-[13px] font-medium leading-relaxed text-amber-700">
+   459→   459→            {latestRevisionNote}
+   460→   460→          </p>
+   461→   461→        </div>
+   462→   462→      );
+   463→   463→      actions = (
+   464→   464→        <Button className="h-12 w-full rounded-xl font-bold" onClick={() => setDeliverOpen(true)}>
+   465→   465→          <FileUp className="mr-2 h-4 w-4" /> Submit revised delivery
+   466→   466→        </Button>
+   467→   467→      );
+   468→   468→      break;
+   469→   469→
+   470→   470→    case "approved":
+   471→   471→      banner = (
+   472→   472→        <div className="rounded-2xl border border-primary/20 bg-secondary p-4 lg:p-5">
+   473→   473→          <div className="flex items-start gap-3">
+   474→   474→            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent">
+   475→   475→              <CheckCircle2 className="h-5 w-5 text-primary" />
+   476→   476→            </span>
+   477→   477→            <div className="min-w-0">
+   478→   478→              <p className="text-[15px] font-extrabold text-foreground">
+   479→   479→                Work approved! {formatNaira(paid)} released from escrow
+   480→   480→              </p>
+   481→   481→              <p className="mt-0.5 text-[13px] font-medium text-muted-foreground">
+   482→   482→                The money has landed in your Payaza payout account.
+   483→   483→              </p>
+   484→   484→              <PayazaMark className="mt-2" />
+   485→   485→            </div>
+   486→   486→          </div>
+   487→   487→        </div>
+   488→   488→      );
+   489→   489→      actions = fullyPaid ? (
+   490→   490→        <Button className="h-12 w-full rounded-xl font-bold" onClick={() => setFinalOpen(true)}>
+   491→   491→          <FileUp className="mr-2 h-4 w-4" /> Upload final files
+   492→   492→        </Button>
+   493→   493→      ) : (
+   494→   494→        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+   495→   495→          <p className="text-[13px] font-extrabold text-amber-800">
+   496→   496→            {formatNaira(remaining)} still outstanding
+   497→   497→          </p>
+   498→   498→          <p className="mt-0.5 text-[13px] font-medium leading-relaxed text-amber-700">
+   499→   499→            The client can pay anytime — payments now land instantly since the work is approved.
+   500→   500→          </p>
+   501→   501→          <Button
+   502→   502→            variant="outline"
+   503→   503→            size="sm"
+   504→   504→            className="mt-3 rounded-lg border-amber-300 bg-white font-bold text-amber-800 hover:bg-amber-100"
+   505→   505→            onClick={remindClient}
+   506→   506→          >
+   507→   507→            <Wallet className="mr-1.5 h-3.5 w-3.5" /> Remind client to pay
+   508→   508→          </Button>
+   509→   509→        </div>
+   510→   510→      );
+   511→   511→      break;
+   512→   512→
+   513→   513→    case "files_released":
+   514→   514→      banner = (
+   515→   515→        <div className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-secondary p-4 lg:p-5">
+   516→   516→          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent">
+   517→   517→            <CheckCircle2 className="h-5 w-5 text-primary" />
+   518→   518→          </span>
+   519→   519→          <div className="min-w-0">
+   520→   520→            <p className="text-[15px] font-extrabold text-foreground">Final files delivered</p>
+   521→   521→            <p className="mt-0.5 text-[13px] font-medium leading-relaxed text-muted-foreground">
+   522→   522→              Waiting for {deal.client.name} to confirm and download — you'll get a notification
+   523→   523→              when they do.
+   524→   524→            </p>
+   525→   525→          </div>
+   526→   526→        </div>
+   527→   527→      );
+   528→   528→      break;
+   529→   529→
+   530→   530→    case "completed":
+   531→   531→      banner = (
+   532→   532→        <div className="rounded-2xl border border-primary/20 bg-secondary p-5 text-center lg:p-6">
+   533→   533→          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary ring-8 ring-accent">
+   534→   534→            <PartyPopper className="h-7 w-7 text-white" />
+   535→   535→          </span>
+   536→   536→          <p className="mt-3 text-lg font-extrabold text-foreground">Deal completed!</p>
+   537→   537→          <p className="mt-0.5 text-[15px] font-extrabold text-primary">
+   538→   538→            {formatNaira(paid)} released to your Payaza payout account
+   539→   539→          </p>
+   540→   540→          <div className="mt-2 flex justify-center">
+   541→   541→            <PayazaMark withText />
+   542→   542→          </div>
+   543→   543→          <p className="mt-2 text-[13px] font-medium text-muted-foreground">
+   544→   544→            Agreed, paid, delivered, approved — DEAL kept the record.
+   545→   545→          </p>
+   546→   546→        </div>
+   547→   547→      );
+   548→   548→      break;
+   549→   549→
+   550→   550→    default:
+   551→   551→      banner = (
+   552→   552→        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 lg:p-5">
+   553→   553→          <p className="text-[15px] font-extrabold text-red-700">
+   554→   554→            {deal.status === "declined" ? "Deal declined" : "Dispute raised"}
+   555→   555→          </p>
+   556→   556→          <p className="mt-0.5 text-[13px] font-medium leading-relaxed text-red-600">
+   557→   557→            {deal.status === "declined"
+   558→   558→              ? `${deal.client.name} passed on this deal. You can create a new one anytime.`
+   559→   559→              : "The DEAL team has been notified and will help both sides resolve it."}
+   560→   560→          </p>
+   561→   561→          {deal.status === "declined" ? (
+   562→   562→            <Button asChild variant="outline" size="sm" className="mt-3 rounded-lg font-bold">
+   563→   563→              <Link href="#/deals/new">
+   564→   564→                <Plus className="mr-1 h-3.5 w-3.5" /> Create a new deal
+   565→   565→              </Link>
+   566→   566→            </Button>
+   567→   567→          ) : null}
+   568→   568→        </div>
+   569→   569→      );
+   570→   570→  }
+   571→   571→
+   572→   572→  return (
+   573→   573→    <AppCanvas activeTab="deals" backHref="/deals">
+   574→   574→      <AppPage
+   575→   575→        title={deal.title}
+   576→   576→        chip={<StatusChip status={deal.status} />}
+   577→   577→        subtitle={
+   578→   578→          <>
+   579→   579→            <span className="font-mono">{deal.ref}</span> · {deal.client.name}
+   580→   580→            {deal.serviceTitle ? ` · ${deal.serviceTitle}` : ""}
+   581→   581→          </>
+   582→   582→        }
+   583→   583→      >
+   584→   584→        <motion.div
+   585→   585→          initial={{ opacity: 0, y: 12 }}
+   586→   586→          animate={{ opacity: 1, y: 0 }}
+   587→   587→          transition={{ duration: 0.25, ease: "easeOut" }}
+   588→   588→          className="space-y-5 lg:space-y-6"
+   589→   589→        >
+   590→   590→          {/* hero card */}
+   591→   591→          <section className="space-y-5 rounded-2xl border border-border bg-card p-5 lg:p-6">
+   592→   592→            <div className="flex flex-wrap items-start justify-between gap-4">
+   593→   593→              <MetaRow
+   594→   594→                items={[
+   595→   595→                  {
+   596→   596→                    icon: <CalendarDays className="h-4 w-4" />,
+   597→   597→                    text: deal.dueDate ? `Due ${formatDate(deal.dueDate)}` : "Date TBD",
+   598→   598→                  },
+   599→   599→                  ...(deal.location
+   600→   600→                    ? [{ icon: <MapPin className="h-4 w-4" />, text: deal.location }]
+   601→   601→                    : []),
+   602→   602→                ]}
+   603→   603→              />
+   604→   604→              <div className="text-right">
+   605→   605→                <p className="text-xl font-extrabold text-foreground lg:text-2xl">
+   606→   606→                  {formatNaira(deal.price)}
+   607→   607→                </p>
+   608→   608→                <p className="text-xs font-bold text-muted-foreground">
+   609→   609→                  {remaining > 0
+   610→   610→                    ? `${formatNaira(paid)} paid · ${formatNaira(remaining)} outstanding`
+   611→   611→                    : "Paid in full"}
+   612→   612→                </p>
+   613→   613→              </div>
+   614→   614→            </div>
+   615→   615→
+   616→   616→            <div>
+   617→   617→              <div className="mb-1.5 flex items-center justify-between text-[11px] font-bold text-muted-foreground">
+   618→   618→                <span>Payment progress</span>
+   619→   619→                <span>{pct}%</span>
+   620→   620→              </div>
+   621→   621→              <Progress value={pct} className="h-2" />
+   622→   622→            </div>
+   623→   623→
+   624→   624→            {HELD_STATUSES.includes(deal.status) ? <Stepper steps={lifecycleSteps(deal)} /> : null}
+   625→   625→
+   626→   626→            {banner}
+   627→   627→            {actions}
+   628→   628→          </section>
+   629→   629→
+   630→   630→          {/* agreement */}
+   631→   631→          <div ref={agreementRef} className="scroll-mt-24 space-y-5 lg:space-y-6">
+   632→   632→            <AgreementSummary deal={deal} />
+   633→   633→            <PaymentSummary deal={deal} />
+   634→   634→            {deal.status === "draft" ? (
+   635→   635→              <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-primary/40 bg-accent/60 p-4 sm:flex-row sm:items-center sm:justify-between lg:p-5">
+   636→   636→                <p className="text-[13px] font-bold text-accent-foreground">
+   637→   637→                  Happy with the agreement? Send it to {deal.client.name}.
+   638→   638→                </p>
+   639→   639→                <Button className="rounded-xl font-bold" disabled={busy} onClick={sendDeal}>
+   640→   640→                  {busy ? (
+   641→   641→                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+   642→   642→                  ) : (
+   643→   643→                    <Send className="mr-2 h-4 w-4" />
+   644→   644→                  )}
+   645→   645→                  Send deal
+   646→   646→                </Button>
+   647→   647→              </div>
+   648→   648→            ) : null}
+   649→   649→          </div>
+   650→   650→
+   651→   651→          {/* deliveries */}
+   652→   652→          {deal.deliveries.length > 0 ? (
+   653→   653→            <SectionCard
+   654→   654→              title="Deliveries"
+   655→   655→              right={
+   656→   656→                <span className="text-xs font-bold text-muted-foreground">
+   657→   657→                  {deal.deliveries.length} submission{deal.deliveries.length === 1 ? "" : "s"}
+   658→   658→                </span>
+   659→   659→              }
+   660→   660→            >
+   661→   661→              <div className="space-y-5">
+   662→   662→                {[...deal.deliveries].reverse().map((delivery, index) => (
+   663→   663→                  <div key={delivery.id} className={index > 0 ? "border-t border-border pt-5" : ""}>
+   664→   664→                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+   665→   665→                      <p className="text-[13px] font-extrabold text-foreground">
+   666→   666→                        {index === 0 ? "Latest delivery" : `Delivery ${deal.deliveries.length - index}`}
+   667→   667→                      </p>
+   668→   668→                      <p className="text-xs font-semibold text-muted-foreground">
+   669→   669→                        {formatDateTime(delivery.submittedAt)}
+   670→   670→                      </p>
+   671→   671→                    </div>
+   672→   672→                    {delivery.note ? (
+   673→   673→                      <p className="mb-3 rounded-xl bg-muted/60 p-3 text-[13px] font-medium leading-relaxed text-foreground/90">
+   674→   674→                        {delivery.note}
+   675→   675→                      </p>
+   676→   676→                    ) : null}
+   677→   677→                    <div className="space-y-2.5">
+   678→   678→                      {delivery.files.map((file) => (
+   679→   679→                        <FileRow
+   680→   680→                          key={file.id}
+   681→   681→                          name={file.name}
+   682→   682→                          size={file.size}
+   683→   683→                          kind={file.kind}
+   684→   684→                          onPreview={() =>
+   685→   685→                            toast.info("File preview is simulated in this demo", {
+   686→   686→                              description:
+   687→   687→                                "In production this opens the file in a secure viewer.",
+   688→   688→                            })
+   689→   689→                          }
+   690→   690→                        />
+   691→   691→                      ))}
+   692→   692→                    </div>
+   693→   693→                  </div>
+   694→   694→                ))}
+   695→   695→              </div>
+   696→   696→            </SectionCard>
+   697→   697→          ) : null}
+   698→   698→
+   699→   699→          {/* final files */}
+   700→   700→          {deal.finalFiles.length > 0 ? (
+   701→   701→            <SectionCard title="Final files">
+   702→   702→              <div className="space-y-2.5">
+   703→   703→                {deal.finalFiles.map((file) => (
+   704→   704→                  <FileRow
+   705→   705→                    key={file.id}
+   706→   706→                    name={file.name}
+   707→   707→                    size={file.size}
+   708→   708→                    kind={file.kind}
+   709→   709→                    onPreview={() => toast.info("File preview is simulated in this demo")}
+   710→   710→                  />
+   711→   711→                ))}
+   712→   712→              </div>
+   713→   713→            </SectionCard>
+   714→   714→          ) : null}
+   715→   715→
+   716→   716→          {/* record */}
+   717→   717→          <RecordTimeline events={deal.events} />
+   718→   718→        </motion.div>
+   719→   719→      </AppPage>
+   720→   720→
+   721→   721→      {/* deliver dialog */}
+   722→   722→      <UploadDialog
+   723→   723→        open={deliverOpen}
+   724→   724→        onOpenChange={setDeliverOpen}
+   725→   725→        title={deal.status === "revision" ? "Submit revised delivery" : "Deliver work for review"}
+   726→   726→        hint={`Attach your preview files and add a note for ${deal.client.name}. Final high-resolution files are uploaded after approval.`}
+   727→   727→        files={DELIVERY_FILES}
+   728→   728→        submitLabel="Submit delivery"
+   729→   729→        progress={progress}
+   730→   730→        submitting={busy}
+   731→   731→        onSubmit={submitDelivery}
+   732→   732→      >
+   733→   733→        <div>
+   734→   734→          <label htmlFor="deliver-note" className="text-[13px] font-extrabold text-foreground">
+   735→   735→            Note for {deal.client.name}
+   736→   736→          </label>
+   737→   737→          <Textarea
+   738→   738→            id="deliver-note"
+   739→   739→            value={note}
+   740→   740→            onChange={(e) => setNote(e.target.value)}
+   741→   741→            rows={3}
+   742→   742→            placeholder="e.g. First cut of the gallery — have a look at shots 12–24."
+   743→   743→            className="mt-1.5 rounded-xl"
+   744→   744→          />
+   745→   745→        </div>
+   746→   746→      </UploadDialog>
+   747→   747→
+   748→   748→      {/* release final files dialog */}
+   749→   749→      <UploadDialog
+   750→   750→        open={finalOpen}
+   751→   751→        onOpenChange={setFinalOpen}
+   752→   752→        title="Upload final files"
+   753→   753→        hint="These are the high-resolution files your client will download once you release them."
+   754→   754→        files={FINAL_FILES}
+   755→   755→        submitLabel="Upload & release"
+   756→   756→        progress={progress}
+   757→   757→        submitting={busy}
+   758→   758→        onSubmit={submitRelease}
+   759→   759→      />
+   760→   760→    </AppCanvas>
+   761→   761→  );
+   762→   762→}
+   763→   763→
+   764→   764→

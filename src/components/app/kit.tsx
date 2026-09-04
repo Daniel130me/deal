@@ -1,20 +1,29 @@
 "use client";
 
-import { Camera, CalendarDays, MapPin, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
+  BOOKING_STATUS_CHIP_CLASS,
+  BOOKING_STATUS_LABELS,
   STATUS_LABELS,
   STATUS_CHIP_CLASS,
   formatNaira,
   formatDate,
   formatDateTime,
+  formatBookingDate,
+  isApproved,
+  paymentSchedule,
+  remainingBalance,
+  type Booking,
   type Deal,
-  type DealStatus,
   type DealEvent,
+  type DealStatus,
+  type CreatorChannel,
 } from "@/lib/types";
+import { CHANNEL_META, channelHref } from "@/lib/channels";
 import { cn } from "@/lib/utils";
 
-/* ---------- status chip ---------- */
+/* ---------- status chips ---------- */
 
 export function StatusChip({ status, className }: { status: DealStatus; className?: string }) {
   return (
@@ -26,6 +35,33 @@ export function StatusChip({ status, className }: { status: DealStatus; classNam
       )}
     >
       {STATUS_LABELS[status]}
+    </span>
+  );
+}
+
+export function BookingChip({ status, className }: { status: Booking["status"]; className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-extrabold",
+        BOOKING_STATUS_CHIP_CLASS[status],
+        className
+      )}
+    >
+      {BOOKING_STATUS_LABELS[status]}
+    </span>
+  );
+}
+
+/* ---------- Payaza branding ---------- */
+
+export function PayazaMark({ withText = false, className }: { withText?: boolean; className?: string }) {
+  return (
+    <span className={cn("inline-flex items-center gap-1.5", className)}>
+      <img src="/payaza/payaza-logo.svg" alt="Payaza" className="h-4 w-auto" />
+      {withText ? (
+        <span className="text-[11px] font-bold text-muted-foreground">Powered by Payaza</span>
+      ) : null}
     </span>
   );
 }
@@ -48,18 +84,18 @@ export function AppPage({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex-1 px-5 pb-8 pt-5">
+    <div className="flex-1 pb-6">
       {backHref ? (
         <a
-          href={backHref}
+          href={backHref.startsWith("#") ? backHref : `#${backHref}`}
           className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold text-primary"
         >
           ← Back
         </a>
       ) : null}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="flex flex-wrap items-center gap-2 text-xl font-extrabold tracking-tight text-foreground">
+          <h1 className="flex flex-wrap items-center gap-2 text-xl font-extrabold tracking-tight text-foreground lg:text-2xl">
             <span className="truncate">{title}</span>
             {chip}
           </h1>
@@ -69,7 +105,7 @@ export function AppPage({
         </div>
         {action}
       </div>
-      <div className="mt-5 space-y-4">{children}</div>
+      <div className="mt-6 space-y-5 lg:mt-8 lg:space-y-6">{children}</div>
     </div>
   );
 }
@@ -86,9 +122,9 @@ export function SectionCard({
   className?: string;
 }) {
   return (
-    <section className={cn("rounded-2xl border border-border bg-card p-4", className)}>
+    <section className={cn("rounded-2xl border border-border bg-card p-5 lg:p-6", className)}>
       {(title || right) && (
-        <header className="mb-3 flex items-center justify-between gap-2">
+        <header className="mb-4 flex items-center justify-between gap-2">
           <h2 className="text-[15px] font-extrabold text-foreground">{title}</h2>
           {right}
         </header>
@@ -117,16 +153,6 @@ export function MetaRow({
       ))}
     </div>
   );
-}
-
-export function PersonIcon() {
-  return <Camera className="h-3.5 w-3.5" />;
-}
-export function DateIcon() {
-  return <CalendarDays className="h-3.5 w-3.5" />;
-}
-export function PinIcon() {
-  return <MapPin className="h-3.5 w-3.5" />;
 }
 
 /* ---------- stepper (deal progress) ---------- */
@@ -178,15 +204,16 @@ export function Stepper({ steps }: { steps: Step[] }) {
   );
 }
 
-/* ---------- payment summary ---------- */
+/* ---------- payment summary (schedule-based, escrow-aware) ---------- */
 
-function PayChip({ tone, children }: { tone: "green" | "amber" | "gray"; children: React.ReactNode }) {
+function PayChip({ tone, children }: { tone: "green" | "amber" | "gray" | "violet"; children: React.ReactNode }) {
   return (
     <span
       className={cn(
         "rounded-full px-2 py-0.5 text-[10px] font-extrabold",
         tone === "green" && "bg-accent text-accent-foreground",
         tone === "amber" && "bg-amber-50 text-amber-700",
+        tone === "violet" && "bg-violet-50 text-violet-700",
         tone === "gray" && "bg-muted text-muted-foreground"
       )}
     >
@@ -195,86 +222,59 @@ function PayChip({ tone, children }: { tone: "green" | "amber" | "gray"; childre
   );
 }
 
-function PayRow({
-  label,
-  sub,
-  amount,
-  badge,
-  strong,
-}: {
-  label: string;
-  sub?: string;
-  amount: number | string;
-  badge?: React.ReactNode;
-  strong?: boolean;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3 py-2.5">
-      <div>
-        <p className="text-sm font-bold text-foreground">{label}</p>
-        {sub ? <p className="text-xs font-medium text-muted-foreground">{sub}</p> : null}
-      </div>
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            "text-sm font-extrabold",
-            strong ? "text-foreground" : amount === 0 ? "text-muted-foreground" : "text-primary"
-          )}
-        >
-          {typeof amount === "number" ? formatNaira(amount) : amount}
-        </span>
-        {badge}
-      </div>
-    </div>
-  );
-}
-
-export function PaymentSummary({
-  deal,
-  deposit,
-  balance,
-}: {
-  deal: Deal;
-  deposit: number;
-  balance: number;
-}) {
-  const depositPaid = deal.payments.some((p) => p.type === "deposit");
-  const balancePaid = deal.payments.some((p) => p.type === "balance");
-  const allReleased = deal.payments.length > 0 && deal.payments.every((p) => p.status === "released");
+export function PaymentSummary({ deal }: { deal: Deal }) {
+  const schedule = paymentSchedule(deal);
+  const remaining = remainingBalance(deal);
+  const approved = isApproved(deal);
 
   return (
     <SectionCard title="Payment summary">
       <div className="divide-y divide-border">
-        <PayRow label="Total project price" amount={deal.price} strong />
-        <PayRow
-          label={`Deposit (${deal.depositPercent}%)`}
-          sub={depositPaid ? (allReleased ? "Paid & released" : "Paid · secured in escrow") : "Pending"}
-          amount={deposit}
-          badge={
-            allReleased ? (
-              <PayChip tone="green">Released</PayChip>
-            ) : depositPaid ? (
-              <PayChip tone="green">Secured</PayChip>
-            ) : (
-              <PayChip tone="gray">Pending</PayChip>
-            )
-          }
-        />
-        <PayRow
-          label="Balance"
-          sub={balancePaid ? (allReleased ? "Paid & released" : "Paid · held securely") : "Due on approval"}
-          amount={balance}
-          badge={
-            allReleased ? (
-              <PayChip tone="green">Released</PayChip>
-            ) : balancePaid ? (
-              <PayChip tone="green">Secured</PayChip>
-            ) : (
-              <PayChip tone="amber">Due</PayChip>
-            )
-          }
-        />
+        <div className="flex items-center justify-between pb-3">
+          <p className="text-sm font-bold text-foreground">Total project price</p>
+          <span className="text-sm font-extrabold text-foreground">{formatNaira(deal.price)}</span>
+        </div>
+        {schedule.map((slot) => (
+          <div key={slot.label} className="flex items-start justify-between gap-3 py-2.5">
+            <div>
+              <p className="text-sm font-bold text-foreground">{slot.label}</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                {slot.status === "paid"
+                  ? approved
+                    ? "Paid & released to creator"
+                    : "Paid · held in Payaza escrow"
+                  : deal.status === "sent"
+                    ? "Due after acceptance"
+                    : "Due — pay anytime"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={cn("text-sm font-extrabold", slot.status === "paid" ? "text-primary" : "text-foreground")}>
+                {formatNaira(slot.amount)}
+              </span>
+              {slot.status === "paid" ? (
+                approved ? (
+                  <PayChip tone="green">Released</PayChip>
+                ) : (
+                  <PayChip tone="violet">In escrow</PayChip>
+                )
+              ) : (
+                <PayChip tone="amber">Due</PayChip>
+              )}
+            </div>
+          </div>
+        ))}
+        {remaining > 0 && (
+          <div className="flex items-center justify-between pt-3">
+            <p className="text-sm font-extrabold text-foreground">Remaining</p>
+            <span className="text-sm font-extrabold text-foreground">{formatNaira(remaining)}</span>
+          </div>
+        )}
       </div>
+      <p className="mt-3 rounded-xl bg-secondary p-3 text-xs font-medium leading-relaxed text-muted-foreground">
+        Every payment sits in <span className="font-bold text-foreground">Payaza escrow</span> and is only
+        released to the creator when the client approves the completed work.
+      </p>
     </SectionCard>
   );
 }
@@ -284,14 +284,14 @@ export function PaymentSummary({
 export function EscrowBanner({
   amount,
   paidOn,
-  note = "Your deposit is securely held by DEAL and will only be released when you approve the completed work.",
+  note = "Held by Payaza escrow — the creator only receives it when you approve the completed work.",
 }: {
   amount: number;
   paidOn?: string;
   note?: string;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-2xl border border-border bg-secondary p-4">
+    <div className="flex items-start gap-3 rounded-2xl border border-border bg-secondary p-4 lg:p-5">
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent">
         <svg viewBox="0 0 24 24" className="h-5 w-5 text-primary" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -301,7 +301,7 @@ export function EscrowBanner({
       </span>
       <div className="min-w-0">
         <p className="text-[13px] font-extrabold text-accent-foreground">
-          Payment is protected · <span className="text-foreground">{formatNaira(amount)}</span> held in escrow
+          Payment protected · <span className="text-foreground">{formatNaira(amount)}</span> held in escrow
         </p>
         <p className="mt-0.5 text-[13px] font-medium leading-relaxed text-muted-foreground">{note}</p>
         {paidOn ? (
@@ -430,7 +430,7 @@ export function AgreementSummary({ deal }: { deal: Deal }) {
             ))}
           </ul>
         </div>
-        <div className="grid grid-cols-2 gap-3 border-t border-border pt-3 text-sm">
+        <div className="grid grid-cols-2 gap-3 border-t border-border pt-3 text-sm sm:grid-cols-3">
           <div>
             <p className="text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">Timeline</p>
             <p className="mt-1 font-bold text-foreground">
@@ -441,8 +441,70 @@ export function AgreementSummary({ deal }: { deal: Deal }) {
             <p className="text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">Revisions</p>
             <p className="mt-1 font-bold text-foreground">{deal.revisions} round{deal.revisions === 1 ? "" : "s"} included</p>
           </div>
+          <div>
+            <p className="text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">Payment plan</p>
+            <p className="mt-1 font-bold text-foreground">
+              {deal.depositPercent >= 100
+                ? "100% upfront"
+                : `${deal.depositPercent}% deposit${deal.installmentsCount > 0 ? ` + ${deal.installmentsCount} installment${deal.installmentsCount === 1 ? "" : "s"}` : ""}`}
+            </p>
+          </div>
         </div>
       </div>
     </SectionCard>
+  );
+}
+
+/* ---------- communication channels ---------- */
+
+export function ChannelButtons({
+  channels,
+  size = "default",
+  className,
+}: {
+  channels: CreatorChannel[];
+  size?: "default" | "sm";
+  className?: string;
+}) {
+  if (!channels || channels.length === 0) return null;
+  return (
+    <div className={cn("flex flex-wrap gap-2", className)}>
+      {channels.map((channel) => {
+        const meta = CHANNEL_META[channel.type];
+        if (!meta) return null;
+        const Icon = meta.icon;
+        return (
+          <a
+            key={channel.type + channel.value}
+            href={channelHref(channel)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`${meta.label}: ${channel.value}`}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border border-border bg-white font-bold text-foreground transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm",
+              size === "default" ? "px-3 py-1.5 text-xs" : "px-2.5 py-1 text-[11px]"
+            )}
+          >
+            <Icon className={cn("text-primary", size === "default" ? "h-3.5 w-3.5" : "h-3 w-3")} />
+            {meta.label}
+            {channel.primary ? (
+              <span className="rounded-full bg-accent px-1.5 py-px text-[9px] font-extrabold text-accent-foreground">
+                Primary
+              </span>
+            ) : null}
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------- booking helpers ---------- */
+
+export function BookingWhen({ date, time }: { date: string; time: string }) {
+  return (
+    <span className="text-sm font-bold text-foreground">
+      {formatBookingDate(date)} · {time}
+    </span>
   );
 }

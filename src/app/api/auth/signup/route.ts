@@ -57,6 +57,9 @@ export async function POST(request: Request) {
     email: contact.includes("@") ? contact : `${handle}@deal.ng`,
     phone: contact.includes("@") ? "" : contact,
     whatsapp: contact.includes("@") ? "" : contact,
+    channels: contact.includes("@")
+      ? [{ type: "email", value: contact, primary: true }]
+      : [{ type: "whatsapp", value: contact, primary: true }],
     password: body.password,
     craft: "",
     location: "",

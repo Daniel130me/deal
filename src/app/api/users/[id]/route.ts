@@ -30,6 +30,7 @@ export async function PATCH(request: Request, { params }: Params) {
     "bio",
     "whatsapp",
     "phone",
+    "channels",
     "onboarded",
   ];
   for (const key of allowed) {

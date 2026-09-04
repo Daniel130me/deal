@@ -21,7 +21,17 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { useApp } from "@/components/app/context";
-import { formatNaira, formatDate, type ClientRequest, type Deal, type Service } from "@/lib/types";
+import {
+  formatNaira,
+  formatDate,
+  paymentSchedule,
+  type ChannelType,
+  type ClientRequest,
+  type Deal,
+  type DealPayment,
+  type Service,
+} from "@/lib/types";
+import { CHANNEL_META } from "@/lib/channels";
 import { cn } from "@/lib/utils";
 
 const WIZARD_STEPS = ["Deal details", "Scope", "Terms", "Review"];
@@ -39,9 +49,19 @@ interface WizardState {
   deliverables: string[];
   price: number;
   depositPercent: number;
+  installmentsCount: number;
   startDate: string;
   dueDate: string;
   revisions: number;
+}
+
+const SHARE_CHANNEL_TYPES: ChannelType[] = ["whatsapp", "telegram", "email"];
+
+function shareHref(type: ChannelType, url: string, text: string) {
+  if (type === "whatsapp") return `https://wa.me/?text=${encodeURIComponent(text)}`;
+  if (type === "telegram")
+    return `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+  return `mailto:?subject=${encodeURIComponent("A deal for you on DEAL")}&body=${encodeURIComponent(text)}`;
 }
 
 export default function WizardScreen({ requestParam }: { requestParam: string | null }) {
@@ -68,6 +88,7 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
     deliverables: [],
     price: 0,
     depositPercent: 50,
+    installmentsCount: 2,
     startDate: "",
     dueDate: "",
     revisions: 2,
@@ -111,6 +132,19 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
     [form.price, form.depositPercent]
   );
   const balance = useMemo(() => form.price - deposit, [form.price, deposit]);
+
+  // ideal schedule preview for the Review step (no deal exists yet, so we cast a minimal shape)
+  const previewDeal = useMemo(
+    () =>
+      ({
+        price: form.price,
+        depositPercent: form.depositPercent,
+        installmentsCount: form.depositPercent >= 100 ? 0 : form.installmentsCount,
+        payments: [] as DealPayment[],
+      } as Deal),
+    [form.price, form.depositPercent, form.installmentsCount]
+  );
+  const previewSchedule = useMemo(() => paymentSchedule(previewDeal), [previewDeal]);
 
   function validateStep(current: number): string | null {
     if (current === 0) {
@@ -164,6 +198,7 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
         deliverables: form.deliverables,
         price: form.price,
         depositPercent: form.depositPercent,
+        installmentsCount: form.depositPercent >= 100 ? 0 : form.installmentsCount,
         startDate: form.startDate,
         dueDate: form.dueDate,
         revisions: form.revisions,
@@ -188,9 +223,14 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
   /* ---------------- sent confirmation ---------------- */
   if (sentDeal) {
     const shareUrl = `${window.location.origin}/#/c/${sentDeal.shareToken}`;
-    const waText = encodeURIComponent(
-      `Hi ${sentDeal.client.name}! I've sent you a deal on DEAL for "${sentDeal.title}" (${formatNaira(sentDeal.price)}). Review and accept here: ${shareUrl}`
-    );
+    const shareText = `Hi ${sentDeal.client.name}! I've sent you a deal on DEAL for "${sentDeal.title}" (${formatNaira(sentDeal.price)}). Review and accept here: ${shareUrl}`;
+    const myChannels =
+      user && (user.channels?.length ?? 0) > 0
+        ? (user.channels ?? [])
+        : user?.whatsapp
+          ? [{ type: "whatsapp" as ChannelType, value: user.whatsapp, primary: true }]
+          : [];
+    const shareChannels = myChannels.filter((c) => SHARE_CHANNEL_TYPES.includes(c.type));
     return (
       <AppCanvas backHref="/dashboard">
         <div className="flex flex-1 flex-col px-5 pb-10 pt-8">
@@ -223,17 +263,40 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
                 <Copy className="mr-1 h-3.5 w-3.5" /> Copy
               </Button>
             </div>
-            <a
-              href={`https://wa.me/?text=${waText}`}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-accent text-sm font-extrabold text-accent-foreground transition-colors hover:bg-primary hover:text-white"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current">
-                <path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm5.5 14.1c-.2.7-1.3 1.3-1.9 1.4-.5.1-1.1.2-3.4-.7-2.9-1.2-4.7-4.1-4.9-4.3-.1-.2-1.1-1.5-1.1-2.9s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.4l.9 2.1c.1.2.1.4 0 .6l-.4.6-.5.5c-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.4 2.4 1.5.3.1.5.1.7-.1l1-1.2c.2-.3.4-.2.7-.1l2 1c.3.1.5.2.6.4 0 .1 0 .7-.5 1.7Z" />
-              </svg>
-              Share deal on WhatsApp
-            </a>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {shareChannels.map((channel) => {
+                const meta = CHANNEL_META[channel.type];
+                const Icon = meta.icon;
+                const label =
+                  channel.type === "whatsapp"
+                    ? "Share on WhatsApp"
+                    : channel.type === "telegram"
+                      ? "Share via Telegram"
+                      : "Share via Email";
+                return (
+                  <a
+                    key={`${channel.type}-${channel.value}`}
+                    href={shareHref(channel.type, shareUrl, shareText)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex h-11 items-center justify-center gap-2 rounded-xl border border-primary/30 bg-accent text-[13px] font-extrabold text-accent-foreground transition-colors hover:bg-primary hover:text-white"
+                  >
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </a>
+                );
+              })}
+              <Button
+                type="button"
+                className="col-span-2 h-11 rounded-xl font-bold"
+                onClick={() => {
+                  navigator.clipboard?.writeText(shareUrl).catch(() => undefined);
+                  toast.success("Link copied!");
+                }}
+              >
+                <Copy className="mr-1.5 h-4 w-4" /> Copy link
+              </Button>
+            </div>
           </div>
 
           <Button
@@ -533,7 +596,11 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
                   <button
                     key={opt.pct}
                     type="button"
-                    onClick={() => set("depositPercent", opt.pct)}
+                    onClick={() => {
+                      set("depositPercent", opt.pct);
+                      if (opt.pct >= 100) set("installmentsCount", 0);
+                      else if (form.installmentsCount === 0) set("installmentsCount", 2);
+                    }}
                     className={cn(
                       "rounded-xl border p-3 text-center transition-colors",
                       form.depositPercent === opt.pct
@@ -546,12 +613,57 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
                   </button>
                 ))}
               </div>
-              <div className="mt-2.5 rounded-xl bg-secondary p-3.5 text-[13px] font-semibold leading-relaxed text-secondary-foreground">
-                Client pays <span className="font-extrabold text-primary">{formatNaira(deposit)}</span>{" "}
-                deposit to start · balance{" "}
-                <span className="font-extrabold text-foreground">{formatNaira(balance)}</span> due on
-                approval. Final files are released only after full payment.
-              </div>
+            </div>
+
+            <div>
+              <label className="text-[13px] font-extrabold text-foreground">
+                How should the balance be paid?
+              </label>
+              {form.depositPercent >= 100 ? (
+                <p className="mt-2 rounded-xl bg-muted/60 p-3 text-[13px] font-semibold text-muted-foreground">
+                  Deposit covers everything — no installments needed.
+                </p>
+              ) : (
+                <>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[1, 2, 3].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => set("installmentsCount", n)}
+                        className={cn(
+                          "rounded-full border px-3.5 py-2 text-[13px] font-bold transition-colors",
+                          form.installmentsCount === n
+                            ? "border-primary bg-accent text-accent-foreground"
+                            : "border-border bg-card text-muted-foreground hover:bg-muted"
+                        )}
+                      >
+                        {n === 1 ? "1 payment" : `${n} installments`}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-[11px] font-medium text-muted-foreground">
+                    Equal parts of the {formatNaira(balance)} balance — clients can always pay
+                    everything left in one go.
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="mt-2.5 rounded-xl bg-secondary p-3.5 text-[13px] font-semibold leading-relaxed text-secondary-foreground">
+              Client pays <span className="font-extrabold text-primary">{formatNaira(deposit)}</span>{" "}
+              deposit to start
+              {form.depositPercent < 100 ? (
+                <>
+                  {" "}· the {formatNaira(balance)} balance is split into{" "}
+                  <span className="font-extrabold text-foreground">
+                    {form.installmentsCount} installment{form.installmentsCount === 1 ? "" : "s"}
+                  </span>{" "}
+                  (they can also pay it all at once)
+                </>
+              ) : null}
+              . Every payment is held in Payaza escrow until your client approves the work — final
+              files unlock after full payment.
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -662,17 +774,21 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
 
             <div className="rounded-2xl border border-primary/20 bg-accent/60 p-4">
               <div className="flex items-center justify-between">
-                <p className="text-[13px] font-extrabold text-accent-foreground">Total price</p>
+                <p className="text-[13px] font-extrabold text-accent-foreground">Payment plan</p>
                 <p className="text-lg font-extrabold text-foreground">{formatNaira(form.price)}</p>
               </div>
-              <div className="mt-1 flex items-center justify-between text-[13px] font-semibold text-muted-foreground">
-                <span>Deposit to start</span>
-                <span className="font-extrabold text-primary">{formatNaira(deposit)}</span>
+              <div className="mt-2 divide-y divide-primary/10 border-t border-primary/10">
+                {previewSchedule.map((slot) => (
+                  <div key={slot.label} className="flex items-center justify-between py-2 text-[13px]">
+                    <span className="font-semibold text-muted-foreground">{slot.label}</span>
+                    <span className="font-extrabold text-foreground">{formatNaira(slot.amount)}</span>
+                  </div>
+                ))}
               </div>
-              <div className="mt-0.5 flex items-center justify-between text-[13px] font-semibold text-muted-foreground">
-                <span>Balance on approval</span>
-                <span className="font-extrabold text-foreground">{formatNaira(balance)}</span>
-              </div>
+              <p className="mt-2 text-[11px] font-semibold leading-relaxed text-muted-foreground">
+                Every payment is held in Payaza escrow and released to you only when the client
+                approves the completed work.
+              </p>
             </div>
 
             <div className="flex gap-3">

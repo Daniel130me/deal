@@ -11,12 +11,21 @@ import {
   Loader2,
   Plus,
   Share2,
+  Star,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/landing/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -25,7 +34,8 @@ import {
 } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { useApp } from "@/components/app/context";
-import { formatNaira } from "@/lib/types";
+import { CHANNEL_META, CHANNEL_TYPES } from "@/lib/channels";
+import { formatNaira, type ChannelType, type CreatorChannel } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const ONBOARD_STEPS = ["Profile", "Services", "Preview", "Publish"];
@@ -53,12 +63,48 @@ export default function OnboardingScreen() {
   const [bio, setBio] = useState(user?.bio ?? "");
   const [craftOpen, setCraftOpen] = useState(false);
 
+  // channels state — "How clients reach you"
+  const [channels, setChannels] = useState<CreatorChannel[]>(() => {
+    if (user?.channels?.length) return user.channels;
+    return user?.whatsapp ? [{ type: "whatsapp", value: user.whatsapp, primary: true }] : [];
+  });
+  const [channelType, setChannelType] = useState<ChannelType>("whatsapp");
+  const [channelValue, setChannelValue] = useState("");
+
   // services state (local, seeded from scratch for new creators)
   const [services, setServices] = useState<
     { title: string; desc: string; from: number; duration: string; includes: string[] }[]
   >([]);
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState({ title: "", desc: "", from: "", duration: "2–3 hrs" });
+
+  function addChannel() {
+    const value = channelValue.trim();
+    if (!value) {
+      toast.error("Enter a value for the channel (number, username or link).");
+      return;
+    }
+    if (channels.some((c) => c.type === channelType && c.value.toLowerCase() === value.toLowerCase())) {
+      toast.error("That channel is already added.");
+      return;
+    }
+    setChannels((prev) => [...prev, { type: channelType, value, primary: prev.length === 0 }]);
+    setChannelValue("");
+    toast.success(`${CHANNEL_META[channelType].label} added`);
+  }
+
+  function makePrimaryChannel(index: number) {
+    setChannels((prev) => prev.map((c, i) => ({ ...c, primary: i === index })));
+  }
+
+  function removeChannel(index: number) {
+    setChannels((prev) => {
+      const wasPrimary = prev[index]?.primary ?? false;
+      return prev
+        .filter((_, i) => i !== index)
+        .map((c, i) => ({ ...c, primary: wasPrimary ? i === 0 : c.primary }));
+    });
+  }
 
   async function saveProfile() {
     if (!user) return;
@@ -73,6 +119,7 @@ export default function OnboardingScreen() {
         craft,
         location: location.trim(),
         bio: bio.trim(),
+        channels,
       });
       setUser(updated);
       setStep(1);
@@ -107,7 +154,7 @@ export default function OnboardingScreen() {
     if (!user) return;
     setBusy(true);
     try {
-      const { user: updated } = await api.updateUser(user.id, { onboarded: true });
+      const { user: updated } = await api.updateUser(user.id, { onboarded: true, channels });
       setUser(updated);
       setStep(3);
     } catch (err) {
@@ -270,6 +317,106 @@ export default function OnboardingScreen() {
                   className="mt-1.5 min-h-24 rounded-xl bg-muted/60 font-semibold"
                 />
                 <p className="mt-1 text-right text-xs font-semibold text-muted-foreground">{bio.length}/120</p>
+              </div>
+
+              {/* how clients reach you */}
+              <div>
+                <label className="text-[13px] font-extrabold text-foreground">How clients reach you</label>
+                <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+                  Shown on your public page — clients tap to message you directly.
+                </p>
+                <div className="mt-2 space-y-2">
+                  {channels.map((channel, i) => {
+                    const meta = CHANNEL_META[channel.type];
+                    if (!meta) return null;
+                    const Icon = meta.icon;
+                    return (
+                      <div
+                        key={`${channel.type}-${channel.value}-${i}`}
+                        className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5"
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent">
+                          <Icon className="h-4 w-4 text-primary" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-extrabold text-foreground">{meta.label}</p>
+                          <p className="truncate text-xs font-semibold text-muted-foreground">{channel.value}</p>
+                        </div>
+                        <button
+                          type="button"
+                          aria-label={channel.primary ? `Primary channel` : `Make ${meta.label} primary`}
+                          aria-pressed={channel.primary}
+                          onClick={() => makePrimaryChannel(i)}
+                          className="rounded-md p-1.5 transition-colors hover:bg-muted"
+                        >
+                          <Star
+                            className={cn(
+                              "h-4 w-4",
+                              channel.primary ? "fill-amber-400 text-amber-400" : "text-muted-foreground/50"
+                            )}
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${meta.label} channel`}
+                          onClick={() => removeChannel(i)}
+                          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-red-500"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                  {channels.length === 0 ? (
+                    <p className="rounded-xl bg-muted/60 p-3 text-[12px] font-semibold text-muted-foreground">
+                      Add at least one way for clients to reach you.
+                    </p>
+                  ) : null}
+
+                  <div className="flex gap-2">
+                    <Select value={channelType} onValueChange={(v) => setChannelType(v as ChannelType)}>
+                      <SelectTrigger
+                        aria-label="Channel type"
+                        className="h-11 w-[9.5rem] shrink-0 rounded-xl bg-muted/60 font-semibold"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CHANNEL_TYPES.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {CHANNEL_META[t].label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      value={channelValue}
+                      onChange={(e) => setChannelValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addChannel();
+                        }
+                      }}
+                      placeholder={CHANNEL_META[channelType].placeholder}
+                      aria-label="Channel value"
+                      className="h-11 min-w-0 flex-1 rounded-xl bg-muted/60 font-semibold"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      aria-label="Add channel"
+                      onClick={addChannel}
+                      className="h-11 shrink-0 rounded-xl border-primary/40 px-3.5 font-bold text-primary"
+                    >
+                      <Plus className="h-4.5 w-4.5" />
+                    </Button>
+                  </div>
+                  <p className="text-[11px] font-medium text-muted-foreground">
+                    Tap the star to set your primary channel — that&rsquo;s the one shown first.
+                  </p>
+                </div>
               </div>
             </div>
 

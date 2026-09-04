@@ -80,9 +80,9 @@ function AppleIcon() {
 }
 
 const SIGNUP_PERKS = [
-  "Protected payments — deposit covered before you start",
+  "Protected payments — every naira held in Payaza escrow until approval",
   "Clear agreements — scope, deliverables and timelines",
-  "Less chasing — reminders and balance collection built in",
+  "Installment-friendly — deposits, installments and balances, all collected for you",
 ];
 
 export function Signup() {

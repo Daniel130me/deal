@@ -6,8 +6,8 @@ import { toast } from "sonner";
 import { Logo } from "@/components/landing/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api } from "@/lib/api";
-import { useApp, type SafeUser } from "@/components/app/context";
+import { api, type SafeUser } from "@/lib/api";
+import { useApp } from "@/components/app/context";
 
 export default function AuthScreen({
   mode,

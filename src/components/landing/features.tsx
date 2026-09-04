@@ -3,11 +3,11 @@
 import { motion } from "framer-motion";
 import {
   BellRing,
+  CalendarCheck,
   FileText,
-  Instagram,
   Layers,
-  LockKeyhole,
   ShieldCheck,
+  Unlock,
 } from "lucide-react";
 import { SectionHeading } from "@/components/landing/section-heading";
 
@@ -15,7 +15,7 @@ const FEATURES = [
   {
     title: "Protected payments",
     description:
-      "Clients pay into DEAL before you start. You're covered before you move a pixel.",
+      "Clients pay into Payaza escrow before you start. You're covered before you move a pixel.",
     icon: ShieldCheck,
     iconClass: "text-primary",
     tileClass: "bg-accent",
@@ -37,26 +37,26 @@ const FEATURES = [
     tileClass: "bg-accent",
   },
   {
-    title: "Milestone payments",
+    title: "Installment-friendly",
     description:
-      "50/50 or custom splits. Deposit to start, balance on approval — the way clients already like to pay.",
+      "Clients pay in parts — deposit first, then installments — so you stop demanding 100% upfront to start work.",
     icon: Layers,
     iconClass: "text-amber-500",
     tileClass: "bg-amber-50",
   },
   {
-    title: "Files locked till full payment",
+    title: "Escrow that releases on approval",
     description:
-      "Watermarked previews stay shareable, but final files are released only after the balance lands.",
-    icon: LockKeyhole,
+      "Money moves only when your client says the work is done — automatically, straight to your Payaza payout.",
+    icon: Unlock,
     iconClass: "text-violet-600",
     tileClass: "bg-violet-50",
   },
   {
-    title: "Start where the work starts",
+    title: "Bookings & your channels",
     description:
-      "Keep finding clients on Instagram, WhatsApp, Behance or referrals — DEAL handles the business side.",
-    icon: Instagram,
+      "Clients book sessions from your public page and reach you on WhatsApp, Instagram, Telegram, email — you choose.",
+    icon: CalendarCheck,
     iconClass: "text-primary",
     tileClass: "bg-accent",
   },

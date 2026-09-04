@@ -42,7 +42,7 @@ function DealMockupCard() {
           </p>
         </div>
         <Badge className="shrink-0 bg-accent text-accent-foreground hover:bg-accent">
-          Deposit paid
+          Deposit in escrow
         </Badge>
       </div>
 
@@ -109,7 +109,7 @@ function DealMockupCard() {
       <div className="mt-5 flex items-center gap-2.5 rounded-xl bg-secondary px-4 py-3">
         <ShieldCheck className="h-4.5 w-4.5 shrink-0 text-primary" />
         <p className="text-[13px] font-semibold text-secondary-foreground">
-          Payment protected — files unlock only after full payment
+          Protected by Payaza escrow — money releases only on approval
         </p>
       </div>
     </div>
@@ -171,9 +171,8 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.16, ease: "easeOut" }}
             className="mt-6 text-lg leading-relaxed text-muted-foreground"
           >
-            DEAL helps you turn client conversations into clear agreements,
-            secure payments and successful projects — without the stress of
-            chasing or confusion.
+            Send clear agreements, get paid in deposits or installments —
+            every naira waits in escrow until your client approves the work.
           </motion.p>
 
           <motion.div
@@ -207,8 +206,8 @@ export function Hero() {
           >
             {[
               "No monthly fees",
-              "Pay only when you get paid",
-              "Start from IG, WhatsApp or referrals",
+              "Money released the moment work is approved",
+              "Powered by Payaza payments",
             ].map((item) => (
               <li
                 key={item}
@@ -238,7 +237,7 @@ export function Hero() {
               </span>
               <div className="leading-tight">
                 <p className="text-[11px] font-semibold text-muted-foreground">
-                  Deposit received
+                  Held in Payaza escrow
                 </p>
                 <p className="text-[13px] font-extrabold text-foreground">
                   ₦225,000
@@ -254,7 +253,7 @@ export function Hero() {
                 <ShieldCheck className="h-3.5 w-3.5 text-violet-600" />
               </span>
               <p className="text-[13px] font-extrabold text-foreground">
-                Client approved · balance settled
+                Client approved · escrow released
               </p>
             </div>
           </div>

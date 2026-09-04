@@ -15,27 +15,27 @@ import { SectionHeading } from "@/components/landing/section-heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const CREATOR_STEPS = [
-  "Create deal",
-  "Client information",
-  "Service / project",
-  "Scope",
-  "Deliverables",
-  "Price",
-  "Payment structure",
-  "Timeline",
-  "Revisions",
-  "Send deal",
+  "Create the deal — scope, price, timeline",
+  "Choose your deposit + installment plan",
+  "Share the link via ANY channel — WhatsApp, IG, Telegram, email…",
+  "Client reviews & accepts the agreement",
+  "Client pays the deposit via Payaza",
+  "Client pays installments anytime — every payment held in escrow",
+  "You create the work and deliver",
+  "Client approves → ALL escrow releases to your Payaza payout automatically",
+  "Payments made after approval are released to you instantly",
+  "Upload final files once the deal is fully paid",
 ];
 
 const CLIENT_STEPS = [
-  "Review deal",
-  "Accept",
-  "Pay deposit",
-  "View progress",
-  "Review work",
-  "Approve",
-  "Pay balance",
-  "Complete",
+  "Get the deal link",
+  "Review the agreement",
+  "Accept & pay the deposit — Payaza checkout: card, transfer or USSD",
+  "Optionally pay installments as the work progresses",
+  "Review the delivery",
+  "Approve — escrow releases to the creator",
+  "Pay any balance — it lands instantly",
+  "Final files unlock when fully paid",
 ];
 
 const RECORD_ITEMS = [
@@ -46,7 +46,8 @@ const RECORD_ITEMS = [
   },
   {
     title: "What was paid",
-    description: "Every deposit and balance, with amounts, dates and payment references.",
+    description:
+      "Every deposit, installment and balance — amounts, dates, methods and Payaza references (PZ-…) on each payment.",
     icon: HandCoins,
   },
   {
@@ -56,7 +57,8 @@ const RECORD_ITEMS = [
   },
   {
     title: "What was approved",
-    description: "Client sign-off on each milestone, with receipts for the final settlement.",
+    description:
+      "Client sign-off that triggers the release — with receipts for the final settlement.",
     icon: ClipboardCheck,
   },
 ];
@@ -86,7 +88,7 @@ export function Flow() {
         <SectionHeading
           eyebrow="One flow, both sides"
           title="A deal both sides can trust"
-          subtitle="Creators send clear agreements. Clients pay with confidence. DEAL keeps the record of everything in between."
+          subtitle="Creators send clear agreements. Clients pay into Payaza escrow with confidence. DEAL keeps the record of everything in between."
         />
 
         <motion.div
@@ -134,7 +136,8 @@ export function Flow() {
                       You set the terms in minutes
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Guided steps turn your WhatsApp agreement into a real deal — nothing forgotten.
+                      Turn any DM into a real deal, then share it on whatever
+                      channel the client lives on — nothing forgotten.
                     </p>
                   </div>
                 </div>
@@ -153,7 +156,8 @@ export function Flow() {
                       Your client always knows what's next
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      A simple link to review, pay and approve — no account needed to get started.
+                      A simple link — no account needed — and every naira sits
+                      in Payaza escrow until the work is approved.
                     </p>
                   </div>
                 </div>
