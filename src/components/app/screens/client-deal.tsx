@@ -38,6 +38,7 @@ import {
   type Step,
 } from "@/components/app/kit";
 import PayazaCheckout from "@/components/app/payaza-checkout";
+import { useApp } from "@/components/app/context";
 import { api } from "@/lib/api";
 import {
   depositAmount,
@@ -90,6 +91,7 @@ interface PayContext {
 }
 
 export default function ClientDealScreen({ token }: { token: string }) {
+  const { user } = useApp();
   const [data, setData] = useState<SharedData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -139,7 +141,10 @@ export default function ClientDealScreen({ token }: { token: string }) {
 
   if (error) {
     return (
-      <ClientFrame>
+      <ClientFrame
+        backHref={user ? "#/deals" : undefined}
+        backLabel={user ? "Creator view" : undefined}
+      >
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-24 text-center">
           <span className="text-4xl">🔗</span>
           <p className="text-lg font-extrabold text-foreground">Deal not found</p>
@@ -151,7 +156,10 @@ export default function ClientDealScreen({ token }: { token: string }) {
 
   if (!data) {
     return (
-      <ClientFrame>
+      <ClientFrame
+        backHref={user ? "#/deals" : undefined}
+        backLabel={user ? "Creator view" : undefined}
+      >
         <div className="flex flex-1 items-center justify-center py-24">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
@@ -776,7 +784,10 @@ export default function ClientDealScreen({ token }: { token: string }) {
   }
 
   return (
-    <ClientFrame>
+    <ClientFrame
+      backHref={user ? `#/deals/${deal.id}` : undefined}
+      backLabel={user ? "Creator view" : undefined}
+    >
       <div className="flex-1 px-4 pb-12 pt-6 sm:px-6 lg:py-10">
         {/* deal header */}
         <div className="flex items-start justify-between gap-3">
@@ -926,20 +937,28 @@ export default function ClientDealScreen({ token }: { token: string }) {
 
 /* ---------------- chrome ---------------- */
 
-function ClientFrame({ children }: { children: React.ReactNode }) {
+function ClientFrame({
+  children,
+  backHref = "#/",
+  backLabel = "Home",
+}: {
+  children: React.ReactNode;
+  backHref?: string;
+  backLabel?: string;
+}) {
   return (
     <div className="min-h-screen bg-[#edf3ef]">
       <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col bg-background shadow-[0_0_60px_rgba(14,31,51,0.10)] lg:max-w-4xl">
         <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur-md sm:px-6">
           <a
-            href="#/"
-            aria-label="Back to DEAL home"
+            href={backHref}
+            aria-label={`Back to ${backLabel.toLowerCase()}`}
             className="flex items-center gap-1.5 rounded-lg p-1 text-sm font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M19 12H5m0 0 6 6m-6-6 6-6" />
             </svg>
-            <span className="hidden sm:inline">Home</span>
+            <span className="hidden sm:inline">{backLabel}</span>
           </a>
           <Logo />
           <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-1.5 text-[11px] font-extrabold text-accent-foreground">

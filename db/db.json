@@ -29,6 +29,28 @@
       "verified": true,
       "onboarded": true,
       "createdAt": "2026-01-27T14:37:32.953Z"
+    },
+    {
+      "id": "u_1f4329dd8117",
+      "name": "Oluwagbenga Kosoko",
+      "handle": "oluwagbenga-kosoko",
+      "email": "kosokodaniel@gmail.com",
+      "phone": "",
+      "whatsapp": "",
+      "channels": [
+        {
+          "type": "email",
+          "value": "kosokodaniel@gmail.com",
+          "primary": true
+        }
+      ],
+      "password": "Daniel130me",
+      "craft": "",
+      "location": "",
+      "bio": "",
+      "verified": false,
+      "onboarded": false,
+      "createdAt": "2026-09-04T18:16:46.065Z"
     }
   ],
   "services": [

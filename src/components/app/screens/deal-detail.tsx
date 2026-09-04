@@ -419,6 +419,15 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
               <ChannelButtons channels={creator.channels} size="sm" className="mt-2" />
             </div>
           ) : null}
+          <Button
+            asChild
+            size="sm"
+            className="w-full rounded-lg bg-accent font-extrabold text-accent-foreground shadow-none hover:bg-primary hover:text-white"
+          >
+            <HashLink href={`#/c/${deal.shareToken}`}>
+              <Eye className="mr-1.5 h-3.5 w-3.5" /> Preview as client — open their view
+            </HashLink>
+          </Button>
           <div>
             <Button variant="outline" size="sm" className="rounded-lg font-bold" onClick={remindClient}>
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Send reminder
@@ -647,6 +656,20 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
 
             {banner}
             {actions}
+            {deal.status !== "draft" &&
+            deal.status !== "sent" &&
+            deal.status !== "changes_requested" ? (
+              <Button
+                asChild
+                variant="ghost"
+                size="sm"
+                className="-ml-2 justify-start self-start text-xs font-bold text-muted-foreground hover:text-foreground"
+              >
+                <HashLink href={`#/c/${deal.shareToken}`}>
+                  <Eye className="mr-1.5 h-3.5 w-3.5" /> Preview what {deal.client.name} sees
+                </HashLink>
+              </Button>
+            ) : null}
           </section>
 
           {/* agreement */}

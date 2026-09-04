@@ -166,3 +166,17 @@ Work Log:
 Stage Summary:
 - All 5 client requirements implemented and browser-verified end-to-end. The demo golden path for investors: share deal via any channel -> client accepts & pays deposit through Payaza checkout (card/transfer/USSD) -> pays installments anytime (all HELD in escrow) -> creator delivers -> client approves -> ALL escrow auto-releases to creator's Payaza payout -> remaining balance pays land instantly -> final files unlock only when fully paid & approved -> client confirms & rates. Plus bookings (public page -> creator Bookings) and creator-chosen contact channels everywhere.
 - infra hardening: no-store on all API responses, globalThis DB singleton, hash-nav anchors.
+
+---
+Task ID: 6
+Agent: Z.ai Code (main)
+Task: Make the client flow reachable in-app (user asked "how do I see client flow?" — it required hand-editing the URL hash).
+
+Work Log:
+- Added "Preview as client — open their view" button (accent pill, Eye icon) inside the Client link card on deal-detail for sent/changes_requested deals.
+- Added a subtle ghost link "Preview what {client.name} sees" under the hero actions on deal-detail for every other non-draft status (active, delivered, revision, approved, files_released, completed, declined/disputed).
+- ClientDealScreen/ClientFrame now accept backHref/backLabel; when a creator is signed in (demo presenter), the client header back link becomes "← Creator view" → #/deals/{deal.id}; anonymous real clients still get "← Home" → #/.
+- E2E via agent-browser (1440x900 + 390x844): DEAL-002 sent → Preview as client → client view ("You've received a DEAL", Accept & pay deposit ₦30,000) → Back to creator view → deal-detail; ghost links verified on DEAL-001/003/005 incl. completed client view (downloads); no horizontal overflow at 390px; zero console/page errors; bun run lint clean.
+
+Stage Summary:
+- Creator ⇄ client perspective switching is now fully click-driven for investor demos. Direct hashes still work: #/c/tok_glow002 (sent), #/c/tok_lola001 (active), #/c/tok_tech003 (delivered), #/c/tok_ezek004 (approved), #/c/tok_lekki005 (completed), #/u/tobi-a (public page + bookings). No data mutated; seed intact.
