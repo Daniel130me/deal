@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 32" role="img" aria-label="Flutterwave">
+  <rect x="1" y="4" width="24" height="24" rx="7" fill="#FF9B00"/>
+  <path d="M5.6 13.1c2.5-2 4.5-2 7 0s4.5 2 7 0" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M5.6 18.7c2.5-2 4.5-2 7 0s4.5 2 7 0l-1.9 5.1c-1.7 1.2-3.4 1.2-5.1 0l-5-1.7z" fill="#fff" opacity=".92"/>
+  <text x="33" y="22.5" font-family="Arial, Helvetica, sans-serif" font-size="17.5" font-weight="700" fill="#FFFFFF" letter-spacing="-0.5">flutterwave</text>
+</svg>

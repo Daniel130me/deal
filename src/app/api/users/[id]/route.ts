@@ -1,4 +1,5 @@
 import { getDB, saveDB, jsonOk, jsonError, readBody } from "@/lib/store";
+import { isPaymentProvider } from "@/lib/types";
 import type { User } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -32,9 +33,11 @@ export async function PATCH(request: Request, { params }: Params) {
     "phone",
     "channels",
     "onboarded",
+    "preferredProvider",
   ];
   for (const key of allowed) {
     if (key in body && body[key] !== undefined) {
+      if (key === "preferredProvider" && !isPaymentProvider(body.preferredProvider)) continue;
       // @ts-expect-error — prototype-grade assignment across narrow types
       user[key] = body[key];
     }

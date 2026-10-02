@@ -2,7 +2,7 @@ import {
   getDB,
   saveDB,
   newId,
-  newPayazaRef,
+  newGatewayRef,
   jsonOk,
   jsonError,
   readBody,
@@ -10,11 +10,13 @@ import {
 import {
   depositAmount,
   isApproved,
+  isPaymentProvider,
   nextDueSlot,
   paymentSchedule,
   remainingBalance,
+  PROVIDER_META,
 } from "@/lib/types";
-import type { Deal, DealPayment, PaymentMethod } from "@/lib/types";
+import type { Deal, DealPayment, PaymentMethod, PaymentProvider } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +30,14 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
 
 function makePayment(
   deal: Deal,
-  args: { type: DealPayment["type"]; label: string; amount: number; method: PaymentMethod; now: string }
+  args: {
+    type: DealPayment["type"];
+    label: string;
+    amount: number;
+    method: PaymentMethod;
+    provider: PaymentProvider;
+    now: string;
+  }
 ): DealPayment {
   const released = isApproved(deal);
   return {
@@ -38,8 +47,8 @@ function makePayment(
     amount: args.amount,
     method: args.method,
     methodLabel: METHOD_LABELS[args.method] ?? "Card payment",
-    provider: "payaza",
-    reference: newPayazaRef(),
+    provider: args.provider,
+    reference: newGatewayRef(args.provider),
     status: released ? "released" : "held",
     paidAt: args.now,
     ...(released ? { releasedAt: args.now } : {}),
@@ -71,6 +80,9 @@ export async function GET(_request: Request, { params }: Params) {
       verified: safeCreator.verified,
       whatsapp: safeCreator.whatsapp,
       channels: safeCreator.channels ?? [],
+      preferredProvider: isPaymentProvider(safeCreator.preferredProvider)
+        ? safeCreator.preferredProvider
+        : "flutterwave",
     },
     amounts: {
       total: deal.price,
@@ -92,6 +104,7 @@ interface ActionBody {
   action?: string;
   note?: string;
   method?: PaymentMethod;
+  provider?: string;
   rating?: number;
 }
 
@@ -106,6 +119,14 @@ export async function POST(request: Request, { params }: Params) {
   const method: PaymentMethod =
     body?.method === "transfer" || body?.method === "ussd" ? body.method : "card";
   const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
+  const creator = db.users.find((u) => u.id === deal.creatorId);
+  // The client picks the rail (Flutterwave or Paystack); defaults to the creator's preferred one.
+  const provider: PaymentProvider = isPaymentProvider(body?.provider)
+    ? body.provider
+    : isPaymentProvider(creator?.preferredProvider)
+      ? creator.preferredProvider
+      : "flutterwave";
+  const via = PROVIDER_META[provider].label;
 
   switch (body?.action) {
     case "pay-deposit": {
@@ -121,6 +142,7 @@ export async function POST(request: Request, { params }: Params) {
         label: `Deposit (${deal.depositPercent}%)`,
         amount,
         method,
+        provider,
         now,
       });
       deal.payments.push(payment);
@@ -129,7 +151,7 @@ export async function POST(request: Request, { params }: Params) {
         {
           at: now,
           type: "deposit_paid",
-          label: `Deposit paid — ${naira(amount)} secured in Payaza escrow (ref ${payment.reference})`,
+          label: `Deposit paid — ${naira(amount)} held in DEAL escrow via ${via} (ref ${payment.reference})`,
           actor: "client",
         }
       );
@@ -156,6 +178,7 @@ export async function POST(request: Request, { params }: Params) {
         label: slot?.label ?? "Balance payment",
         amount,
         method,
+        provider,
         now,
       });
       deal.payments.push(payment);
@@ -170,7 +193,7 @@ export async function POST(request: Request, { params }: Params) {
         deal.events.push({
           at: now,
           type: "balance_paid",
-          label: `${payment.label} paid — ${naira(amount)} secured in Payaza escrow (ref ${payment.reference})`,
+          label: `${payment.label} paid — ${naira(amount)} held in DEAL escrow via ${via} (ref ${payment.reference})`,
           actor: "client",
         });
       }
@@ -195,6 +218,7 @@ export async function POST(request: Request, { params }: Params) {
         label: "Balance payment",
         amount,
         method,
+        provider,
         now,
       });
       deal.payments.push(payment);
@@ -209,7 +233,7 @@ export async function POST(request: Request, { params }: Params) {
         deal.events.push({
           at: now,
           type: "balance_paid",
-          label: `Balance paid in full — ${naira(amount)} secured in Payaza escrow (ref ${payment.reference})`,
+          label: `Balance paid in full — ${naira(amount)} held in DEAL escrow via ${via} (ref ${payment.reference})`,
           actor: "client",
         });
       }
@@ -256,7 +280,7 @@ export async function POST(request: Request, { params }: Params) {
         deal.events.push({
           at: now,
           type: "payment_released",
-          label: `${naira(releasedTotal)} released from escrow to the creator's Payaza payout account`,
+          label: `${naira(releasedTotal)} released from escrow to the creator's payout account`,
           actor: "system",
         });
       }

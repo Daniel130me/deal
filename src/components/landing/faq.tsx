@@ -13,17 +13,17 @@ const FAQS = [
   {
     question: "When do I actually receive my money?",
     answer:
-      "The moment your client approves the completed work. Everything they've paid — deposit and installments — is sitting in Payaza escrow, and on approval it releases automatically to your Payaza payout account. No “confirm payout” step, no waiting around.",
+      "The moment your client approves the completed work. Everything they've paid — deposit and installments — is sitting in DEAL escrow, and on approval it releases automatically to you. No “confirm payout” step, no waiting around.",
   },
   {
     question: "Can my client pay in installments?",
     answer:
-      "Yes. You set the structure: a deposit plus up to 3 installments, or any balance afterwards. Your client can pay the next installment whenever they're ready — and every single payment is secured in Payaza escrow until the work is approved.",
+      "Yes. You set the structure: a deposit plus up to 3 installments, or any balance afterwards. Your client can pay the next installment whenever they're ready — and every single payment is secured in DEAL escrow until the work is approved.",
   },
   {
-    question: "What is Payaza?",
+    question: "How do payments work?",
     answer:
-      "Payaza is a licensed Nigerian payment processor. It handles the checkout — card, bank transfer and USSD — and holds every payment in escrow until the deal is approved, so both sides are protected: clients know the money only moves when they're happy, and you know the money is real before you start.",
+      "Payments are processed by Flutterwave or Paystack — card, bank transfer or USSD. But the money is held by DEAL, not the gateway: DEAL escrow keeps every payment locked until the client approves the work, then releases it to the creator. The gateway processes the charge; DEAL protects both sides.",
   },
   {
     question: "Can clients book a session with me?",
@@ -31,14 +31,14 @@ const FAQS = [
       "Yes. Your public page has a booking calendar — clients pick a service, a date and a time, and the request lands straight in your Bookings. Confirm it and the session is on.",
   },
   {
-    question: "Where do I talk to my clients?",
+    question: "How are my files protected?",
     answer:
-      "Wherever you already do. Each deal carries your preferred channels — WhatsApp, Instagram DM, Telegram, email and more — so clients can always reach you the way you actually use, not the way an app decides.",
+      "Clients review watermarked, reduced-quality previews — never the originals. Full-quality files unlock only when the work is approved AND the deal is fully paid, so nobody walks away with your work before you've been paid.",
   },
   {
-    question: "What if a client refuses to pay or approve the work?",
+    question: "Who is DEAL for?",
     answer:
-      "Final files stay locked until the deal is fully paid, and DEAL sends automatic reminders on your behalf. Because the scope, revisions and approval terms were agreed upfront — and every payment and delivery sits on the record with a timestamp — you have everything you need for a fast, fair resolution, including dispute support.",
+      "DEAL is built for 7 creative crafts: photographers, videographers, motion designers, graphic designers, video editors, illustrators and voice artists. Niching down means the agreements, escrow and file protection are tuned to how creative work actually happens — not a generic freelancer app.",
   },
 ];
 

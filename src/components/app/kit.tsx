@@ -1,7 +1,8 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   BOOKING_STATUS_CHIP_CLASS,
   BOOKING_STATUS_LABELS,
@@ -14,11 +15,13 @@ import {
   isApproved,
   paymentSchedule,
   remainingBalance,
+  PROVIDER_META,
   type Booking,
   type Deal,
   type DealEvent,
   type DealStatus,
   type CreatorChannel,
+  type PaymentProvider,
 } from "@/lib/types";
 import { CHANNEL_META, channelHref } from "@/lib/channels";
 import { cn } from "@/lib/utils";
@@ -53,15 +56,46 @@ export function BookingChip({ status, className }: { status: Booking["status"]; 
   );
 }
 
-/* ---------- Payaza branding ---------- */
+/* ---------- payment rail branding (Flutterwave / Paystack — escrow is DEAL's) ---------- */
 
-export function PayazaMark({ withText = false, className }: { withText?: boolean; className?: string }) {
+export function ProviderMark({
+  provider,
+  withText = false,
+  white = false,
+  className,
+}: {
+  provider: PaymentProvider;
+  withText?: boolean;
+  white?: boolean;
+  className?: string;
+}) {
+  const meta = PROVIDER_META[provider];
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
-      <img src="/payaza/payaza-logo.svg" alt="Payaza" className="h-4 w-auto" />
+      <img src={white ? meta.logoWhite : meta.logo} alt={meta.label} className="h-4 w-auto" />
       {withText ? (
-        <span className="text-[11px] font-bold text-muted-foreground">Powered by Payaza</span>
+        <span className="text-[11px] font-bold text-muted-foreground">Paid via {meta.label}</span>
       ) : null}
+    </span>
+  );
+}
+
+/** Both rails side by side — "payments powered by Flutterwave & Paystack". */
+export function GatewayMarks({ white = false, className }: { white?: boolean; className?: string }) {
+  return (
+    <span className={cn("inline-flex items-center gap-3", className)}>
+      <img src="/flutterwave/logo.svg" alt="Flutterwave" className={cn("h-4 w-auto", white && "hidden")} />
+      <img
+        src="/flutterwave/logo-white.svg"
+        alt="Flutterwave"
+        className={cn("h-4 w-auto", !white && "hidden")}
+      />
+      <span className="text-[10px] font-extrabold text-muted-foreground/60">&</span>
+      <img
+        src={white ? "/paystack/logo-white.svg" : "/paystack/logo.svg"}
+        alt="Paystack"
+        className="h-4 w-auto"
+      />
     </span>
   );
 }
@@ -242,7 +276,7 @@ export function PaymentSummary({ deal }: { deal: Deal }) {
                 {slot.status === "paid"
                   ? approved
                     ? "Paid & released to creator"
-                    : "Paid · held in Payaza escrow"
+                    : "Paid · held in DEAL escrow"
                   : deal.status === "sent"
                     ? "Due after acceptance"
                     : "Due — pay anytime"}
@@ -272,8 +306,9 @@ export function PaymentSummary({ deal }: { deal: Deal }) {
         )}
       </div>
       <p className="mt-3 rounded-xl bg-secondary p-3 text-xs font-medium leading-relaxed text-muted-foreground">
-        Every payment sits in <span className="font-bold text-foreground">Payaza escrow</span> and is only
-        released to the creator when the client approves the completed work.
+        <span className="font-bold text-foreground">DEAL escrow</span> holds every payment and only
+        releases it to the creator when the client approves the completed work. Charges are processed
+        by Flutterwave or Paystack — the client picks their preferred rail at checkout.
       </p>
     </SectionCard>
   );
@@ -284,7 +319,7 @@ export function PaymentSummary({ deal }: { deal: Deal }) {
 export function EscrowBanner({
   amount,
   paidOn,
-  note = "Held by Payaza escrow — the creator only receives it when you approve the completed work.",
+  note = "Held in DEAL escrow — the creator only receives it when you approve the completed work.",
 }: {
   amount: number;
   paidOn?: string;
@@ -360,12 +395,16 @@ export function FileRow({
   size,
   kind,
   locked,
+  protected: isProtected,
   onPreview,
 }: {
   name: string;
   size: string;
   kind: string;
+  /** Hard lock — file not delivered to the client yet (final files before release). */
   locked?: boolean;
+  /** Protected preview — viewable with DEAL watermark, download only after full payment. */
+  protected?: boolean;
   onPreview?: () => void;
 }) {
   return (
@@ -381,6 +420,22 @@ export function FileRow({
         <Badge variant="outline" className="shrink-0 border-border text-[10px] font-bold text-muted-foreground">
           🔒 Locked
         </Badge>
+      ) : isProtected ? (
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onPreview}
+            className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-bold text-foreground transition-colors hover:bg-muted"
+          >
+            Preview
+          </button>
+          <span
+            title="Protected until the deal is fully paid"
+            className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] font-extrabold text-amber-700"
+          >
+            <ShieldCheck className="h-3 w-3" /> Protected
+          </span>
+        </div>
       ) : (
         <div className="flex shrink-0 items-center gap-1.5">
           <button
@@ -404,6 +459,59 @@ export function FileRow({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Simulated watermarked preview — DEAL protects delivered work with a visible
+ * watermark + reduced quality until the client approves AND fully pays.
+ */
+export function ProtectedPreviewDialog({
+  open,
+  onOpenChange,
+  file,
+  creatorName,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  file: { name: string; size: string; kind: string } | null;
+  creatorName: string;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent aria-describedby={undefined} className="max-w-lg p-0 overflow-hidden sm:rounded-2xl">
+        <DialogHeader className="border-b border-border px-5 pb-3 pt-4">
+          <DialogTitle className="truncate pr-6 text-[15px] font-extrabold text-foreground">
+            {file?.name ?? "Preview"}
+          </DialogTitle>
+          <p className="text-xs font-semibold text-muted-foreground">
+            {file ? `${file.kind} · ${file.size}` : ""} · Protected preview
+          </p>
+        </DialogHeader>
+        <div className="relative mx-5 mb-4 flex h-56 items-center justify-center overflow-hidden rounded-xl border border-border bg-gradient-to-br from-muted via-secondary to-accent/70 sm:h-72">
+          <span className="text-4xl font-black tracking-tight text-primary/25">{file?.kind}</span>
+          {/* diagonal watermark */}
+          <div className="pointer-events-none absolute inset-0 flex rotate-[-18deg] flex-col justify-center gap-6 overflow-hidden opacity-[0.16]">
+            {[0, 1, 2].map((row) => (
+              <p
+                key={row}
+                className="whitespace-nowrap text-center text-sm font-black uppercase tracking-[0.3em] text-foreground"
+              >
+                DEAL · Protected preview · {creatorName} · DEAL · Protected preview
+              </p>
+            ))}
+          </div>
+          <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white/90 px-2 py-1 text-[10px] font-extrabold text-amber-700 shadow-sm">
+            <ShieldCheck className="h-3 w-3" /> Watermarked
+          </span>
+        </div>
+        <p className="mb-5 flex items-start gap-2 px-5 text-xs font-medium leading-relaxed text-muted-foreground">
+          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+          This is a reduced-resolution, watermarked preview. The clean full-quality file unlocks for
+          download only once the work is approved and the deal is fully paid.
+        </p>
+      </DialogContent>
+    </Dialog>
   );
 }
 

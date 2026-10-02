@@ -38,12 +38,22 @@ export function SiteFooter() {
           {/* Brand */}
           <div className="max-w-xs">
             <Logo wordmarkClassName="text-white" />
-            <p className="mt-4 flex items-center gap-2 text-[11px] font-semibold text-slate-400">
+            <p className="mt-4 flex flex-wrap items-center gap-2.5 text-[11px] font-semibold text-slate-400">
               Payments powered by
               <img
-                src="/payaza/payaza-logo.svg"
-                alt="Payaza"
-                className="h-4 w-auto rounded-full bg-white px-2 py-1"
+                src="/flutterwave/logo-white.svg"
+                alt="Flutterwave"
+                width={86}
+                height={16}
+                className="h-4 w-auto"
+              />
+              <span className="text-slate-500">&</span>
+              <img
+                src="/paystack/logo-white.svg"
+                alt="Paystack"
+                width={69}
+                height={16}
+                className="h-4 w-auto"
               />
             </p>
             <p className="mt-4 text-sm leading-relaxed text-slate-400">

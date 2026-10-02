@@ -1,0 +1,183 @@
+     1→# DEAL Project Worklog
+     2→
+     3→---
+     4→Task ID: 1
+     5→Agent: Z.ai Code (main)
+     6→Task: Build the DEAL landing page from the sample design (Google Drive screenshot), following the product context (DEAL helps African creatives manage paid projects from IG/WhatsApp/referrals with agreements, milestone payments, protected delivery).
+     7→
+     8→Work Log:
+     9→- Downloaded and analyzed the sample design from Google Drive (605x1280 mobile JPEG): white bg, green #0FA958 primary, dark navy ink, "Built for African creatives" badge, "Agree. Pay. / Create. Deliver." headline, 4-step dotted flow (Agree/Pay/Create/Complete), feature card (Protected payments / Clear agreements / Less chasing), signup form (name, email/phone, password, Google/Apple), terms footer text.
+    10→- Replaced Prisma demo models with `Signup` model (name, unique contact, scrypt passwordHash) and pushed to SQLite (`bun run db:push`).
+    11→- Rewrote `src/app/globals.css` design tokens: primary green #0FA958, navy foreground #0e1f33, mint accent #e8f6ee, amber/violet step accents, container-page + step-connector + float-soft utilities, smooth scroll with scroll-margin for sticky header.
+    12→- Rewrote `src/app/layout.tsx`: Plus Jakarta Sans (matches sample's geometric type), DEAL metadata/OG tags, sonner Toaster, theme-color #0FA958.
+    13→- Created `public/logo.svg` + `src/components/landing/logo.tsx` (green rounded-D mark + DEAL wordmark).
+    14→- Built landing components in `src/components/landing/`:
+    15→  - header.tsx — sticky translucent header, scroll shadow, desktop nav, mobile Sheet menu.
+    16→  - hero.tsx — sample-faithful hero (badge with pulsing dot, two-tone H1, subtext, dual CTA, trust checks) + desktop-only CSS-built deal-card mockup (₦450,000 total / ₦225,000 deposit paid / milestones / locked files) with floating chips.
+    17→  - steps.tsx — 4-step flow with dotted connector (green/amber/green/violet icon tints like sample).
+    18→  - features.tsx — 6 cards: sample's 3 (Protected payments, Clear agreements, Less chasing) + Milestone payments, Files locked till full payment, Start where the work starts.
+    19→  - flow.tsx — interactive Tabs: Creator flow (10 steps), Client flow (8 steps), DEAL record (agreed/paid/delivered/approved) — directly from the MVP flow spec.
+    20→  - audience.tsx — creative-type chips (photographers, designers, writers, developers, etc.).
+    21→  - pricing-banner.tsx — dark navy banner "No monthly fees. Pay only when you get paid."
+    22→  - faq.tsx — 6-question shadcn Accordion.
+    23→  - signup.tsx — sample form (name, email-or-phone with combined validation, password + eye toggle), POSTs to /api/signup, sonner toasts, Google/Apple buttons ("coming soon" toast), testimonial quote, terms text.
+    24→  - footer.tsx — dark navy footer, link columns, socials, safe-area-inset bottom padding, mt-auto sticky behavior.
+    25→- Assembled `src/app/page.tsx` (server component; min-h-screen flex-col wrapper, main flex-1, footer mt-auto).
+    26→- Added `src/app/api/signup/route.ts`: zod validation, email-or-phone normalization, duplicate check (409), scrypt password hashing with timing-safe verification, in-memory rate limit (8/min/ip), returns {ok:true} 201.
+    27→- Verified with agent-browser at 1440x900 and 390x844: hero renders and matches sample; steps/features/flow/FAQ/signup/footer all render on scroll; tabs (Creator/Client/Record) switch correctly; FAQ accordion expands; mobile menu Sheet opens; mobile 2x2 steps grid; footer safe-area.
+    28→- Fixed issues found during verification: floating chip overlapped the "Deposit paid" badge (moved to -right-12 -top-10), mockup title truncation (shortened to "Brand photoshoot · 12 photos").
+    29→- End-to-end form test: submitted "Amara Okafor / amara@testmail.com" → success toast shown, form reset, Prisma INSERT logged, record confirmed in SQLite with hashed password. Empty submit shows inline validation errors.
+    30→- `bun run lint` passes with no errors; dev.log shows no runtime errors (GET / 200, POST /api/signup 201).
+    31→
+    32→Stage Summary:
+    33→- Landing page live at `/` (single route, per instructions) — production-ready, responsive, accessible, animated with framer-motion.
+    34→- Design fidelity to sample kept on mobile (badge → headline → subtext → steps → features → signup form order); desktop enhanced with product mockup, tabs, expanded sections.
+    35→- API: POST /api/signup persists early signups to SQLite (Signup model) with hashed passwords + rate limiting.
+    36→- Key decisions: light-only theme (matches sample), sonner for toasts, no server actions (API route per rules), placeholders (# links) for Terms/Privacy/socials until product pages exist.
+    37→- Next steps for product build: creator deal-creation wizard (10 steps), client deal view link, payment integration, file delivery/lock logic.
+    38→
+    39→---
+    40→Task ID: 2
+    41→Agent: Z.ai Code (main)
+    42→Task: Build the full clickable prototype for DEAL from the 31-screen reference folder (Drive), replacing SQLite/Prisma with a fast JSON store (db/db.json), improving on the provided designs as content/flow direction.
+    43→
+    44→Work Log:
+    45→- Downloaded all 31 reference screens from the Drive folder (embeddedfolderview listing + parallel download) and analyzed every screen: onboarding (profile/services/preview/publish), creator dashboard/requests/request review, 4-step deal wizard, creator deal states (deposit secured, delivery submitted, full payment secured, ready to deliver, files released, payment released), public "Work with me" page + service detail + client request flow (3 steps), client deal states (received deal, checkout w/ escrow, payment success, in progress, delivery review, approved→pay balance, awaiting balance, full payment secured, completed), plus Instagram-bio context shot.
+    46→- Removed Prisma/SQLite entirely (schema, lib/db.ts, old /api/signup, db/custom.db).
+    47→- Built the JSON data layer: db/db.json (seeded: Tobi A. photographer + 4 services, 3 requests, 5 deals covering every lifecycle state, earnings series) + db/seed.json pristine copy. src/lib/store.ts keeps the DB in memory (reads are sub-ms, no driver/network hop — faster than a separate json-server process) and persists atomically (tmp+rename) on every mutation. POST /api/admin/reset restores the seed.
+    48→- API routes (all same-origin, force-dynamic): auth/signup+login, users/[id] (GET/PATCH onboarding), users/[id]/services, creators/[id]/overview (stats+money+chart+recent), creators/[id]/requests, requests/[id] (GET/decline/archive), deals (GET list/POST create w/ DEAL-00N refs + share tokens), deals/[id] (GET/PATCH wizard save/POST actions: send|deliver|release-files|confirm-payout), public/[handle] (page data), public/[handle]/requests (client request intake), shared/[token] (GET client view + POST actions: pay-deposit|request-changes|approve|pay-balance|dispute|review).
+    49→- SPA architecture at "/" only (preview constraint): src/components/app/shell.tsx hash router (#/ #/login #/signup #/onboarding #/dashboard #/requests[/:id] #/deals[/new|/r-req|/:id] #/c/:token #/u/:handle) + RouteErrorBoundary + lazy screens; context.tsx with useSyncExternalStore hash routing + localStorage user session.
+    50→- App chrome: centered max-w-lg canvas (phone-style presentation of the mobile designs on desktop), sticky header (WhatsApp button, notifications, account menu with Reset demo data + logout), bottom tab bar (Dashboard/Requests/Add New/Projects/Earnings) with safe-area padding.
+    51→- Creator screens: auth (login/signup + one-tap demo login), onboarding 4-step (profile→services add-dialog→live preview→published with public link + how-it-works), dashboard (stats, earnings chart via recharts, escrow/expected balance, quick actions, recent requests, deals), requests list (filters)+detail (brief, client info, next steps, decline dialog, Send proposal→wizard prefilled), deal wizard 4 steps (details→scope/deliverables→terms: price quick-sets, 50/50|70/30|100%, dates, revisions stepper→review) with Save draft / Send deal → sent screen (copy link + WhatsApp share), deals list (filters), deal detail (status-driven hero per WA0014/15/10-13 + deliver dialog with simulated upload progress + payment summary + deal record timeline).
+    52→- Client screens (no login, via share link): status-driven view per WA0044/0000/0006/0002/0005/0004 — received deal (what happens next + accept/request changes), secure checkout (escrow explainer, Card/Bank/USSD/Wallet methods, card form), payment success screens, in-progress (escrow banner, 4-step progress, people on deal), delivery review (files + approve/request changes/dispute), approved (pay balance), full payment secured (waiting for delivery), files released (downloads), completed (download again + 5-star review dialog) + full "DEAL keeps the record" timeline.
+    53→- Public flow: creator page (hero, verified badge, services with From prices + popular) → request form (per service) → success screen (what happens next) → lands in creator's Requests.
+    54→- Landing wired into SPA: all hash anchors converted to JS scrolling (hash router conflict), CTAs → #/signup + one-tap "Try the live demo", signup form now creates account via API and enters onboarding.
+    55→- Lint fixes: moved render-time components (PayRow/PayChip) out of PaymentSummary, replaced conditional useMemo with plain computation, useSyncExternalStore for routing, aria-describedby={undefined} on all DialogContent.
+    56→- Agent-browser E2E verified the ENTIRE golden path with real data mutations: landing → demo login → dashboard → wizard (all 4 steps filled) → deal sent (DEAL-006) → client link → accept+pay ₦75,000 deposit (escrow) → creator delivers (upload simulation) → client approves → pays ₦75,000 balance → creator releases final files → payout released → deal completed → client 5-star review; plus public page → request submitted → landed in creator requests; validation errors, request-detail→proposal link, mobile 390px layouts all verified. Demo data reset to pristine seed afterwards.
+    57→
+    58→Stage Summary:
+    59→- Full clickable prototype live at "/" covering onboarding → requests → proposals → deal lifecycle → escrow payments → delivery/approval → payout → completion → review, for both creator and client sides, plus the public acquisition loop (public page → request).
+    60→- Data: db/db.json + in-memory store; reads ~5-20ms end-to-end (verified in dev.log); atomic persistence; /api/admin/reset restores seed; account menu exposes "Reset demo data".
+    61→- Demo credentials: tobi@deal.ng / demo1234 (one-tap on login screen); clients need no accounts (share links #/c/<token>).
+    62→- Key product decisions: 4-step wizard groups the original 10-step MVP flow (details/scope/terms/review); accept+deposit combined in checkout per designs; deposit flexible (50/50, 70/30, 100% upfront); files locked till balance; record timeline = agreed+paid+delivered+approved.
+    63→
+    64→---
+    65→Task ID: 3
+    66→Agent: Z.ai Code (main)
+    67→Task: Upgrade round v2 — backend contract + app backbone for 5 client requirements: (1) installments + escrow released ONLY on client approval, (2) Payaza checkout branding, (3) bookings, (4) multi-channel communication, (5) responsive app-like redesign (desktop sidebar).
+    68→
+    69→Work Log:
+    70→- Researched Payaza (payaza.africa): purple brand #9545FE / #29003D / #440066, downloaded official logo SVG to public/payaza/payaza-logo.svg.
+    71→- Wrote UPGRADE_SPEC.md (single source of truth: money model, status flow, API contract, seed, file ownership for parallel agents).
+    72→- Rewrote src/lib/types.ts: Deal.installmentsCount, DealPayment {type deposit|installment|balance, label, method card|transfer|ussd, methodLabel, provider payaza, reference PZ-XXXXXXXX, releasedAt}, Booking entity, DB.bookings, CreatorChannel, helpers remainingBalance/isFullyPaid/isApproved/paymentSchedule/nextDueSlot, BookingStatus labels/chips. balanceAmount kept as deprecated helper.
+    73→- New src/lib/channels.ts: CHANNEL_META for 9 channel types (whatsapp/telegram/instagram/email/phone_call/sms/x_twitter/linkedin/tiktok) with icons + deep-link href builders.
+    74→- store.ts: nextRef widened to BKG, newPayazaRef() added.
+    75→- API routes: shared/[token] rewritten (pay-deposit/pay-next/pay-remaining with escrow rule: held pre-approval, instant-release post-approval; approve auto-releases ALL held payments + system event; complete action from files_released with rating; creator payload includes channels; amounts include schedule/nextDue/fullyPaid/approved). deals/[id]: WIZARD_KEYS+installmentsCount, release-files requires approved+fullyPaid, confirm-payout removed. creators/[id]/overview: releasedAllTime, bookingsUpcoming, bookings top3, remaining-balance based expected. NEW creators/[id]/bookings GET, bookings/[id] POST (confirm/decline/complete/cancel), public/[handle]/bookings POST (intake, ref BKG-00N). users PATCH +channels whitelist; signup seeds channels from contact type.
+    76→- Rewrote src/lib/api.ts to the new contract (bookings endpoints, pay actions with method card|transfer|ussd, overview new fields).
+    77→- db/make-seed.ts generator (relative dates) -> db/seed.json + db/db.json: 5 deals covering every state (active w/ deposit+installment held, sent, delivered awaiting review, approved fully-released awaiting file upload, completed with full trail incl. revision), 3 bookings, Tobi channels (whatsapp primary, instagram, email), PZ references on all payments.
+    78→- Backbone: chrome.tsx rewritten — desktop fixed sidebar w-64 (logo, New deal button, nav Dashboard/Projects/Requests/Bookings/Money, user card menu) + content column lg:pl-64 max-w-5xl; mobile keeps sticky header + bottom tabs (Home/Projects/FAB/Bookings/Money); AccountMenu shared. shell.tsx: added #/bookings + #/money lazy routes. kit.tsx: schedule-based PaymentSummary({deal}) with In escrow/Released/Due chips + escrow explainer, BookingChip, PayazaMark (logo img), ChannelButtons (deep links), EscrowBanner Payaza copy, BookingWhen.
+    79→- Placeholder screens/money.tsx + bookings.tsx created (agents will replace).
+    80→- Backend verified via curl: pay-next creates HELD payment; approve on delivered releases ALL held (75000 released) + payment_released event; pay-next AFTER approval releases instantly; booking intake BKG-004 -> confirm works; overview money {releasedAllTime 200000, inEscrow 165000}; shared payload includes schedule + channels; admin/reset restores seed.
+    81→
+    82→Stage Summary:
+    83→- Backend + backbone live and curl-verified. Screen rewrites delegated: Task 4-a (creator screens), Task 4-b (client+Payaza+public+wizard+onboarding), Task 4-c (landing copy). Integration + E2E verification = Task 5.
+    84→
+    85→---
+    86→Task ID: 4-c
+    87→Agent: frontend builder (landing copy)
+    88→Task: Landing copy/content upgrade to reflect the 5 v2 upgrades (installments + escrow released on approval, Payaza payments, bookings, multi-channel communication) — surgical copy edits in src/components/landing/* only.
+    89→
+    90→Work Log:
+    91→- hero.tsx: subtext reworded to "Send clear agreements, get paid in deposits or installments — every naira waits in escrow until your client approves the work."; trust checks now "No monthly fees / Money released the moment work is approved / Powered by Payaza payments"; mockup micro-copy aligned to escrow (badge "Deposit in escrow", protection strip "Protected by Payaza escrow — money releases only on approval", floating chips "Held in Payaza escrow" + "Client approved · escrow released").
+    92→- steps.tsx: step subs updated — Agree (send the agreement, one-tap accept), Pay (deposit + installments anytime, every payment locked in Payaza escrow), Create (files stay locked until fully paid), step 4 renamed "Complete" → "Approve & Deliver" (approve → automatic escrow release, final files unlock once fully paid); icon swap CheckCircle2 → BadgeCheck; section subtitle now "The familiar pay-in-parts arrangement — deposits and installments held in escrow, released only when the work is approved."
+    93→- features.tsx: kept Protected payments (now says "into Payaza escrow"), Clear agreements, Less chasing; replaced the other three with "Installment-friendly" (Layers/amber), "Escrow that releases on approval" (Unlock/violet), "Bookings & your channels" (CalendarCheck/accent); imports updated.
+    94→- flow.tsx: Creator tab rewritten to the 10-step deal lifecycle (share via ANY channel — WhatsApp/IG/Telegram/email; deposit via Payaza; installments anytime held in escrow; approve → ALL escrow releases to Payaza payout automatically; post-approval payments instant; final files once fully paid); Client tab = 8 steps (link → agreement → accept & pay deposit via Payaza checkout card/transfer/USSD → optional installments → review delivery → approve (escrow releases) → balance lands instantly → files unlock when fully paid); DEAL record tab keeps Agreed/Paid/Delivered/Approved, Paid item now mentions Payaza references (PZ-…) on every payment; tab intro lines + section subtitle mention escrow/channels.
+    95→- faq.tsx: 6 questions replaced/updated — When do I actually receive my money? (auto-release to Payaza payout on approval) / Can my client pay in installments? (deposit + up to 3, all escrow-secured) / What is Payaza? (licensed Nigerian processor: card, transfer, USSD + escrow) / Can clients book a session with me? (booking calendar on public page → your Bookings) / Where do I talk to my clients? (deal carries your preferred channels) / kept strong Q expanded to "refuse to pay or approve" (record + dispute support).
+    96→- pricing-banner.tsx: added "Payments powered by" line with Payaza wordmark (/payaza/payaza-logo.svg, h-4) in a small white pill next to "No monthly fees…" — neutral on the navy banner, purple stays a tiny accent only.
+    97→- footer.tsx: tiny "Payments powered by" + Payaza logo pill under the footer logo; brand blurb now "get paid in deposits and installments".
+    98→- signup.tsx: supporting perk copy only — "every naira held in Payaza escrow until approval" + "Installment-friendly"; no form/logic changes.
+    99→- Verified with agent-browser at 1440x900 and 390x844: all sections render with new copy, both Payaza imgs load (170x40) and are visible on dark surfaces, Client tab shows 8 steps, Record tab keeps 4 items, no console errors, GET / 200 in dev.log.
+   100→- bun run lint: 0 errors (removed 2 now-unused eslint-disable img directives in my files; the one remaining warning is in app/kit.tsx — not this task's file).
+   101→
+   102→Stage Summary:
+   103→- Landing now sells the upgraded product: installments + approval-gated Payaza escrow as the core money story, Payaza as the payment rail (subtle "Powered by" mentions, no purple takeover), bookings + creator-chosen channels as new hooks — with design language, layout, animations and component APIs unchanged. Ready for Task 5 integration/E2E.
+   104→
+   105→---
+   106→Task ID: 4-a
+   107→Agent: frontend builder (creator screens)
+   108→Task: Rewrite the 5 creator screens (dashboard, money, bookings, deals-list, deal-detail) to the v2 contract — schedule-based escrow money model, Payaza branding, bookings, channels, responsive sidebar layout.
+   109→
+   110→Work Log:
+   111→- Read worklog.md (Tasks 1-3), UPGRADE_SPEC.md and the contracts: context.tsx (useApp/navigate), chrome.tsx (AppCanvas/AppTab), kit.tsx (AppPage/SectionCard/StatusChip/BookingChip/PayazaMark/Stepper/PaymentSummary/EscrowBanner/RecordTimeline/FileRow/AgreementSummary/MetaRow/ChannelButtons/BookingWhen), types.ts helpers (remainingBalance/isFullyPaid/isApproved/paidTotal/paymentSchedule/formatNaira/...), api.ts, channels.ts.
+   112→- Audited all five owned screens against the spec (they existed from an unlogged prior run); verified every required block, then fixed the gaps (edits confined to my 5 files):
+   113→  - deal-detail: added AppPage backHref="#/deals" (desktop inline back — kit renders a plain <a>, so it needs the "#" prefix); added the draft "one last look before send" hint; legacy balance_paid status now renders the approved hero instead of falling into the red dispute banner; converted hoisted handler declarations to const arrows so narrowing removes all `deal!` non-null assertions; fullyPaid now uses the isFullyPaid() helper.
+   114→- CRITICAL backbone bug found & worked around: Next `<Link href="#/...">` performs a same-page pushState WITHOUT firing `hashchange`, so the SPA router (context.tsx useSyncExternalStore on hashchange) never re-rendered — clicking sidebar/tabs/stat links changed the URL but the screen stayed stale (reproduced in browser: hashchange fired 0 times, h1 unchanged). Fix inside my files: replaced every next/link import with a local `HashLink` plain-anchor component (native same-document navigation fires hashchange; also scrolls to top like navigate()). Verified click-through navigation now works from all 5 screens. NOTE for main agent / Task 5: chrome.tsx (sidebar nav, bottom tabs, AppHeader back button, New deal button) and any other screens using next/link with "#/..." hash hrefs still have this bug — either convert those to plain anchors or patch history.pushState in context.tsx to dispatch hashchange when the hash changes.
+   115→- Browser E2E (agent-browser, 1440x900 + 390x844) against the live API, demo login first:
+   116→  - dashboard: greeting+verified badge+craft+date, 4 stat cards, money strip (escrow/released+Payaza/expected + explainer + View money link), recharts area chart (green #0fa958) side-by-side with quick actions at lg, upcoming bookings (requested+confirmed, chips, BookingWhen), recent requests & deals with links.
+   117→  - money: 3 big tiles, Payaza payout account card ("Tobi Visuals •••4532", Active badge), payments history (All 6 / In escrow 3 / Released 3 filter chips, md+ table with mono PZ refs, stacked mobile cards, empty state), fine print.
+   118→  - bookings: explainer strip with @handle link, upcoming/history split, BKG-001..003 cards (avatar initials, contact, session chip, note, ref), Confirm action → toast "Booking confirmed — Lola Adeyemi will be notified" + chip flips to Confirmed + list refetch.
+   119→  - deals-list: All/Live/Needs action/Completed filters (5 deals → 3/1 respectively + counts via header CTA), cards with mono ref, StatusChip, due date, ₦ outstanding / Paid in full, New deal header action + empty CTA.
+   120→  - deal-detail across states: active → EscrowBanner with Σ held + deliver dialog (note textarea, auto file list, simulated progress) → toast → status delivered w/ violet "Awaiting client review — ₦X in escrow and releases the moment they approve" banner; approved → green hero "Work approved! ₦120,000 released from escrow" + PayazaMark + "Upload final files" dialog → files_released; completed → celebration card "₦80,000 released to your Payaza payout account"; sent → waiting banner + copy client link (origin/#/c/token) + 3 channel share buttons (wa.me/ig.me/mailto) + installment-escrow note; agreement (AgreementSummary + schedule PaymentSummary), deliveries w/ FileRow preview, final files, RecordTimeline, lifecycle Stepper all render. 404 error state covered.
+   121→  - No horizontal overflow at 390px on any screen; no page errors; dev.log clean (only the benign allowedDevOrigins preview warning).
+   122→- `bun run lint`: 0 errors (single pre-existing warning is kit.tsx line 61, not my file).
+   123→- Reset demo data to the pristine seed (POST /api/admin/reset) after testing.
+   124→
+   125→Stage Summary:
+   126→- All 5 creator screens live and contract-complete: escrow-until-approval money story with Payaza references everywhere, schedule-based payment summary, bookings management, channel-based sharing, responsive sidebar/bottom-tab layout (cards p-5 lg:p-6, stats grid-cols-2 lg:grid-cols-4, xl:2-col deal grid, generous empty states, motion ≤250ms).
+   127→- Key decisions: local HashLink helper per screen instead of next/link (router reliability — see backbone note above); draft hero "Review & send" scrolls to the agreement where the real Send deal action lives (2-tap review flow, send action still the path out); deal dialogs keep simulated ~1.2s upload progress per spec.
+   128→- Contract gaps for main agent: (1) backbone hash-navigation bug in chrome.tsx/others using next/link with hash hrefs (details above); (2) kit.tsx AppPage backHref renders a raw <a> so callers must pass "#/..." — worth normalizing in kit; (3) kit.tsx has an unused eslint-disable warning at line 61; (4) no UI exists to edit an existing draft deal (wizard always creates new) — draft "edit hint" is worded accordingly.
+   129→
+   130→---
+   131→Task ID: 4-b
+   132→Agent: frontend builder (client/payaza/public)
+   133→Task: Verify/complete the 5 client-side files (payaza-checkout, client-deal, public-page, wizard, onboarding) against the v2 contract — Payaza gateway realism, per-status client deal, booking dialog, installments + channel sharing, channels editor.
+   134→
+   135→Work Log:
+   136→- Read worklog.md (Tasks 1-4-a), UPGRADE_SPEC.md and contracts (context/kit/types/api/channels). Found all 5 owned files already existed from an unlogged prior run (same situation Task 4-a hit), so audited each line-by-line against the task spec, then fixed the gaps (edits confined to my 5 files):
+   137→  - payaza-checkout.tsx: the Bank Transfer and USSD steps were missing their spec'd confirm buttons — the purple CTA now switches per method: "Pay ₦X" (card, gated by form validity) / "I've sent the money" (transfer) / "I've dialed the code" (USSD). Added optional `successNote` prop (superset of contract; default copy unchanged) so post-approval payments can show correct release copy.
+   138→  - client-deal.tsx: checkout amount/label are now snapshotted into a PayContext when the checkout opens (previously they were derived live, so after the API returned mid-payment the success screen relabelled the just-paid slot, e.g. paying "Installment 1 of 2" showed "Installment 2 of 2"); approved-state checkouts pass escrowNote/successNote ("work already approved — released instantly") instead of the escrow-until-approval default; fixed "released to Tobi A.." double period and nested-quote rendering of change-request notes (strip both "Client requested changes:" and "Revision requested:" prefixes).
+   139→  - wizard.tsx: hardened sent-screen share-channel fallback for pre-v2 localStorage users without `channels` (`user.channels?.length ?? 0`).
+   140→  - public-page.tsx / onboarding.tsx: audited, no changes needed — booking dialog (session chips → 14-day date grid → hourly time chips → details → BKG success + primary-channel deep link), request flow, and the channels editor (rows with star/remove, add via Select+Input, PATCH on Continue + Publish, whatsapp seed fallback) were already contract-complete.
+   141→- Verified the 4-step flow contract on client-deal: hero+identity card+channels, AgreementSummary, schedule rows, what-happens-next, Accept & pay deposit; active (EscrowBanner Σheld, Stepper, PaymentSummary In-escrow/Due chips + PayazaMark, pay-next/pay-remaining, "pay in parts" copy, channels); delivered (review-unlocks-₦X header, files, green/amber approve+changes cards, dispute link); revision (note + waiting); approved (released Σ hero, instant-release balance card, all-paid hint); files_released (final files + 5-star rating → complete); completed (downloads, review summary, timeline, Book-another-session → #/u/handle); declined/disputed banners; RecordTimeline + Payaza line always at bottom.
+   142→- agent-browser E2E (1440x900 + 390x844) against live API: full Payaza checkout three ways — card via "Use test card" (4084…4081/09/28/123) and manually typed card (auto-spacing + MM/YY verified), Bank transfer (one-time account 88 0123456712 + 30:00 countdown + confirm button), USSD (*737*15000# with GTB/Access/Wema chips) — each → "Contacting/Authorizing" processing → success with PZ ref (PZ-3D45D1E8 etc.) + copy; drove DEAL-002 sent→active (deposit + 2 installments via 3 different methods) and DEAL-003 delivered→approved→pay-remaining→(creator release-files via API)→files_released→5-star→completed; booking flow BKG-004 created (session/date/time/name/contact/note → success + Chat on WhatsApp); request flow REQ-023; wizard: 100% hides installment chips ("Deposit covers everything"), 50/50 × 3 installments → review preview shows Deposit ₦45,000 + 3×₦15,000 → sent screen share row (WhatsApp/Email from channels + Copy link; Telegram correctly absent for Tobi); onboarding: primary star moved to Instagram, Telegram added via Radix select, PATCH verified in public API payload.
+   143→- No horizontal overflow at 390px on client-deal (incl. 358px-wide checkout dialog) and public page; no console errors after fixes (one transient compile error in dev.log was from a mid-edit save, gone after reload).
+   144→- bun run lint: 0 errors in my files (single pre-existing warning remains in kit.tsx — not this task's file). Demo data reset to pristine seed (POST /api/admin/reset) after testing.
+   145→
+   146→Stage Summary:
+   147→- All 5 client-side surfaces are contract-complete and investor-clickable: the Payaza checkout now behaves like a real gateway end-to-end (3 methods with method-specific confirm actions, processing states, PZ reference success, escrow messaging that adapts pre/post approval); the client deal screen tells the escrow story per status with copy-transfer/USSD-proof references in the timeline; public page sells services + bookings through the creator's own channels; the wizard produces installment-aware schedules and shares via any channel; onboarding collects those channels. Remaining for Task 5: backbone hash-link fix in chrome.tsx (4-a's finding) and the pre-existing tsc strictness issues outside my files (examples/, skills/, api/deals/route.ts missing installmentsCount in one cast).
+   148→
+   149→---
+   150→Task ID: 5
+   151→Agent: Z.ai Code (main)
+   152→Task: Integration, fixes, and full E2E verification of the v2 upgrade (installments/escrow-on-approval, Payaza checkout, bookings, channels, responsive redesign).
+   153→
+   154→Work Log:
+   155→- Fixed critical hash-nav bug found by 4-a: chrome.tsx used next/link with hash hrefs — Next intercepts and pushState()s without firing hashchange, so sidebar/tab links never switched screens. Converted ALL chrome links to plain anchors.
+   156→- kit.tsx AppPage backHref now normalizes to "#/..." (tolerates both forms).
+   157→- Fixed src/app/api/deals/route.ts: created deals now include installmentsCount: 2.
+   158→- Fixed browser-caching bug reproduced in E2E: API GETs had no Cache-Control, so Chromium served stale JSON (deal showed "sent" after client had paid). jsonOk/jsonError now send Cache-Control: no-store, no-cache, must-revalidate.
+   159→- Fixed HMR dual-instance hazard: store.ts in-memory DB moved to globalThis singleton (__dealDb) so hot reloads share one DB instead of forking stale copies that could clobber the file.
+   160→- Fixed auth.tsx SafeUser import (from @/lib/api, not context) + removed unused eslint-disable in kit.tsx. bun run lint: 0 problems; tsc clean for app code.
+   161→- agent-browser E2E (desktop 1440x900): landing (new escrow/installments/Payaza copy verified) -> demo login -> dashboard (sidebar, money strip w/ Payaza) -> Money screen (tiles + payout card + PZ-ref table) -> Bookings (confirmed BKG-001 via UI, verified in DB) -> CLIENT golden path on DEAL-002: accept & pay ₦30,000 deposit (Payaza card + test card) -> pay ₦15,000 installment (Payaza bank transfer w/ one-time account + countdown) -> creator delivers -> client approves ("Approving releases ₦45,000...") -> toast + hero "Work approved — ₦45,000 released to Tobi A.", payments marked Released -> paid final ₦15,000 via USSD (*737*15000#, explainer correctly says "released instantly, not held") -> creator "Upload final files" -> client downloads + 5-star -> deal completed -> Money screen updated (Released ₦260,000, All(9)/In escrow(3)/Released(6)).
+   162→- E2E continued: public page (channels row + Book a session dialog: session chips, 14-day date grid, time slots -> BKG-004 created, verified in DB) -> wizard terms step (installment chips 1/2/3 + explainer "Every payment is held in Payaza escrow until your client approves") -> onboarding channels editor (WhatsApp primary / Instagram / Email rows, add-channel combobox).
+   163→- Mobile 390x844: dashboard 2x2 grid + bottom tabs + FAB, client deal + Payaza checkout render clean, scrollWidth == innerWidth (no overflow).
+   164→- dev.log clean (no errors/warnings; API renders 5-13ms). Demo data reset to pristine seed; seed regenerable via `bun db/make-seed.ts`.
+   165→
+   166→Stage Summary:
+   167→- All 5 client requirements implemented and browser-verified end-to-end. The demo golden path for investors: share deal via any channel -> client accepts & pays deposit through Payaza checkout (card/transfer/USSD) -> pays installments anytime (all HELD in escrow) -> creator delivers -> client approves -> ALL escrow auto-releases to creator's Payaza payout -> remaining balance pays land instantly -> final files unlock only when fully paid & approved -> client confirms & rates. Plus bookings (public page -> creator Bookings) and creator-chosen contact channels everywhere.
+   168→- infra hardening: no-store on all API responses, globalThis DB singleton, hash-nav anchors.
+   169→
+   170→---
+   171→Task ID: 6
+   172→Agent: Z.ai Code (main)
+   173→Task: Make the client flow reachable in-app (user asked "how do I see client flow?" — it required hand-editing the URL hash).
+   174→
+   175→Work Log:
+   176→- Added "Preview as client — open their view" button (accent pill, Eye icon) inside the Client link card on deal-detail for sent/changes_requested deals.
+   177→- Added a subtle ghost link "Preview what {client.name} sees" under the hero actions on deal-detail for every other non-draft status (active, delivered, revision, approved, files_released, completed, declined/disputed).
+   178→- ClientDealScreen/ClientFrame now accept backHref/backLabel; when a creator is signed in (demo presenter), the client header back link becomes "← Creator view" → #/deals/{deal.id}; anonymous real clients still get "← Home" → #/.
+   179→- E2E via agent-browser (1440x900 + 390x844): DEAL-002 sent → Preview as client → client view ("You've received a DEAL", Accept & pay deposit ₦30,000) → Back to creator view → deal-detail; ghost links verified on DEAL-001/003/005 incl. completed client view (downloads); no horizontal overflow at 390px; zero console/page errors; bun run lint clean.
+   180→
+   181→Stage Summary:
+   182→- Creator ⇄ client perspective switching is now fully click-driven for investor demos. Direct hashes still work: #/c/tok_glow002 (sent), #/c/tok_lola001 (active), #/c/tok_tech003 (delivered), #/c/tok_ezek004 (approved), #/c/tok_lekki005 (completed), #/u/tobi-a (public page + bookings). No data mutated; seed intact.
+   183→

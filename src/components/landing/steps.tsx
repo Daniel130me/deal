@@ -23,7 +23,7 @@ const STEPS = [
     number: "2",
     title: "Pay",
     description:
-      "Client accepts & pays the deposit — then installments anytime. Every payment is locked in Payaza escrow.",
+      "Client pays the deposit — then installments anytime — by card, transfer or USSD via Flutterwave or Paystack. Every naira locks in DEAL escrow.",
     icon: Wallet,
     iconClass: "text-amber-500",
     circleClass: "bg-amber-50",
@@ -41,7 +41,7 @@ const STEPS = [
     number: "4",
     title: "Approve & Deliver",
     description:
-      "Client approves → escrow releases your money automatically. Final files unlock once fully paid.",
+      "Client approves → DEAL escrow releases your money automatically. Final files unlock once fully paid.",
     icon: BadgeCheck,
     iconClass: "text-violet-600",
     circleClass: "bg-violet-50",
@@ -59,7 +59,7 @@ export function Steps() {
               From chat to cash, in four steps
             </>
           }
-          subtitle="The familiar pay-in-parts arrangement — deposits and installments held in escrow, released only when the work is approved."
+          subtitle="The familiar pay-in-parts arrangement — deposits and installments locked in DEAL escrow, released only when the work is approved."
         />
 
         <div className="relative mt-12 sm:mt-14">

@@ -20,10 +20,10 @@ import {
 import { Area, AreaChart, ResponsiveContainer, Tooltip as ReTooltip, XAxis } from "recharts";
 import { toast } from "sonner";
 import { AppCanvas } from "@/components/app/chrome";
-import { BookingChip, BookingWhen, PayazaMark, SectionCard, StatusChip } from "@/components/app/kit";
+import { BookingChip, BookingWhen, ProviderMark, SectionCard, StatusChip } from "@/components/app/kit";
 import { useApp } from "@/components/app/context";
 import { api } from "@/lib/api";
-import { formatDate, formatNaira } from "@/lib/types";
+import { formatDate, formatNaira, isPaymentProvider, type PaymentProvider } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Overview = Awaited<ReturnType<typeof api.overview>>;
@@ -221,6 +221,10 @@ export default function DashboardScreen() {
 
   if (!user) return null;
 
+  // Preferred rail — guard older localStorage users missing the field.
+  const provider: PaymentProvider = isPaymentProvider(user.preferredProvider)
+    ? user.preferredProvider
+    : "flutterwave";
   const firstName = user.name.split(" ")[0];
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
@@ -331,7 +335,7 @@ export default function DashboardScreen() {
                   <MoneyTile
                     label="Released all-time"
                     value={formatNaira(data.money.releasedAllTime)}
-                    sub={<PayazaMark />}
+                    sub={<ProviderMark provider={provider} />}
                     icon={Wallet}
                     tone="green"
                   />
@@ -345,8 +349,11 @@ export default function DashboardScreen() {
                 </div>
                 <p className="mt-3 flex items-start gap-2 rounded-xl bg-secondary p-3.5 text-xs font-semibold leading-relaxed text-muted-foreground">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  Escrow releases to your Payaza payout account the moment your client approves the
-                  completed work.
+                  <span>
+                    <span className="font-bold text-foreground">DEAL escrow</span> releases to your
+                    payout account the moment your client approves the completed work — Flutterwave
+                    and Paystack only process the charges.
+                  </span>
                 </p>
               </section>
             </Reveal>

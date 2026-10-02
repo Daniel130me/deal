@@ -1,0 +1,975 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useState } from "react";
+     4→import {
+     5→  ArrowRight,
+     6→  BadgeCheck,
+     7→  CalendarDays,
+     8→  Check,
+     9→  Download,
+    10→  FileText,
+    11→  Loader2,
+    12→  MapPin,
+    13→  PencilLine,
+    14→  ShieldCheck,
+    15→  Star,
+    16→} from "lucide-react";
+    17→import { motion } from "framer-motion";
+    18→import { toast } from "sonner";
+    19→import { Logo } from "@/components/landing/logo";
+    20→import { Button } from "@/components/ui/button";
+    21→import { Textarea } from "@/components/ui/textarea";
+    22→import {
+    23→  Dialog,
+    24→  DialogContent,
+    25→  DialogHeader,
+    26→  DialogTitle,
+    27→} from "@/components/ui/dialog";
+    28→import {
+    29→  AgreementSummary,
+    30→  ChannelButtons,
+    31→  EscrowBanner,
+    32→  FileRow,
+    33→  PaymentSummary,
+    34→  PayazaMark,
+    35→  RecordTimeline,
+    36→  SectionCard,
+    37→  Stepper,
+    38→  type Step,
+    39→} from "@/components/app/kit";
+    40→import PayazaCheckout from "@/components/app/payaza-checkout";
+    41→import { useApp } from "@/components/app/context";
+    42→import { api } from "@/lib/api";
+    43→import {
+    44→  depositAmount,
+    45→  formatNaira,
+    46→  formatDate,
+    47→  isApproved,
+    48→  isFullyPaid,
+    49→  nextDueSlot,
+    50→  paidTotal,
+    51→  paymentSchedule,
+    52→  remainingBalance,
+    53→  type CreatorChannel,
+    54→  type Deal,
+    55→  type ScheduleSlot,
+    56→} from "@/lib/types";
+    57→import { cn } from "@/lib/utils";
+    58→
+    59→interface SharedData {
+    60→  deal: Deal;
+    61→  creator: {
+    62→    id: string;
+    63→    name: string;
+    64→    handle: string;
+    65→    craft: string;
+    66→    location: string;
+    67→    verified: boolean;
+    68→    whatsapp: string;
+    69→    channels: CreatorChannel[];
+    70→  };
+    71→  amounts: {
+    72→    total: number;
+    73→    deposit: number;
+    74→    paid: number;
+    75→    due: number;
+    76→    held: number;
+    77→    schedule: ScheduleSlot[];
+    78→    nextDue: ScheduleSlot | null;
+    79→    fullyPaid: boolean;
+    80→    approved: boolean;
+    81→  };
+    82→}
+    83→
+    84→type PayKind = "deposit" | "next" | "remaining";
+    85→
+    86→/** Snapshot of what the checkout is for, taken when it opens (stays fixed while paying). */
+    87→interface PayContext {
+    88→  kind: PayKind;
+    89→  amount: number;
+    90→  label: string;
+    91→}
+    92→
+    93→export default function ClientDealScreen({ token }: { token: string }) {
+    94→  const { user } = useApp();
+    95→  const [data, setData] = useState<SharedData | null>(null);
+    96→  const [error, setError] = useState<string | null>(null);
+    97→  const [busy, setBusy] = useState(false);
+    98→  const [payCtx, setPayCtx] = useState<PayContext | null>(null);
+    99→  const [changesOpen, setChangesOpen] = useState(false);
+   100→  const [changesNote, setChangesNote] = useState("");
+   101→  const [approveOpen, setApproveOpen] = useState(false);
+   102→  const [rating, setRating] = useState(5);
+   103→
+   104→  useEffect(() => {
+   105→    let alive = true;
+   106→    api
+   107→      .sharedDeal(token)
+   108→      .then((d) => alive && setData(d))
+   109→      .catch((err) => alive && setError(err instanceof Error ? err.message : "Deal not found."));
+   110→    return () => {
+   111→      alive = false;
+   112→    };
+   113→  }, [token]);
+   114→
+   115→  function applyDeal(updated: Deal) {
+   116→    setData((prev) => (prev ? { ...prev, deal: updated } : prev));
+   117→  }
+   118→
+   119→  /** Performs a shared action; returns the updated deal or null (toast on failure). */
+   120→  async function act(body: Parameters<typeof api.sharedAction>[1]): Promise<Deal | null> {
+   121→    setBusy(true);
+   122→    try {
+   123→      const { deal: updated } = await api.sharedAction(token, body);
+   124→      applyDeal(updated);
+   125→      return updated;
+   126→    } catch (err) {
+   127→      toast.error(err instanceof Error ? err.message : "Action failed.");
+   128→      return null;
+   129→    } finally {
+   130→      setBusy(false);
+   131→    }
+   132→  }
+   133→
+   134→  /** Pay action for the PayazaCheckout — errors bubble to the checkout's inline error box. */
+   135→  async function pay(kind: PayKind, method: "card" | "transfer" | "ussd"): Promise<Deal> {
+   136→    const action = kind === "deposit" ? "pay-deposit" : kind === "next" ? "pay-next" : "pay-remaining";
+   137→    const { deal: updated } = await api.sharedAction(token, { action, method });
+   138→    applyDeal(updated);
+   139→    return updated;
+   140→  }
+   141→
+   142→  if (error) {
+   143→    return (
+   144→      <ClientFrame
+   145→        backHref={user ? "#/deals" : undefined}
+   146→        backLabel={user ? "Creator view" : undefined}
+   147→      >
+   148→        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-24 text-center">
+   149→          <span className="text-4xl">🔗</span>
+   150→          <p className="text-lg font-extrabold text-foreground">Deal not found</p>
+   151→          <p className="text-sm font-medium text-muted-foreground">{error}</p>
+   152→        </div>
+   153→      </ClientFrame>
+   154→    );
+   155→  }
+   156→
+   157→  if (!data) {
+   158→    return (
+   159→      <ClientFrame
+   160→        backHref={user ? "#/deals" : undefined}
+   161→        backLabel={user ? "Creator view" : undefined}
+   162→      >
+   163→        <div className="flex flex-1 items-center justify-center py-24">
+   164→          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+   165→        </div>
+   166→      </ClientFrame>
+   167→    );
+   168→  }
+   169→
+   170→  const { deal, creator } = data;
+   171→  const paid = paidTotal(deal);
+   172→  const due = remainingBalance(deal);
+   173→  const held = deal.payments.filter((p) => p.status === "held").reduce((s, p) => s + p.amount, 0);
+   174→  const releasedTotal = deal.payments
+   175→    .filter((p) => p.status === "released")
+   176→    .reduce((s, p) => s + p.amount, 0);
+   177→  const schedule = paymentSchedule(deal);
+   178→  const nextDue = nextDueSlot(deal);
+   179→  const fullyPaid = isFullyPaid(deal);
+   180→  const approved = isApproved(deal);
+   181→  const deposit = depositAmount(deal);
+   182→  const latestDelivery = deal.deliveries.at(-1);
+   183→  const firstName = creator.name.split(" ")[0];
+   184→
+   185→  /** Opens the checkout with the amount/label frozen from the current schedule. */
+   186→  function openCheckout(kind: PayKind) {
+   187→    const label =
+   188→      kind === "deposit"
+   189→        ? (schedule[0]?.label ?? `Deposit (${deal.depositPercent}%)`)
+   190→        : kind === "next"
+   191→          ? (nextDue?.label ?? "Next payment")
+   192→          : "Balance payment";
+   193→    const amount = kind === "deposit" ? deposit : kind === "next" ? (nextDue?.amount ?? due) : due;
+   194→    setPayCtx({ kind, amount, label });
+   195→  }
+   196→
+   197→  /* ---------------- status bodies ---------------- */
+   198→
+   199→  let body: React.ReactNode = null;
+   200→
+   201→  if (deal.status === "sent" || deal.status === "changes_requested") {
+   202→    const lastChange = [...deal.events].reverse().find((e) => e.type === "changes_requested");
+   203→    body = (
+   204→      <>
+   205→        <div className="rounded-2xl border border-primary/20 bg-secondary p-5 text-center lg:p-6">
+   206→          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white ring-8 ring-accent/60">
+   207→            <FileText className="h-8 w-8 text-primary" />
+   208→          </span>
+   209→          <h2 className="mt-3 text-xl font-extrabold tracking-tight text-foreground">
+   210→            You&rsquo;ve received a DEAL
+   211→          </h2>
+   212→          <p className="mx-auto mt-1 max-w-sm text-[13px] font-medium text-muted-foreground">
+   213→            {deal.status === "changes_requested"
+   214→              ? `${creator.name} is updating the deal based on your notes — review the new version below.`
+   215→              : `${creator.name} has sent you a deal for your project. Review the details and accept to get started.`}
+   216→          </p>
+   217→          <span
+   218→            className="mt-3 inline-flex items-center rounded-full bg-amber-50 px-3 py-1.5 text-[12px] font-extrabold text-amber-700"
+   219→          >
+   220→            {deal.status === "changes_requested"
+   221→              ? "Updated deal — waiting for your response"
+   222→              : "Waiting for your response"}
+   223→          </span>
+   224→          {deal.status === "changes_requested" && lastChange ? (
+   225→            <p className="mx-auto mt-3 max-w-sm rounded-xl bg-white/80 p-3 text-[12px] font-medium leading-relaxed text-muted-foreground">
+   226→              “{lastChange.label.replace(/^(Client requested changes|Revision requested):\s*/, "")}”
+   227→            </p>
+   228→          ) : null}
+   229→        </div>
+   230→
+   231→        <SectionCard title="Who you're working with">
+   232→          <div className="flex items-center gap-3.5">
+   233→            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-base font-extrabold text-white">
+   234→              {creator.name.slice(0, 1).toUpperCase()}
+   235→            </span>
+   236→            <div className="min-w-0 flex-1">
+   237→              <p className="flex items-center gap-1.5 text-[15px] font-extrabold text-foreground">
+   238→                <span className="truncate">{creator.name}</span>
+   239→                {creator.verified ? <BadgeCheck className="h-4 w-4 shrink-0 text-primary" /> : null}
+   240→              </p>
+   241→              <p className="truncate text-[13px] font-semibold text-muted-foreground">
+   242→                {creator.craft || "Creative"}
+   243→                {creator.location ? ` · ${creator.location}` : ""}
+   244→              </p>
+   245→            </div>
+   246→          </div>
+   247→          <div className="mt-4 border-t border-border pt-3.5">
+   248→            <p className="text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">
+   249→              Questions? Reach {creator.name} on
+   250→            </p>
+   251→            <ChannelButtons channels={creator.channels} className="mt-2" />
+   252→          </div>
+   253→        </SectionCard>
+   254→
+   255→        {deal.message ? (
+   256→          <div className="rounded-xl border border-border bg-muted/60 p-3.5 text-[13px] font-medium leading-relaxed text-foreground">
+   257→            “{deal.message}”
+   258→          </div>
+   259→        ) : null}
+   260→
+   261→        <AgreementSummary deal={deal} />
+   262→
+   263→        <SectionCard title="Payment plan" right={<PayazaMark />}>
+   264→          <div className="divide-y divide-border">
+   265→            {schedule.map((slot) => (
+   266→              <div key={slot.label} className="flex items-center justify-between gap-3 py-2.5">
+   267→                <div>
+   268→                  <p className="text-sm font-bold text-foreground">{slot.label}</p>
+   269→                  <p className="text-xs font-medium text-muted-foreground">
+   270→                    {slot.status === "paid" ? "Paid" : approved ? "Due — released instantly" : "Due after acceptance"}
+   271→                  </p>
+   272→                </div>
+   273→                <div className="flex items-center gap-2">
+   274→                  <span className="text-sm font-extrabold text-foreground">{formatNaira(slot.amount)}</span>
+   275→                  <span
+   276→                    className={cn(
+   277→                      "rounded-full px-2 py-0.5 text-[10px] font-extrabold",
+   278→                      slot.status === "paid" ? "bg-accent text-accent-foreground" : "bg-amber-50 text-amber-700"
+   279→                    )}
+   280→                  >
+   281→                    {slot.status === "paid" ? "Paid" : "Due"}
+   282→                  </span>
+   283→                </div>
+   284→              </div>
+   285→            ))}
+   286→            <div className="flex items-center justify-between pt-3">
+   287→              <p className="text-sm font-extrabold text-foreground">Total</p>
+   288→              <span className="text-sm font-extrabold text-foreground">{formatNaira(deal.price)}</span>
+   289→            </div>
+   290→          </div>
+   291→          <p className="mt-3 rounded-xl bg-secondary p-3 text-xs font-medium leading-relaxed text-muted-foreground">
+   292→            Every payment sits in <span className="font-bold text-foreground">Payaza escrow</span> —{" "}
+   293→            {creator.name} only gets paid when you approve the completed work.
+   294→          </p>
+   295→        </SectionCard>
+   296→
+   297→        <SectionCard title="What happens next?">
+   298→          <ol className="space-y-4">
+   299→            {[
+   300→              [
+   301→                "Accept & pay the deposit",
+   302→                `Your ${formatNaira(deposit)} deposit is held safely in Payaza escrow — not sent to ${firstName} yet.`,
+   303→              ],
+   304→              [`${firstName} gets to work`, "Track progress right here until the work is delivered."],
+   305→              [
+   306→                "Approve to release payment",
+   307→                `Only when you approve the completed work does ${firstName} receive the money.`,
+   308→              ],
+   309→            ].map(([title, desc], i) => (
+   310→              <li key={title} className="flex gap-3">
+   311→                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-extrabold text-primary">
+   312→                  {i + 1}
+   313→                </span>
+   314→                <div>
+   315→                  <p className="text-[13px] font-extrabold text-foreground">{title}</p>
+   316→                  <p className="text-[13px] font-medium leading-relaxed text-muted-foreground">{desc}</p>
+   317→                </div>
+   318→              </li>
+   319→            ))}
+   320→          </ol>
+   321→        </SectionCard>
+   322→
+   323→        <Button
+   324→          className="h-13 w-full rounded-xl text-[15px] font-bold shadow-md shadow-primary/25"
+   325→          disabled={busy}
+   326→          onClick={() => openCheckout("deposit")}
+   327→        >
+   328→          <Check className="mr-1.5 h-4.5 w-4.5" />
+   329→          Accept & pay deposit ({formatNaira(deposit)})
+   330→        </Button>
+   331→        <Button
+   332→          variant="outline"
+   333→          className="h-12 w-full rounded-xl font-bold"
+   334→          onClick={() => setChangesOpen(true)}
+   335→        >
+   336→          <PencilLine className="mr-1.5 h-4 w-4" /> Request changes
+   337→        </Button>
+   338→        <p className="text-center text-xs font-semibold text-muted-foreground">
+   339→          You&rsquo;ll review everything before any payment leaves your account.
+   340→        </p>
+   341→      </>
+   342→    );
+   343→  }
+   344→
+   345→  if (deal.status === "active") {
+   346→    body = (
+   347→      <>
+   348→        {held > 0 ? <EscrowBanner amount={held} paidOn={deal.depositPaidAt} /> : null}
+   349→
+   350→        <SectionCard title="Deal progress">
+   351→          <Stepper
+   352→            steps={[
+   353→              { label: "Agreed", sub: formatDate(deal.acceptedAt), state: "done" },
+   354→              { label: "Deposit secured", sub: formatNaira(deposit), state: "done" },
+   355→              { label: "Creation in progress", sub: "Creator working", state: "current" },
+   356→              { label: "Review & release", sub: "You approve", state: "todo" },
+   357→            ] satisfies Step[]}
+   358→          />
+   359→        </SectionCard>
+   360→
+   361→        <div className="flex items-start justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+   362→          <div className="min-w-0">
+   363→            <p className="text-[14px] font-extrabold text-amber-800">What&rsquo;s next?</p>
+   364→            <p className="mt-0.5 text-[13px] font-medium text-amber-700">
+   365→              {firstName} is working on your project and will deliver it for your review by{" "}
+   366→              {formatDate(deal.dueDate)}.
+   367→            </p>
+   368→          </div>
+   369→        </div>
+   370→
+   371→        <PaymentSummary deal={deal} />
+   372→        <p className="flex items-center justify-center">
+   373→          <PayazaMark withText />
+   374→        </p>
+   375→
+   376→        <SectionCard title="Payments on this deal">
+   377→          {fullyPaid ? (
+   378→            <p className="flex items-center gap-2 rounded-xl bg-accent p-3.5 text-[13px] font-extrabold text-accent-foreground">
+   379→              <Check className="h-4.5 w-4.5 text-primary" strokeWidth={3} />
+   380→              All paid — nothing left to pay. Waiting on delivery.
+   381→            </p>
+   382→          ) : (
+   383→            <div className="space-y-2.5">
+   384→              {nextDue ? (
+   385→                <Button
+   386→                  className="h-12 w-full rounded-xl font-bold shadow-md shadow-primary/25"
+   387→                  onClick={() => openCheckout("next")}
+   388→                >
+   389→                  Pay next installment · {nextDue.label} · {formatNaira(nextDue.amount)}
+   390→                </Button>
+   391→              ) : null}
+   392→              <Button
+   393→                variant="ghost"
+   394→                className="h-11 w-full rounded-xl font-bold text-primary hover:bg-accent"
+   395→                onClick={() => openCheckout("remaining")}
+   396→              >
+   397→                Pay all remaining ({formatNaira(due)})
+   398→              </Button>
+   399→              <p className="text-center text-[12px] font-medium leading-relaxed text-muted-foreground">
+   400→                You can pay in parts — every part sits in escrow until you approve the work.
+   401→              </p>
+   402→            </div>
+   403→          )}
+   404→          <div className="mt-4 border-t border-border pt-3.5">
+   405→            <p className="text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">
+   406→              Questions? Reach {creator.name} on
+   407→            </p>
+   408→            <ChannelButtons channels={creator.channels} size="sm" className="mt-2" />
+   409→          </div>
+   410→        </SectionCard>
+   411→      </>
+   412→    );
+   413→  }
+   414→
+   415→  if (deal.status === "delivered") {
+   416→    body = (
+   417→      <>
+   418→        <div className="rounded-2xl border border-violet-200 bg-violet-50 p-5 text-center lg:p-6">
+   419→          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white ring-8 ring-violet-100">
+   420→            <FileText className="h-7 w-7 text-violet-600" />
+   421→          </span>
+   422→          <h2 className="mt-3 text-xl font-extrabold tracking-tight text-foreground">
+   423→            Your review unlocks {formatNaira(held)}
+   424→          </h2>
+   425→          <p className="mx-auto mt-1 max-w-sm text-[13px] font-medium text-violet-700">
+   426→            {firstName} has submitted the delivery. Approving releases the money from escrow — request
+   427→            changes if something&rsquo;s off. Submitted {formatDate(deal.deliveredAt)}.
+   428→          </p>
+   429→        </div>
+   430→
+   431→        <SectionCard title="What was delivered">
+   432→          <div className="space-y-2.5">
+   433→            {latestDelivery?.note ? (
+   434→              <p className="text-[13px] font-medium leading-relaxed text-muted-foreground">
+   435→                {latestDelivery.note}
+   436→              </p>
+   437→            ) : null}
+   438→            {latestDelivery?.files.map((file) => (
+   439→              <FileRow
+   440→                key={file.id}
+   441→                name={file.name}
+   442→                size={file.size}
+   443→                kind={file.kind}
+   444→                onPreview={() =>
+   445→                  toast.info("Preview is simulated in this demo", {
+   446→                    description: "In production, watermarked previews open here.",
+   447→                  })
+   448→                }
+   449→              />
+   450→            ))}
+   451→          </div>
+   452→        </SectionCard>
+   453→
+   454→        <div className="grid gap-4 lg:grid-cols-2">
+   455→          <div className="flex flex-col rounded-2xl border border-primary/30 bg-secondary p-5">
+   456→            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white">
+   457→              <ShieldCheck className="h-5.5 w-5.5 text-primary" />
+   458→            </span>
+   459→            <p className="mt-3 text-[15px] font-extrabold text-foreground">Approve delivery</p>
+   460→            <p className="mt-1 flex-1 text-[13px] font-medium leading-relaxed text-muted-foreground">
+   461→              Approving releases {formatNaira(held)} from escrow to {creator.name} and confirms the work
+   462→              is complete.
+   463→            </p>
+   464→            <Button
+   465→              className="mt-4 h-12 w-full rounded-xl font-bold shadow-md shadow-primary/25"
+   466→              disabled={busy}
+   467→              onClick={() => setApproveOpen(true)}
+   468→            >
+   469→              <ShieldCheck className="mr-1.5 h-4.5 w-4.5" /> Approve & release
+   470→            </Button>
+   471→          </div>
+   472→          <div className="flex flex-col rounded-2xl border border-amber-200 bg-amber-50 p-5">
+   473→            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white">
+   474→              <PencilLine className="h-5.5 w-5.5 text-amber-600" />
+   475→            </span>
+   476→            <p className="mt-3 text-[15px] font-extrabold text-foreground">Request changes</p>
+   477→            <p className="mt-1 flex-1 text-[13px] font-medium leading-relaxed text-amber-700">
+   478→              Tell {firstName} what to adjust — the money stays in escrow and they&rsquo;ll send an
+   479→              updated delivery.
+   480→            </p>
+   481→            <Button
+   482→              variant="outline"
+   483→              className="mt-4 h-12 w-full rounded-xl border-amber-300 bg-white font-bold text-amber-800 hover:bg-amber-100"
+   484→              onClick={() => setChangesOpen(true)}
+   485→            >
+   486→              <PencilLine className="mr-1.5 h-4.5 w-4.5" /> Request changes
+   487→            </Button>
+   488→          </div>
+   489→        </div>
+   490→
+   491→        <button
+   492→          type="button"
+   493→          disabled={busy}
+   494→          onClick={async () => {
+   495→            const updated = await act({
+   496→              action: "dispute",
+   497→              note: "Work doesn't match the agreed scope",
+   498→            });
+   499→            if (updated) toast.warning("Dispute raised — our team will step in.");
+   500→          }}
+   501→          className="mx-auto block text-xs font-bold text-red-500 underline-offset-2 hover:underline"
+   502→        >
+   503→          Something else? Raise a dispute — your money stays protected.
+   504→        </button>
+   505→      </>
+   506→    );
+   507→  }
+   508→
+   509→  if (deal.status === "revision") {
+   510→    const lastChange = [...deal.events].reverse().find((e) => e.type === "changes_requested");
+   511→    body = (
+   512→      <>
+   513→        {held > 0 ? <EscrowBanner amount={held} /> : null}
+   514→        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+   515→          <p className="text-[15px] font-extrabold text-amber-800">Changes requested</p>
+   516→          <p className="mt-1 text-[13px] font-medium leading-relaxed text-amber-700">
+   517→            “{lastChange?.label.replace(/^(Client requested changes|Revision requested):\s*/, "") ?? "You requested changes to this delivery."}”
+   518→          </p>
+   519→          <p className="mt-3 flex items-center gap-2 text-[13px] font-extrabold text-amber-800">
+   520→            <Loader2 className="h-4 w-4 animate-spin" /> Waiting for {firstName} to revise
+   521→          </p>
+   522→        </div>
+   523→        <PaymentSummary deal={deal} />
+   524→      </>
+   525→    );
+   526→  }
+   527→
+   528→  if (deal.status === "approved") {
+   529→    body = (
+   530→      <>
+   531→        <div className="rounded-2xl border border-primary/20 bg-secondary p-5 text-center lg:p-6">
+   532→          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent ring-8 ring-accent/50">
+   533→            <ShieldCheck className="h-8 w-8 text-primary" />
+   534→          </span>
+   535→          <h2 className="mt-3 text-xl font-extrabold tracking-tight text-foreground">
+   536→            Work approved — {formatNaira(releasedTotal)} released to {creator.name}
+   537→          </h2>
+   538→          <p className="mx-auto mt-1 max-w-sm text-[13px] font-medium text-muted-foreground">
+   539→            Your approval released the escrow. {creator.name} has been notified.
+   540→          </p>
+   541→          <p className="mt-3 flex items-center justify-center">
+   542→            <PayazaMark />
+   543→          </p>
+   544→        </div>
+   545→
+   546→        {!fullyPaid ? (
+   547→          <SectionCard title="Remaining balance">
+   548→            <div className="flex flex-wrap items-center justify-between gap-3">
+   549→              <div>
+   550→                <p className="text-2xl font-extrabold text-amber-600">{formatNaira(due)}</p>
+   551→                <p className="mt-0.5 text-[12px] font-semibold text-muted-foreground">
+   552→                  Pay anytime — since the work is approved your payment reaches {firstName} instantly.
+   553→                </p>
+   554→              </div>
+   555→            </div>
+   556→            <div className="mt-4 space-y-2.5">
+   557→              {nextDue ? (
+   558→                <Button
+   559→                  className="h-12 w-full rounded-xl font-bold shadow-md shadow-primary/25"
+   560→                  onClick={() => openCheckout("next")}
+   561→                >
+   562→                  Pay next · {nextDue.label} · {formatNaira(nextDue.amount)}
+   563→                </Button>
+   564→              ) : null}
+   565→              <Button
+   566→                variant="ghost"
+   567→                className="h-11 w-full rounded-xl font-bold text-primary hover:bg-accent"
+   568→                onClick={() => openCheckout("remaining")}
+   569→              >
+   570→                Pay all remaining ({formatNaira(due)})
+   571→              </Button>
+   572→            </div>
+   573→          </SectionCard>
+   574→        ) : (
+   575→          <div className="flex items-start gap-3 rounded-2xl border border-border bg-muted/60 p-4">
+   576→            <span className="text-xl">⏳</span>
+   577→            <div>
+   578→              <p className="text-[14px] font-extrabold text-foreground">
+   579→                All paid — {firstName} will now upload your final files.
+   580→              </p>
+   581→              <p className="mt-0.5 text-[13px] font-medium text-muted-foreground">
+   582→                You&rsquo;ll get your final files here as soon as they&rsquo;re uploaded.
+   583→              </p>
+   584→            </div>
+   585→          </div>
+   586→        )}
+   587→
+   588→        <PaymentSummary deal={deal} />
+   589→      </>
+   590→    );
+   591→  }
+   592→
+   593→  if (deal.status === "files_released") {
+   594→    body = (
+   595→      <>
+   596→        <div className="rounded-2xl border border-primary/20 bg-secondary p-5 text-center lg:p-6">
+   597→          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent ring-8 ring-accent/50">
+   598→            <Download className="h-8 w-8 text-primary" />
+   599→          </span>
+   600→          <h2 className="mt-3 text-xl font-extrabold tracking-tight text-foreground">
+   601→            Your final files are ready
+   602→          </h2>
+   603→          <p className="mx-auto mt-1 max-w-sm text-[13px] font-medium text-muted-foreground">
+   604→            {firstName} has released the final files. Download them below — then confirm & rate to wrap
+   605→            up the deal.
+   606→          </p>
+   607→        </div>
+   608→
+   609→        <SectionCard title="Final files">
+   610→          <div className="space-y-2.5">
+   611→            {deal.finalFiles.map((file) => (
+   612→              <FileRow
+   613→                key={file.id}
+   614→                name={file.name}
+   615→                size={file.size}
+   616→                kind={file.kind}
+   617→                onPreview={() => toast.success("Download started (demo)")}
+   618→              />
+   619→            ))}
+   620→          </div>
+   621→          <Button
+   622→            variant="outline"
+   623→            className="mt-3 h-11 w-full rounded-xl font-bold"
+   624→            onClick={() => toast.success("Download started (demo)")}
+   625→          >
+   626→            <Download className="mr-2 h-4 w-4" /> Download all files
+   627→          </Button>
+   628→        </SectionCard>
+   629→
+   630→        <SectionCard title="Confirm & rate">
+   631→          <p className="text-center text-[13px] font-medium text-muted-foreground">
+   632→            How did {firstName} do? Your rating closes out the deal.
+   633→          </p>
+   634→          <div className="mt-3 flex justify-center gap-2">
+   635→            {[1, 2, 3, 4, 5].map((n) => (
+   636→              <button
+   637→                key={n}
+   638→                type="button"
+   639→                onClick={() => setRating(n)}
+   640→                aria-label={`${n} star${n === 1 ? "" : "s"}`}
+   641→                className="rounded-md p-0.5 transition-transform hover:scale-110"
+   642→              >
+   643→                <Star
+   644→                  className={cn(
+   645→                    "h-8 w-8 transition-colors",
+   646→                    n <= rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40"
+   647→                  )}
+   648→                />
+   649→              </button>
+   650→            ))}
+   651→          </div>
+   652→          <Button
+   653→            className="mt-4 h-12 w-full rounded-xl font-bold"
+   654→            disabled={busy}
+   655→            onClick={async () => {
+   656→              const updated = await act({ action: "complete", rating });
+   657→              if (updated) toast.success("Deal completed — thank you!");
+   658→            }}
+   659→          >
+   660→            {busy ? <Loader2 className="mr-2 h-4.5 w-4.5 animate-spin" /> : <Check className="mr-1.5 h-4.5 w-4.5" />}
+   661→            Confirm & rate {rating}-star
+   662→          </Button>
+   663→        </SectionCard>
+   664→      </>
+   665→    );
+   666→  }
+   667→
+   668→  if (deal.status === "completed") {
+   669→    const reviewEvent = [...deal.events].reverse().find((e) => e.label.includes("star"));
+   670→    const reviewMatch = reviewEvent?.label.match(/(\d)-star/);
+   671→    const reviewRating = reviewMatch ? Number(reviewMatch[1]) : null;
+   672→    body = (
+   673→      <>
+   674→        <div className="rounded-2xl border border-primary/20 bg-secondary p-6 text-center">
+   675→          <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary ring-8 ring-accent">
+   676→            <Check className="h-10 w-10 text-white" strokeWidth={3} />
+   677→          </span>
+   678→          <h2 className="mt-4 text-xl font-extrabold tracking-tight text-foreground">DEAL completed 🎉</h2>
+   679→          <p className="mx-auto mt-1 max-w-sm text-[13px] font-medium text-muted-foreground">
+   680→            The project is complete and {formatNaira(releasedTotal)} has been released to{" "}
+   681→            {creator.name.replace(/\.$/, "")}.
+   682→          </p>
+   683→        </div>
+   684→
+   685→        <SectionCard title="Final files">
+   686→          <div className="space-y-2.5">
+   687→            {deal.finalFiles.map((file) => (
+   688→              <FileRow
+   689→                key={file.id}
+   690→                name={file.name}
+   691→                size={file.size}
+   692→                kind={file.kind}
+   693→                onPreview={() => toast.success("Download started (demo)")}
+   694→              />
+   695→            ))}
+   696→          </div>
+   697→          <Button
+   698→            variant="outline"
+   699→            className="mt-3 h-11 w-full rounded-xl font-bold"
+   700→            onClick={() => toast.success("Download started (demo)")}
+   701→          >
+   702→            <Download className="mr-2 h-4 w-4" /> Download again
+   703→          </Button>
+   704→        </SectionCard>
+   705→
+   706→        <SectionCard title="Your review">
+   707→          {reviewRating ? (
+   708→            <div className="flex flex-col items-center gap-1.5 py-1">
+   709→              <div className="flex gap-1">
+   710→                {[1, 2, 3, 4, 5].map((n) => (
+   711→                  <Star
+   712→                    key={n}
+   713→                    className={cn(
+   714→                      "h-6 w-6",
+   715→                      n <= reviewRating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40"
+   716→                    )}
+   717→                  />
+   718→                ))}
+   719→              </div>
+   720→              <p className="text-[13px] font-bold text-foreground">You rated {firstName} {reviewRating}-star</p>
+   721→            </div>
+   722→          ) : (
+   723→            <div>
+   724→              <p className="text-center text-[13px] font-medium text-muted-foreground">
+   725→                How did {firstName} do?
+   726→              </p>
+   727→              <div className="mt-3 flex justify-center gap-2">
+   728→                {[1, 2, 3, 4, 5].map((n) => (
+   729→                  <button
+   730→                    key={n}
+   731→                    type="button"
+   732→                    onClick={() => setRating(n)}
+   733→                    aria-label={`${n} star${n === 1 ? "" : "s"}`}
+   734→                    className="rounded-md p-0.5 transition-transform hover:scale-110"
+   735→                  >
+   736→                    <Star
+   737→                      className={cn(
+   738→                        "h-8 w-8 transition-colors",
+   739→                        n <= rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40"
+   740→                      )}
+   741→                    />
+   742→                  </button>
+   743→                ))}
+   744→              </div>
+   745→              <Button
+   746→                variant="outline"
+   747→                className="mt-4 h-11 w-full rounded-xl font-bold"
+   748→                disabled={busy}
+   749→                onClick={async () => {
+   750→                  const updated = await act({ action: "review", rating });
+   751→                  if (updated) toast.success("Review sent — thank you!");
+   752→                }}
+   753→              >
+   754→                Submit {rating}-star review
+   755→              </Button>
+   756→            </div>
+   757→          )}
+   758→        </SectionCard>
+   759→
+   760→        <a
+   761→          href={`#/u/${creator.handle}`}
+   762→          className="flex h-13 w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-accent font-bold text-accent-foreground transition-colors hover:bg-primary hover:text-white"
+   763→        >
+   764→          Book another session with {firstName} <ArrowRight className="h-4.5 w-4.5" />
+   765→        </a>
+   766→      </>
+   767→    );
+   768→  }
+   769→
+   770→  if (deal.status === "declined" || deal.status === "disputed") {
+   771→    body = (
+   772→      <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+   773→        <p className="text-[15px] font-extrabold text-red-700">
+   774→          {deal.status === "declined" ? "Deal declined" : "Dispute in review"}
+   775→        </p>
+   776→        <p className="mt-1 text-[13px] font-medium leading-relaxed text-red-600">
+   777→          {deal.status === "declined"
+   778→            ? "This deal was declined. Reach out to the creator to discuss alternatives."
+   779→            : "Our team is reviewing this case and will contact both sides shortly. Your money is safe in escrow."}
+   780→        </p>
+   781→        <ChannelButtons channels={creator.channels} size="sm" className="mt-3" />
+   782→      </div>
+   783→    );
+   784→  }
+   785→
+   786→  return (
+   787→    <ClientFrame
+   788→      backHref={user ? `#/deals/${deal.id}` : undefined}
+   789→      backLabel={user ? "Creator view" : undefined}
+   790→    >
+   791→      <div className="flex-1 px-4 pb-12 pt-6 sm:px-6 lg:py-10">
+   792→        {/* deal header */}
+   793→        <div className="flex items-start justify-between gap-3">
+   794→          <div className="min-w-0">
+   795→            <h1 className="text-xl font-extrabold tracking-tight text-foreground lg:text-2xl">
+   796→              {deal.title}
+   797→            </h1>
+   798→            <p className="mt-0.5 flex items-center gap-1 text-[13px] font-semibold text-muted-foreground">
+   799→              <span className="truncate">
+   800→                {deal.ref} · {creator.name} ({creator.craft || "Creator"})
+   801→              </span>
+   802→              {creator.verified ? <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-primary" /> : null}
+   803→            </p>
+   804→            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold text-muted-foreground">
+   805→              <span className="inline-flex items-center gap-1.5">
+   806→                <CalendarDays className="h-3.5 w-3.5" />
+   807→                {deal.eventDate ? formatDate(deal.eventDate) : "Date TBD"}
+   808→              </span>
+   809→              <span className="inline-flex items-center gap-1.5">
+   810→                <MapPin className="h-3.5 w-3.5" /> {deal.location || "—"}
+   811→              </span>
+   812→            </div>
+   813→          </div>
+   814→          <div className="shrink-0 rounded-2xl border border-border bg-card px-3.5 py-2 text-right">
+   815→            <p className="text-[10px] font-bold uppercase text-muted-foreground">Total price</p>
+   816→            <p className="text-[15px] font-extrabold text-foreground">{formatNaira(deal.price)}</p>
+   817→          </div>
+   818→        </div>
+   819→
+   820→        <motion.div
+   821→          key={deal.status}
+   822→          initial={{ opacity: 0, y: 10 }}
+   823→          animate={{ opacity: 1, y: 0 }}
+   824→          transition={{ duration: 0.25 }}
+   825→          className="mt-5 space-y-4 lg:space-y-5"
+   826→        >
+   827→          {body}
+   828→        </motion.div>
+   829→
+   830→        {/* record — always */}
+   831→        {deal.events.length > 0 ? (
+   832→          <div className="mt-5">
+   833→            <RecordTimeline events={deal.events} />
+   834→          </div>
+   835→        ) : null}
+   836→
+   837→        <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-xs font-semibold text-muted-foreground">
+   838→          <PayazaMark /> Every payment processed by Payaza
+   839→        </p>
+   840→      </div>
+   841→
+   842→      {/* Payaza checkout */}
+   843→      <PayazaCheckout
+   844→        open={payCtx !== null}
+   845→        onClose={() => setPayCtx(null)}
+   846→        amount={payCtx?.amount ?? 0}
+   847→        paymentLabel={payCtx?.label ?? ""}
+   848→        dealTitle={deal.title}
+   849→        dealRef={deal.ref}
+   850→        creatorName={creator.name}
+   851→        escrowNote={
+   852→          approved
+   853→            ? `The work is already approved — this payment is released to ${creator.name} instantly (not held).`
+   854→            : undefined
+   855→        }
+   856→        successNote={
+   857→          approved
+   858→            ? `Released to ${creator.name} instantly — the work was already approved.`
+   859→            : undefined
+   860→        }
+   861→        onPay={(method) =>
+   862→          payCtx ? pay(payCtx.kind, method) : Promise.reject(new Error("Nothing to pay."))
+   863→        }
+   864→      />
+   865→
+   866→      {/* request changes dialog */}
+   867→      <Dialog open={changesOpen} onOpenChange={setChangesOpen}>
+   868→        <DialogContent aria-describedby={undefined} className="max-w-md rounded-2xl">
+   869→          <DialogHeader>
+   870→            <DialogTitle className="text-lg font-extrabold">Request changes</DialogTitle>
+   871→          </DialogHeader>
+   872→          <p className="text-sm font-medium text-muted-foreground">
+   873→            Tell {firstName} what you&rsquo;d like adjusted — they&rsquo;ll update the deal or send a new
+   874→            delivery. Your money stays protected in escrow.
+   875→          </p>
+   876→          <Textarea
+   877→            value={changesNote}
+   878→            onChange={(e) => setChangesNote(e.target.value)}
+   879→            placeholder="e.g. Can we move the shoot to the morning? Also add one extra location."
+   880→            className="min-h-24 rounded-xl bg-muted/60 font-semibold"
+   881→          />
+   882→          <Button
+   883→            className="h-12 w-full rounded-xl font-bold"
+   884→            disabled={busy}
+   885→            onClick={async () => {
+   886→              const updated = await act({ action: "request-changes", note: changesNote });
+   887→              setChangesOpen(false);
+   888→              setChangesNote("");
+   889→              if (updated) toast.success("Changes requested");
+   890→            }}
+   891→          >
+   892→            {busy ? <Loader2 className="mr-2 h-4.5 w-4.5 animate-spin" /> : null}
+   893→            Send change request
+   894→          </Button>
+   895→        </DialogContent>
+   896→      </Dialog>
+   897→
+   898→      {/* approve confirm dialog */}
+   899→      <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
+   900→        <DialogContent aria-describedby={undefined} className="max-w-md rounded-2xl">
+   901→          <DialogHeader>
+   902→            <DialogTitle className="text-lg font-extrabold">Approve delivery?</DialogTitle>
+   903→          </DialogHeader>
+   904→          <div className="flex items-start gap-2.5 rounded-xl bg-accent p-3.5">
+   905→            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+   906→            <p className="text-[13px] font-semibold leading-relaxed text-accent-foreground">
+   907→              Approving releases {formatNaira(held)} from Payaza escrow to {creator.name} and confirms
+   908→              the work is complete.
+   909→            </p>
+   910→          </div>
+   911→          <div className="flex gap-3">
+   912→            <Button
+   913→              variant="outline"
+   914→              className="h-12 flex-1 rounded-xl font-bold"
+   915→              onClick={() => setApproveOpen(false)}
+   916→            >
+   917→              Not yet
+   918→            </Button>
+   919→            <Button
+   920→              className="h-12 flex-1 rounded-xl font-bold shadow-md shadow-primary/25"
+   921→              disabled={busy}
+   922→              onClick={async () => {
+   923→                const updated = await act({ action: "approve" });
+   924→                setApproveOpen(false);
+   925→                if (updated) toast.success(`Approved — ${formatNaira(held)} released to ${creator.name}`);
+   926→              }}
+   927→            >
+   928→              {busy ? <Loader2 className="mr-2 h-4.5 w-4.5 animate-spin" /> : <Check className="mr-1.5 h-4.5 w-4.5" />}
+   929→              Approve & release
+   930→            </Button>
+   931→          </div>
+   932→        </DialogContent>
+   933→      </Dialog>
+   934→    </ClientFrame>
+   935→  );
+   936→}
+   937→
+   938→/* ---------------- chrome ---------------- */
+   939→
+   940→function ClientFrame({
+   941→  children,
+   942→  backHref = "#/",
+   943→  backLabel = "Home",
+   944→}: {
+   945→  children: React.ReactNode;
+   946→  backHref?: string;
+   947→  backLabel?: string;
+   948→}) {
+   949→  return (
+   950→    <div className="min-h-screen bg-[#edf3ef]">
+   951→      <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col bg-background shadow-[0_0_60px_rgba(14,31,51,0.10)] lg:max-w-4xl">
+   952→        <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur-md sm:px-6">
+   953→          <a
+   954→            href={backHref}
+   955→            aria-label={`Back to ${backLabel.toLowerCase()}`}
+   956→            className="flex items-center gap-1.5 rounded-lg p-1 text-sm font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+   957→          >
+   958→            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5">
+   959→              <path d="M19 12H5m0 0 6 6m-6-6 6-6" />
+   960→            </svg>
+   961→            <span className="hidden sm:inline">{backLabel}</span>
+   962→          </a>
+   963→          <Logo />
+   964→          <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-1.5 text-[11px] font-extrabold text-accent-foreground">
+   965→            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+   966→            Protected
+   967→          </span>
+   968→        </header>
+   969→        <main className="flex flex-1 flex-col">{children}</main>
+   970→        <div className="pb-[env(safe-area-inset-bottom)]" />
+   971→      </div>
+   972→    </div>
+   973→  );
+   974→}
+   975→

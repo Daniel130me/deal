@@ -28,7 +28,7 @@ import {
   FileRow,
   MetaRow,
   PaymentSummary,
-  PayazaMark,
+  ProviderMark,
   RecordTimeline,
   SectionCard,
   StatusChip,
@@ -51,9 +51,11 @@ import {
   formatDateTime,
   isApproved,
   isFullyPaid,
+  isPaymentProvider,
   paidTotal,
   remainingBalance,
   type Deal,
+  type PaymentProvider,
 } from "@/lib/types";
 
 /** Plain hash anchor: native navigation fires `hashchange`, which drives the SPA router
@@ -95,6 +97,16 @@ function heldTotal(deal: Deal) {
     .reduce((sum, p) => sum + p.amount, 0);
 }
 
+/** The rail this deal's money actually moved on — released payments first, then any
+ *  payment, then the creator's preferred rail, then Paystack as a last-resort default. */
+function dealProviderOf(deal: Deal, creator: SafeUser | null): PaymentProvider {
+  const released = deal.payments.find((p) => p.status === "released");
+  if (released) return released.provider;
+  if (deal.payments[0]) return deal.payments[0].provider;
+  if (creator && isPaymentProvider(creator.preferredProvider)) return creator.preferredProvider;
+  return "paystack";
+}
+
 function lifecycleSteps(deal: Deal): Step[] {
   const delivery: Step["state"] =
     deal.status === "active" || deal.status === "revision" ? "current" : "done";
@@ -108,7 +120,7 @@ function lifecycleSteps(deal: Deal): Step[] {
         : "todo";
   return [
     { label: "Accepted", state: "done" },
-    { label: "Payment", sub: "In Payaza escrow", state: "done" },
+    { label: "Payment", sub: "In DEAL escrow", state: "done" },
     { label: "Delivery", sub: deal.status === "revision" ? "Revision" : undefined, state: delivery },
     { label: "Approval", state: approval },
     {
@@ -263,6 +275,7 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
   const pct = deal.price > 0 ? Math.min(100, Math.round((paid / deal.price) * 100)) : 0;
   const escrowed = heldTotal(deal);
   const fullyPaid = isFullyPaid(deal);
+  const dealProvider = dealProviderOf(deal, creator);
   const shareUrl =
     typeof window !== "undefined" ? `${window.location.origin}/#/c/${deal.shareToken}` : "";
 
@@ -435,7 +448,7 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
           </div>
           <p className="flex items-start gap-1.5 text-xs font-medium leading-relaxed text-muted-foreground">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-            Clients can also pay installments before delivery — everything sits in Payaza escrow
+            Clients can also pay installments before delivery — everything sits in DEAL escrow
             until they approve the completed work.
           </p>
         </div>
@@ -447,7 +460,7 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
         <EscrowBanner
           amount={escrowed}
           paidOn={deal.depositPaidAt}
-          note={`Held by Payaza escrow — released to you the moment ${deal.client.name} approves the completed work. They can pay installments anytime.`}
+          note={`Held in DEAL escrow — released to you the moment ${deal.client.name} approves the completed work. They can pay installments anytime.`}
         />
       );
       actions = (
@@ -509,9 +522,9 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
                 Work approved! {formatNaira(paid)} released from escrow
               </p>
               <p className="mt-0.5 text-[13px] font-medium text-muted-foreground">
-                The money has landed in your Payaza payout account.
+                The money has landed in your payout account.
               </p>
-              <PayazaMark className="mt-2" />
+              <ProviderMark provider={dealProvider} className="mt-2" />
             </div>
           </div>
         </div>
@@ -565,10 +578,10 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
           </span>
           <p className="mt-3 text-lg font-extrabold text-foreground">Deal completed!</p>
           <p className="mt-0.5 text-[15px] font-extrabold text-primary">
-            {formatNaira(paid)} released to your Payaza payout account
+            {formatNaira(paid)} released to your payout account
           </p>
           <div className="mt-2 flex justify-center">
-            <PayazaMark withText />
+            <ProviderMark provider={dealProvider} withText />
           </div>
           <p className="mt-2 text-[13px] font-medium text-muted-foreground">
             Agreed, paid, delivered, approved — DEAL kept the record.
@@ -703,6 +716,13 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
                 </span>
               }
             >
+              <p className="mb-5 flex items-start gap-2 rounded-xl bg-muted/60 p-3 text-xs font-medium leading-relaxed text-muted-foreground">
+                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                <span>
+                  The client sees watermarked protected previews — full-quality downloads unlock
+                  once the work is approved and fully paid.
+                </span>
+              </p>
               <div className="space-y-5">
                 {[...deal.deliveries].reverse().map((delivery, index) => (
                   <div key={delivery.id} className={index > 0 ? "border-t border-border pt-5" : ""}>

@@ -9,6 +9,7 @@ import type {
   User,
   CreatorChannel,
   ScheduleSlot,
+  PaymentProvider,
 } from "@/lib/types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -207,6 +208,7 @@ export const api = {
         verified: boolean;
         whatsapp: string;
         channels: CreatorChannel[];
+        preferredProvider: PaymentProvider;
       };
       amounts: {
         total: number;
@@ -235,6 +237,7 @@ export const api = {
         | "dispute";
       note?: string;
       method?: PayMethod;
+      provider?: PaymentProvider;
       rating?: number;
     }
   ) =>

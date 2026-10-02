@@ -29,6 +29,7 @@ export interface User {
   bio: string;
   verified: boolean;
   onboarded: boolean;
+  preferredProvider: PaymentProvider;
   createdAt: string;
 }
 
@@ -97,6 +98,48 @@ export interface DealEvent {
 
 export type PaymentMethod = "card" | "transfer" | "ussd";
 
+/** Payment rails DEAL supports. They process the charge; escrow is managed by DEAL itself. */
+export type PaymentProvider = "flutterwave" | "paystack";
+
+export const PROVIDERS: PaymentProvider[] = ["flutterwave", "paystack"];
+
+export function isPaymentProvider(value: unknown): value is PaymentProvider {
+  return value === "flutterwave" || value === "paystack";
+}
+
+export const PROVIDER_META: Record<
+  PaymentProvider,
+  { label: string; logo: string; logoWhite: string; refPrefix: "FLW" | "PSK"; tint: string }
+> = {
+  flutterwave: {
+    label: "Flutterwave",
+    logo: "/flutterwave/logo.svg",
+    logoWhite: "/flutterwave/logo-white.svg",
+    refPrefix: "FLW",
+    tint: "bg-[#FFF3E0] text-[#8A5300]",
+  },
+  paystack: {
+    label: "Paystack",
+    logo: "/paystack/logo.svg",
+    logoWhite: "/paystack/logo-white.svg",
+    refPrefix: "PSK",
+    tint: "bg-[#E0F7FE] text-[#02516B]",
+  },
+};
+
+/** DEAL is niched down to these creator crafts only. */
+export const CREATOR_CRAFTS = [
+  "Photographer",
+  "Videographer",
+  "Motion designer",
+  "Graphic designer",
+  "Video editor",
+  "Illustrator",
+  "Voice artist",
+] as const;
+
+export type CreatorCraft = (typeof CREATOR_CRAFTS)[number];
+
 export interface DealPayment {
   id: string;
   type: "deposit" | "installment" | "balance";
@@ -104,8 +147,8 @@ export interface DealPayment {
   amount: number;
   method: PaymentMethod;
   methodLabel: string;
-  provider: "payaza";
-  reference: string; // PZ-XXXXXXXX
+  provider: PaymentProvider;
+  reference: string; // FLW-XXXXXXXX (Flutterwave) | PSK-XXXXXXXX (Paystack)
   status: "held" | "released";
   paidAt: string;
   releasedAt?: string;

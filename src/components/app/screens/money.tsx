@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Inbox, Loader2, Lock, ShieldCheck, TrendingUp, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { AppCanvas } from "@/components/app/chrome";
-import { AppPage, PayazaMark, SectionCard } from "@/components/app/kit";
+import { AppPage, ProviderMark, SectionCard } from "@/components/app/kit";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -17,7 +17,15 @@ import {
 } from "@/components/ui/table";
 import { useApp } from "@/components/app/context";
 import { api } from "@/lib/api";
-import { formatDateTime, formatNaira, type Deal } from "@/lib/types";
+import {
+  PROVIDERS,
+  PROVIDER_META,
+  formatDateTime,
+  formatNaira,
+  isPaymentProvider,
+  type Deal,
+  type PaymentProvider,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Overview = Awaited<ReturnType<typeof api.overview>>;
@@ -43,6 +51,7 @@ interface PaymentRow {
   dealTitle: string;
   label: string;
   amount: number;
+  provider: PaymentProvider;
   reference: string;
   status: "held" | "released";
   paidAt: string;
@@ -57,8 +66,14 @@ const FILTERS = [
 
 type FilterKey = (typeof FILTERS)[number]["key"];
 
-function referenceOf(reference: string) {
-  return reference.startsWith("PZ-") ? reference : `PZ-${reference}`;
+/** Tiny tinted chip naming the rail that processed the charge (Flutterwave / Paystack). */
+function ProviderChip({ provider }: { provider: PaymentProvider }) {
+  const meta = PROVIDER_META[provider];
+  return (
+    <span className={cn("inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-extrabold", meta.tint)}>
+      via {meta.label}
+    </span>
+  );
 }
 
 function PaymentStatusChip({ status }: { status: PaymentRow["status"] }) {
@@ -75,10 +90,16 @@ function PaymentStatusChip({ status }: { status: PaymentRow["status"] }) {
 }
 
 export default function MoneyScreen() {
-  const { user } = useApp();
+  const { user, setUser } = useApp();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [deals, setDeals] = useState<Deal[] | null>(null);
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [switching, setSwitching] = useState(false);
+
+  // Preferred rail — guard older localStorage users missing the field.
+  const provider: PaymentProvider = isPaymentProvider(user?.preferredProvider)
+    ? user.preferredProvider
+    : "flutterwave";
 
   useEffect(() => {
     if (!user) return;
@@ -105,6 +126,7 @@ export default function MoneyScreen() {
           dealTitle: deal.title,
           label: payment.label,
           amount: payment.amount,
+          provider: payment.provider,
           reference: payment.reference,
           status: payment.status,
           paidAt: payment.paidAt,
@@ -122,6 +144,20 @@ export default function MoneyScreen() {
   const countFor = (key: FilterKey) =>
     key === "all" ? rows.length : rows.filter((row) => row.status === key).length;
 
+  const switchProvider = async (next: PaymentProvider) => {
+    if (!user || next === provider || switching) return;
+    setSwitching(true);
+    try {
+      const { user: updated } = await api.updateUser(user.id, { preferredProvider: next });
+      setUser(updated);
+      toast.success(`Payout rail set to ${PROVIDER_META[next].label}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't update your payout rail.");
+    } finally {
+      setSwitching(false);
+    }
+  };
+
   if (!user) return null;
 
   const firstName = user.name.split(" ")[0];
@@ -130,7 +166,7 @@ export default function MoneyScreen() {
     <AppCanvas activeTab="money">
       <AppPage
         title="Money"
-        subtitle="Every payment sits in Payaza escrow until your client approves the completed work."
+        subtitle="Every payment sits in DEAL escrow until your client approves the completed work."
       >
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -176,7 +212,7 @@ export default function MoneyScreen() {
                     {formatNaira(overview.money.releasedAllTime)}
                   </p>
                   <div className="mt-1">
-                    <PayazaMark />
+                    <ProviderMark provider={provider} />
                   </div>
                 </div>
 
@@ -207,19 +243,66 @@ export default function MoneyScreen() {
               >
                 <div className="flex items-center gap-3">
                   <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-border bg-white">
-                    <PayazaMark />
+                    <ProviderMark provider={provider} />
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-extrabold text-foreground">
-                      Payaza payout · {firstName} Visuals •••4532
+                      {firstName} Visuals •••4532
                     </p>
                     <p className="text-xs font-semibold text-muted-foreground">
-                      Automatic payouts · no manual transfers needed
+                      Payout account · {PROVIDER_META[provider].label} · automatic payouts
                     </p>
                   </div>
                 </div>
+
+                {/* default payout rail switcher */}
+                <div className="mt-4 border-t border-border pt-4">
+                  <p className="text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">
+                    Default payout rail
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-2.5">
+                    {PROVIDERS.map((p) => {
+                      const meta = PROVIDER_META[p];
+                      const active = p === provider;
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          disabled={switching}
+                          aria-pressed={active}
+                          onClick={() => switchProvider(p)}
+                          className={cn(
+                            "flex items-center gap-2.5 rounded-xl border p-3 text-left transition-all disabled:opacity-60",
+                            active
+                              ? "border-primary bg-accent ring-2 ring-primary/15"
+                              : "border-border bg-white hover:border-primary/40"
+                          )}
+                        >
+                          <img src={meta.logo} alt={meta.label} className="h-4 w-auto shrink-0" />
+                          <span
+                            className={cn(
+                              "min-w-0 flex-1 truncate text-[13px] font-extrabold",
+                              active ? "text-accent-foreground" : "text-foreground"
+                            )}
+                          >
+                            {meta.label}
+                          </span>
+                          {active ? (
+                            <span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-extrabold text-white">
+                              Default
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+                    Your clients can pay via either rail — this just sets where released money lands.
+                  </p>
+                </div>
+
                 <p className="mt-4 rounded-xl bg-muted/60 p-3.5 text-xs font-medium leading-relaxed text-muted-foreground">
-                  Money from every deal is held in <span className="font-bold text-foreground">Payaza escrow</span>{" "}
+                  Money from every deal is held in <span className="font-bold text-foreground">DEAL escrow</span>{" "}
                   and paid out automatically when your client approves the completed work.
                 </p>
               </SectionCard>
@@ -253,7 +336,8 @@ export default function MoneyScreen() {
                     <Inbox className="h-7 w-7 text-muted-foreground" />
                     <p className="text-sm font-extrabold text-foreground">No payments yet</p>
                     <p className="max-w-xs text-[13px] font-semibold text-muted-foreground">
-                      When clients pay, every transaction lands here with its Payaza reference.
+                      When clients pay, every transaction lands here with its Flutterwave or Paystack
+                      reference.
                     </p>
                   </div>
                 ) : filtered.length === 0 ? (
@@ -291,14 +375,19 @@ export default function MoneyScreen() {
                                   </span>
                                 </HashLink>
                               </TableCell>
-                              <TableCell className="text-[13px] font-semibold text-foreground">
-                                {row.label}
+                              <TableCell>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="text-[13px] font-semibold text-foreground">
+                                    {row.label}
+                                  </span>
+                                  <ProviderChip provider={row.provider} />
+                                </div>
                               </TableCell>
                               <TableCell className="whitespace-nowrap text-[13px] font-extrabold text-foreground">
                                 {formatNaira(row.amount)}
                               </TableCell>
                               <TableCell className="whitespace-nowrap font-mono text-xs font-bold text-muted-foreground">
-                                {referenceOf(row.reference)}
+                                {row.reference}
                               </TableCell>
                               <TableCell>
                                 <PaymentStatusChip status={row.status} />
@@ -335,9 +424,12 @@ export default function MoneyScreen() {
                               {formatDateTime(row.releasedAt ?? row.paidAt)}
                             </span>
                           </div>
-                          <p className="mt-1.5 font-mono text-[11px] font-bold text-muted-foreground">
-                            {referenceOf(row.reference)}
-                          </p>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                            <p className="font-mono text-[11px] font-bold text-muted-foreground">
+                              {row.reference}
+                            </p>
+                            <ProviderChip provider={row.provider} />
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -348,8 +440,11 @@ export default function MoneyScreen() {
               {/* fine print */}
               <p className="flex items-start gap-2 rounded-2xl border border-border bg-secondary p-4 text-xs font-semibold leading-relaxed text-muted-foreground lg:p-5">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                Every naira is held by Payaza escrow until your client approves the completed work —
-                then it lands in your payout account automatically.
+                <span>
+                  <span className="font-bold text-foreground">DEAL escrow</span> holds every payment
+                  until approval — Flutterwave and Paystack only process the charges. Once your client
+                  approves, released money lands in your payout account automatically.
+                </span>
               </p>
             </>
           )}

@@ -19,10 +19,10 @@ const CREATOR_STEPS = [
   "Choose your deposit + installment plan",
   "Share the link via ANY channel — WhatsApp, IG, Telegram, email…",
   "Client reviews & accepts the agreement",
-  "Client pays the deposit via Payaza",
-  "Client pays installments anytime — every payment held in escrow",
+  "Client pays the deposit via Flutterwave or Paystack — DEAL escrow holds it until approval",
+  "Client pays installments anytime — every payment held in DEAL escrow",
   "You create the work and deliver",
-  "Client approves → ALL escrow releases to your Payaza payout automatically",
+  "Client approves → ALL DEAL escrow releases to you automatically",
   "Payments made after approval are released to you instantly",
   "Upload final files once the deal is fully paid",
 ];
@@ -30,7 +30,7 @@ const CREATOR_STEPS = [
 const CLIENT_STEPS = [
   "Get the deal link",
   "Review the agreement",
-  "Accept & pay the deposit — Payaza checkout: card, transfer or USSD",
+  "Accept & pay the deposit — choose Flutterwave or Paystack at checkout: card, transfer or USSD",
   "Optionally pay installments as the work progresses",
   "Review the delivery",
   "Approve — escrow releases to the creator",
@@ -47,7 +47,7 @@ const RECORD_ITEMS = [
   {
     title: "What was paid",
     description:
-      "Every deposit, installment and balance — amounts, dates, methods and Payaza references (PZ-…) on each payment.",
+      "Every deposit, installment and balance — amounts, dates, methods and Flutterwave/Paystack references (FLW-… / PSK-…) recorded on every payment.",
     icon: HandCoins,
   },
   {
@@ -88,7 +88,7 @@ export function Flow() {
         <SectionHeading
           eyebrow="One flow, both sides"
           title="A deal both sides can trust"
-          subtitle="Creators send clear agreements. Clients pay into Payaza escrow with confidence. DEAL keeps the record of everything in between."
+          subtitle="Creators send clear agreements. Clients pay via Flutterwave or Paystack into DEAL escrow with confidence. DEAL keeps the record of everything in between."
         />
 
         <motion.div
@@ -120,7 +120,8 @@ export function Flow() {
                   className="rounded-full px-4 py-2 text-sm font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
                 >
                   <FileCheck2 className="mr-1.5 h-4 w-4" />
-                  DEAL keeps the record
+                  <span className="sm:hidden">The record</span>
+                  <span className="hidden sm:inline">DEAL keeps the record</span>
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -157,7 +158,7 @@ export function Flow() {
                     </h3>
                     <p className="text-sm text-muted-foreground">
                       A simple link — no account needed — and every naira sits
-                      in Payaza escrow until the work is approved.
+                      in DEAL escrow until the work is approved.
                     </p>
                   </div>
                 </div>

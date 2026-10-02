@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { randomBytes } from "crypto";
-import type { DB } from "@/lib/types";
+import type { DB, PaymentProvider } from "@/lib/types";
 
 /**
  * Ultra-fast JSON data layer for the clickable prototype.
@@ -59,8 +59,10 @@ export function nextRef(
   return `${prefix}-${String(max + 1).padStart(3, "0")}`;
 }
 
-export function newPayazaRef(): string {
-  return `PZ-${randomBytes(4).toString("hex").toUpperCase()}`;
+/** Gateway transaction reference — the rail that processed the charge (escrow itself is DEAL's). */
+export function newGatewayRef(provider: PaymentProvider = "flutterwave"): string {
+  const prefix = provider === "paystack" ? "PSK" : "FLW";
+  return `${prefix}-${randomBytes(4).toString("hex").toUpperCase()}`;
 }
 
 const NO_CACHE = { "Cache-Control": "no-store, no-cache, must-revalidate" } as const;

@@ -35,12 +35,22 @@ export function PricingBanner() {
             No monthly fees.{" "}
             <span className="text-emerald-400">Pay only when you get paid.</span>
           </h2>
-          <p className="relative mt-4 flex items-center justify-center gap-2 text-[13px] font-semibold text-slate-400">
+          <p className="relative mt-4 flex flex-wrap items-center justify-center gap-2.5 text-[13px] font-semibold text-slate-400">
             Payments powered by
             <img
-              src="/payaza/payaza-logo.svg"
-              alt="Payaza"
-              className="h-4 w-auto rounded-full bg-white px-2.5 py-1.5"
+              src="/flutterwave/logo-white.svg"
+              alt="Flutterwave"
+              width={86}
+              height={16}
+              className="h-4 w-auto"
+            />
+            <span className="text-slate-500">&</span>
+            <img
+              src="/paystack/logo-white.svg"
+              alt="Paystack"
+              width={69}
+              height={16}
+              className="h-4 w-auto"
             />
           </p>
           <p className="relative mx-auto mt-4 max-w-xl text-base leading-relaxed text-slate-300">

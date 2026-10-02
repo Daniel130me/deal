@@ -1,0 +1,804 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useMemo, useState } from "react";
+     4→import {
+     5→  ArrowRight,
+     6→  BadgeCheck,
+     7→  CalendarDays,
+     8→  Check,
+     9→  Clock,
+    10→  Loader2,
+    11→  MapPin,
+    12→  ShieldCheck,
+    13→} from "lucide-react";
+    14→import { motion } from "framer-motion";
+    15→import { toast } from "sonner";
+    16→import { Logo } from "@/components/landing/logo";
+    17→import { Button } from "@/components/ui/button";
+    18→import { Input } from "@/components/ui/input";
+    19→import { Textarea } from "@/components/ui/textarea";
+    20→import {
+    21→  Dialog,
+    22→  DialogContent,
+    23→  DialogHeader,
+    24→  DialogTitle,
+    25→} from "@/components/ui/dialog";
+    26→import { ChannelButtons } from "@/components/app/kit";
+    27→import { CHANNEL_META, primaryChannel } from "@/lib/channels";
+    28→import { api, type SafeUser } from "@/lib/api";
+    29→import { formatNaira, type Booking, type Service } from "@/lib/types";
+    30→import { cn } from "@/lib/utils";
+    31→
+    32→const BOOKING_TIMES = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+    33→
+    34→const EMPTY_BOOKING = {
+    35→  sessionType: "",
+    36→  serviceId: undefined as string | undefined,
+    37→  date: "",
+    38→  time: "",
+    39→  clientName: "",
+    40→  clientContact: "",
+    41→  note: "",
+    42→};
+    43→type BookingForm = typeof EMPTY_BOOKING;
+    44→
+    45→export default function PublicPageScreen({ handle }: { handle: string }) {
+    46→  const [data, setData] = useState<{ creator: SafeUser; services: Service[] } | null>(null);
+    47→  const [error, setError] = useState<string | null>(null);
+    48→  const [selected, setSelected] = useState<Service | null>(null);
+    49→  const [requestResult, setRequestResult] = useState<{ ref: string } | null>(null);
+    50→  const [bookingOpen, setBookingOpen] = useState(false);
+    51→  const [bookingForm, setBookingForm] = useState<BookingForm>(EMPTY_BOOKING);
+    52→  const [bookingDone, setBookingDone] = useState<Booking | null>(null);
+    53→  const [busy, setBusy] = useState(false);
+    54→
+    55→  useEffect(() => {
+    56→    let alive = true;
+    57→    api
+    58→      .publicCreator(handle)
+    59→      .then((d) => alive && setData(d))
+    60→      .catch((err) => alive && setError(err instanceof Error ? err.message : "Creator not found."));
+    61→    return () => {
+    62→      alive = false;
+    63→    };
+    64→  }, [handle]);
+    65→
+    66→  const days = useMemo(() => {
+    67→    const out: { iso: string; weekday: string; day: number; month: string }[] = [];
+    68→    const now = new Date();
+    69→    for (let i = 0; i < 14; i++) {
+    70→      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    71→      out.push({
+    72→        iso: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+    73→        weekday: d.toLocaleDateString("en-GB", { weekday: "short" }),
+    74→        day: d.getDate(),
+    75→        month: d.toLocaleDateString("en-GB", { month: "short" }),
+    76→      });
+    77→    }
+    78→    return out;
+    79→  }, []);
+    80→
+    81→  function openBooking(service?: Service) {
+    82→    setBookingForm({
+    83→      ...EMPTY_BOOKING,
+    84→      sessionType: service ? service.title : "General consultation",
+    85→      serviceId: service?.id,
+    86→    });
+    87→    setBookingDone(null);
+    88→    setBookingOpen(true);
+    89→  }
+    90→
+    91→  async function submitBooking() {
+    92→    if (!data || busy) return;
+    93→    const { sessionType, date, time, clientName, clientContact } = bookingForm;
+    94→    if (!sessionType || !date || !time || !clientName.trim() || !clientContact.trim()) {
+    95→      toast.error("Pick a session type, date and time, and add your name + contact.");
+    96→      return;
+    97→    }
+    98→    setBusy(true);
+    99→    try {
+   100→      const { booking } = await api.bookSession(data.creator.handle, {
+   101→        sessionType,
+   102→        serviceId: bookingForm.serviceId,
+   103→        date,
+   104→        time,
+   105→        clientName: clientName.trim(),
+   106→        clientContact: clientContact.trim(),
+   107→        note: bookingForm.note.trim() || undefined,
+   108→      });
+   109→      setBookingDone(booking);
+   110→      toast.success("Booking request sent!");
+   111→    } catch (err) {
+   112→      toast.error(err instanceof Error ? err.message : "Couldn't send your booking.");
+   113→    } finally {
+   114→      setBusy(false);
+   115→    }
+   116→  }
+   117→
+   118→  if (error) {
+   119→    return (
+   120→      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#edf3ef] px-6 text-center">
+   121→        <Logo />
+   122→        <p className="mt-4 text-lg font-extrabold text-foreground">Page not found</p>
+   123→        <p className="text-sm font-medium text-muted-foreground">{error}</p>
+   124→      </div>
+   125→    );
+   126→  }
+   127→
+   128→  if (!data) {
+   129→    return (
+   130→      <div className="flex min-h-screen items-center justify-center bg-[#edf3ef]">
+   131→        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+   132→      </div>
+   133→    );
+   134→  }
+   135→
+   136→  const { creator, services } = data;
+   137→  const primary = primaryChannel(creator.channels);
+   138→
+   139→  /* ---------------- request flow (kept from v1, made responsive) ---------------- */
+   140→
+   141→  if (requestResult && selected) {
+   142→    return (
+   143→      <PublicFrame creator={creator} onBook={() => openBooking()}>
+   144→        <div className="flex flex-1 flex-col px-4 pb-12 pt-8 sm:px-6 lg:py-10">
+   145→          <div className="flex justify-center">
+   146→            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-accent ring-8 ring-accent/40">
+   147→              <Check className="h-9 w-9 text-primary" strokeWidth={3} />
+   148→            </span>
+   149→          </div>
+   150→          <h1 className="mt-5 text-center text-2xl font-extrabold tracking-tight text-foreground">
+   151→            Your request has been <span className="text-primary">sent!</span>
+   152→          </h1>
+   153→          <p className="mx-auto mt-2 max-w-sm text-center text-[15px] font-medium text-muted-foreground">
+   154→            {creator.name} will review your request and get back to you within 24 hours.
+   155→          </p>
+   156→          <p className="mx-auto mt-3 w-fit rounded-full bg-muted px-3.5 py-1.5 font-mono text-[12px] font-extrabold text-foreground">
+   157→            {requestResult.ref}
+   158→          </p>
+   159→
+   160→          <div className="mx-auto mt-6 w-full max-w-md rounded-2xl border border-border bg-card p-5">
+   161→            <p className="text-center text-[15px] font-extrabold text-foreground">What happens next?</p>
+   162→            <ol className="mt-4 space-y-4">
+   163→              {[
+   164→                [`${creator.name} reviews your request`, "They'll go through your project details and may reach out for more info."],
+   165→                ["You'll get a deal", "You'll receive a message with a deal covering scope, timeline and price."],
+   166→                ["Approve to release payment", "Agree, pay safely into escrow, and only release when you're happy."],
+   167→              ].map(([title, desc], i) => (
+   168→                <li key={title} className="flex gap-3">
+   169→                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-extrabold text-primary">
+   170→                    {i + 1}
+   171→                  </span>
+   172→                  <div>
+   173→                    <p className="text-[13px] font-extrabold text-foreground">{title}</p>
+   174→                    <p className="text-[13px] font-medium leading-relaxed text-muted-foreground">{desc}</p>
+   175→                  </div>
+   176→                </li>
+   177→              ))}
+   178→            </ol>
+   179→          </div>
+   180→
+   181→          <div className="mx-auto mt-6 flex w-full max-w-md flex-col gap-3 sm:flex-row">
+   182→            {primary ? (
+   183→              <a
+   184→                href={CHANNEL_META[primary.type].href(primary.value)}
+   185→                target="_blank"
+   186→                rel="noreferrer"
+   187→                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-primary/30 bg-accent font-bold text-accent-foreground transition-colors hover:bg-primary hover:text-white"
+   188→              >
+   189→                Chat on {CHANNEL_META[primary.type].label}
+   190→              </a>
+   191→            ) : null}
+   192→            <Button
+   193→              variant="outline"
+   194→              className="h-12 flex-1 rounded-xl font-bold"
+   195→              onClick={() => {
+   196→                setRequestResult(null);
+   197→                setSelected(null);
+   198→              }}
+   199→            >
+   200→              Back to {creator.name}&rsquo;s page
+   201→            </Button>
+   202→          </div>
+   203→        </div>
+   204→      </PublicFrame>
+   205→    );
+   206→  }
+   207→
+   208→  if (selected) {
+   209→    return (
+   210→      <RequestForm
+   211→        creator={creator}
+   212→        service={selected}
+   213→        onBack={() => setSelected(null)}
+   214→        onSent={(ref) => setRequestResult({ ref })}
+   215→      />
+   216→    );
+   217→  }
+   218→
+   219→  /* ---------------- public page ---------------- */
+   220→
+   221→  return (
+   222→    <PublicFrame creator={creator} onBook={() => openBooking()}>
+   223→      {/* hero */}
+   224→      <div className="relative bg-gradient-to-br from-emerald-900 via-emerald-700 to-emerald-600">
+   225→        <div
+   226→          aria-hidden
+   227→          className="pointer-events-none absolute inset-0 opacity-20"
+   228→          style={{
+   229→            backgroundImage:
+   230→              "radial-gradient(24rem 12rem at 80% 0%, rgba(255,255,255,0.5), transparent 60%)",
+   231→          }}
+   232→        />
+   233→        <div className="relative grid gap-8 px-4 py-8 sm:px-6 lg:grid-cols-2 lg:items-center lg:gap-10 lg:px-8 lg:py-12">
+   234→          <div>
+   235→            <div className="flex items-center gap-4">
+   236→              <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-white/60 bg-emerald-950 text-2xl font-extrabold text-white">
+   237→                {creator.name.slice(0, 1).toUpperCase()}
+   238→              </span>
+   239→              <div className="min-w-0">
+   240→                <p className="flex items-center gap-1.5 text-xl font-extrabold text-white lg:text-2xl">
+   241→                  <span className="truncate">{creator.name}</span>
+   242→                  {creator.verified ? <BadgeCheck className="h-5 w-5 shrink-0 text-emerald-200" /> : null}
+   243→                </p>
+   244→                <p className="text-[13px] font-bold text-emerald-100">
+   245→                  {creator.craft || "Creative"}
+   246→                  {creator.location ? ` · ${creator.location}` : ""}
+   247→                </p>
+   248→                <p className="mt-0.5 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-200">
+   249→                  <MapPin className="h-3.5 w-3.5" /> Available for projects
+   250→                </p>
+   251→              </div>
+   252→            </div>
+   253→            {creator.bio ? (
+   254→              <p className="mt-4 max-w-md text-[14px] font-medium leading-relaxed text-emerald-50">
+   255→                {creator.bio}
+   256→              </p>
+   257→            ) : null}
+   258→            <div className="mt-5">
+   259→              <p className="text-[11px] font-extrabold uppercase tracking-wide text-emerald-200">
+   260→                Reach {creator.name.split(" ")[0]} on
+   261→              </p>
+   262→              <ChannelButtons channels={creator.channels} className="mt-2 [&_a]:border-white/25 [&_a]:bg-white/10 [&_a]:text-white [&_a:hover]:border-white/50" />
+   263→            </div>
+   264→          </div>
+   265→
+   266→          <div className="rounded-2xl border border-white/20 bg-white/10 p-5 backdrop-blur-sm lg:p-6">
+   267→            <h1 className="text-xl font-extrabold tracking-tight text-white lg:text-2xl">
+   268→              Work with me 👋
+   269→            </h1>
+   270→            <p className="mt-1.5 text-[14px] font-medium leading-relaxed text-emerald-50">
+   271→              Pick a service below to request a custom deal, or book a session directly on my calendar.
+   272→            </p>
+   273→            <Button
+   274→              className="mt-4 h-12 w-full rounded-xl text-[15px] font-bold shadow-md"
+   275→              onClick={() => openBooking()}
+   276→            >
+   277→              <CalendarDays className="mr-2 h-4.5 w-4.5" /> Book a session
+   278→            </Button>
+   279→            <p className="mt-3 flex items-center justify-center gap-1.5 text-xs font-semibold text-emerald-100">
+   280→              <ShieldCheck className="h-4 w-4" /> Payments protected by DEAL escrow
+   281→            </p>
+   282→          </div>
+   283→        </div>
+   284→      </div>
+   285→
+   286→      {/* services */}
+   287→      <div className="px-4 pb-12 pt-6 sm:px-6 lg:px-8 lg:py-10">
+   288→        <h2 className="text-xl font-extrabold tracking-tight text-foreground lg:text-2xl">
+   289→          Services
+   290→        </h2>
+   291→        <p className="mt-1 text-[14px] font-medium text-muted-foreground">
+   292→          Request any service for a custom deal — I usually reply within 24 hours.
+   293→        </p>
+   294→
+   295→        <motion.div
+   296→          initial={{ opacity: 0, y: 10 }}
+   297→          animate={{ opacity: 1, y: 0 }}
+   298→          transition={{ duration: 0.25 }}
+   299→          className="mt-5 grid gap-3 sm:grid-cols-2 lg:gap-4"
+   300→        >
+   301→          {services.map((svc) => (
+   302→            <div
+   303→              key={svc.id}
+   304→              className="flex flex-col rounded-2xl border border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:shadow-md lg:p-5"
+   305→            >
+   306→              <div className="flex items-start justify-between gap-3">
+   307→                <div className="min-w-0">
+   308→                  {svc.popular ? (
+   309→                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-primary">
+   310→                      Popular
+   311→                    </span>
+   312→                  ) : null}
+   313→                  <p className="text-[15px] font-extrabold text-foreground">{svc.title}</p>
+   314→                  <p className="mt-0.5 text-[13px] font-medium leading-relaxed text-muted-foreground">
+   315→                    {svc.desc}
+   316→                  </p>
+   317→                </div>
+   318→                <div className="shrink-0 text-right">
+   319→                  <p className="text-[10px] font-bold uppercase text-muted-foreground">From</p>
+   320→                  <p className="text-[15px] font-extrabold text-primary">{formatNaira(svc.from)}</p>
+   321→                </div>
+   322→              </div>
+   323→              {svc.includes.length > 0 ? (
+   324→                <ul className="mt-3 space-y-1">
+   325→                  {svc.includes.slice(0, 3).map((inc) => (
+   326→                    <li key={inc} className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+   327→                      <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={3} /> {inc}
+   328→                    </li>
+   329→                  ))}
+   330→                </ul>
+   331→              ) : null}
+   332→              <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
+   333→                <p className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+   334→                  <Clock className="h-3.5 w-3.5" /> {svc.duration}
+   335→                </p>
+   336→                <div className="flex gap-2">
+   337→                  <Button
+   338→                    variant="outline"
+   339→                    size="sm"
+   340→                    className="h-9 rounded-lg border-primary/40 px-3 text-xs font-bold text-primary"
+   341→                    onClick={() => setSelected(svc)}
+   342→                  >
+   343→                    Request this service
+   344→                  </Button>
+   345→                  <Button
+   346→                    size="sm"
+   347→                    className="h-9 rounded-lg px-3 text-xs font-bold"
+   348→                    onClick={() => openBooking(svc)}
+   349→                  >
+   350→                    Book
+   351→                  </Button>
+   352→                </div>
+   353→              </div>
+   354→            </div>
+   355→          ))}
+   356→          {services.length === 0 && (
+   357→            <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm font-semibold text-muted-foreground sm:col-span-2">
+   358→              This creator hasn&rsquo;t added services yet — book a general consultation instead.
+   359→            </p>
+   360→          )}
+   361→        </motion.div>
+   362→
+   363→        <div className="mt-8 flex items-center justify-center gap-2 text-center">
+   364→          <ShieldCheck className="h-4 w-4 shrink-0 text-primary" />
+   365→          <p className="text-xs font-semibold text-muted-foreground">
+   366→            All projects on <span className="font-extrabold text-primary">DEAL</span> are protected by
+   367→            clear agreements and secure payments.
+   368→          </p>
+   369→        </div>
+   370→      </div>
+   371→
+   372→      {/* booking dialog */}
+   373→      <Dialog
+   374→        open={bookingOpen}
+   375→        onOpenChange={(next) => {
+   376→          setBookingOpen(next);
+   377→          if (!next) setBookingDone(null);
+   378→        }}
+   379→      >
+   380→        <DialogContent aria-describedby={undefined} className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-md">
+   381→          {bookingDone ? (
+   382→            <>
+   383→              <DialogHeader>
+   384→                <DialogTitle className="flex flex-col items-center gap-3 pt-2 text-center">
+   385→                  <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent ring-8 ring-accent/50">
+   386→                    <Check className="h-8 w-8 text-primary" strokeWidth={3} />
+   387→                  </span>
+   388→                  <span className="text-xl font-extrabold tracking-tight text-foreground">
+   389→                    Booking request sent
+   390→                  </span>
+   391→                </DialogTitle>
+   392→              </DialogHeader>
+   393→              <p className="text-center text-[14px] font-medium text-muted-foreground">
+   394→                {creator.name} will confirm shortly.
+   395→              </p>
+   396→              <p className="mx-auto w-fit rounded-full bg-muted px-3.5 py-1.5 font-mono text-[12px] font-extrabold text-foreground">
+   397→                {bookingDone.ref}
+   398→              </p>
+   399→              <div className="rounded-2xl border border-border bg-card p-4">
+   400→                <p className="text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">
+   401→                  Your session
+   402→                </p>
+   403→                <p className="mt-1 text-[14px] font-extrabold text-foreground">{bookingDone.sessionType}</p>
+   404→                <p className="text-[13px] font-semibold text-muted-foreground">
+   405→                  {formatDayLabel(bookingDone.date)} · {bookingDone.time}
+   406→                </p>
+   407→              </div>
+   408→              <div className="rounded-2xl border border-border bg-card p-4">
+   409→                <p className="text-[13px] font-extrabold text-foreground">What happens next</p>
+   410→                <ol className="mt-2.5 space-y-2.5">
+   411→                  {[
+   412→                    `${creator.name} reviews the request and confirms the slot`,
+   413→                    "You'll get a confirmation with the details",
+   414→                    "Any payments happen securely through DEAL escrow",
+   415→                  ].map((step, i) => (
+   416→                    <li key={step} className="flex gap-2.5">
+   417→                      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-extrabold text-primary">
+   418→                        {i + 1}
+   419→                      </span>
+   420→                      <p className="text-[13px] font-medium leading-relaxed text-muted-foreground">{step}</p>
+   421→                    </li>
+   422→                  ))}
+   423→                </ol>
+   424→              </div>
+   425→              <div className="flex flex-col gap-2.5 sm:flex-row">
+   426→                {primary ? (
+   427→                  <a
+   428→                    href={CHANNEL_META[primary.type].href(primary.value)}
+   429→                    target="_blank"
+   430→                    rel="noreferrer"
+   431→                    className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-primary/30 bg-accent text-sm font-bold text-accent-foreground transition-colors hover:bg-primary hover:text-white"
+   432→                  >
+   433→                    Chat on {CHANNEL_META[primary.type].label}
+   434→                  </a>
+   435→                ) : null}
+   436→                <Button
+   437→                  variant="outline"
+   438→                  className="h-11 flex-1 rounded-xl font-bold"
+   439→                  onClick={() => setBookingOpen(false)}
+   440→                >
+   441→                  Back to {creator.name}&rsquo;s page
+   442→                </Button>
+   443→              </div>
+   444→            </>
+   445→          ) : (
+   446→            <>
+   447→              <DialogHeader>
+   448→                <DialogTitle className="text-lg font-extrabold">Book a session</DialogTitle>
+   449→              </DialogHeader>
+   450→              <p className="-mt-2 text-[13px] font-medium text-muted-foreground">
+   451→                Pick what works for you — {creator.name} confirms every booking personally.
+   452→              </p>
+   453→
+   454→              {/* (a) session type */}
+   455→              <div>
+   456→                <p className="text-[12px] font-extrabold text-foreground">Session type</p>
+   457→                <div className="mt-2 flex flex-wrap gap-2">
+   458→                  {[
+   459→                    ...services.map((svc) => ({ title: svc.title, id: svc.id as string | undefined })),
+   460→                    { title: "General consultation", id: undefined },
+   461→                  ].map((opt) => (
+   462→                    <button
+   463→                      key={opt.title}
+   464→                      type="button"
+   465→                      onClick={() => setBookingForm({ ...bookingForm, sessionType: opt.title, serviceId: opt.id })}
+   466→                      className={cn(
+   467→                        "rounded-full border px-3.5 py-2 text-[13px] font-bold transition-colors",
+   468→                        bookingForm.sessionType === opt.title
+   469→                          ? "border-primary bg-accent text-accent-foreground"
+   470→                          : "border-border bg-card text-muted-foreground hover:bg-muted"
+   471→                      )}
+   472→                    >
+   473→                      {opt.title}
+   474→                    </button>
+   475→                  ))}
+   476→                </div>
+   477→              </div>
+   478→
+   479→              {/* (b) date grid */}
+   480→              <div>
+   481→                <p className="text-[12px] font-extrabold text-foreground">Pick a date</p>
+   482→                <div className="mt-2 grid grid-cols-4 gap-2">
+   483→                  {days.map((day) => {
+   484→                    const active = bookingForm.date === day.iso;
+   485→                    return (
+   486→                      <button
+   487→                        key={day.iso}
+   488→                        type="button"
+   489→                        onClick={() => setBookingForm({ ...bookingForm, date: day.iso })}
+   490→                        className={cn(
+   491→                          "rounded-xl border px-1 py-2 text-center transition-colors",
+   492→                          active
+   493→                            ? "border-primary bg-accent"
+   494→                            : "border-border bg-card hover:bg-muted"
+   495→                        )}
+   496→                      >
+   497→                        <p className={cn("text-[10px] font-bold uppercase", active ? "text-primary" : "text-muted-foreground")}>
+   498→                          {day.weekday}
+   499→                        </p>
+   500→                        <p className={cn("text-[15px] font-extrabold leading-tight", active ? "text-foreground" : "text-foreground")}>
+   501→                          {day.day}
+   502→                        </p>
+   503→                        <p className="text-[9px] font-semibold text-muted-foreground">{day.month}</p>
+   504→                      </button>
+   505→                    );
+   506→                  })}
+   507→                </div>
+   508→              </div>
+   509→
+   510→              {/* (c) time slots */}
+   511→              <div>
+   512→                <p className="text-[12px] font-extrabold text-foreground">Pick a time</p>
+   513→                <div className="mt-2 flex flex-wrap gap-2">
+   514→                  {BOOKING_TIMES.map((t) => (
+   515→                    <button
+   516→                      key={t}
+   517→                      type="button"
+   518→                      onClick={() => setBookingForm({ ...bookingForm, time: t })}
+   519→                      className={cn(
+   520→                        "rounded-full border px-3 py-1.5 font-mono text-[12px] font-bold transition-colors",
+   521→                        bookingForm.time === t
+   522→                          ? "border-primary bg-accent text-accent-foreground"
+   523→                          : "border-border bg-card text-muted-foreground hover:bg-muted"
+   524→                      )}
+   525→                    >
+   526→                      {t}
+   527→                    </button>
+   528→                  ))}
+   529→                </div>
+   530→              </div>
+   531→
+   532→              {/* (d) details */}
+   533→              <div className="space-y-3">
+   534→                <div>
+   535→                  <label htmlFor="bk-name" className="text-[12px] font-extrabold text-foreground">
+   536→                    Your name
+   537→                  </label>
+   538→                  <Input
+   539→                    id="bk-name"
+   540→                    value={bookingForm.clientName}
+   541→                    onChange={(e) => setBookingForm({ ...bookingForm, clientName: e.target.value })}
+   542→                    placeholder="e.g. Lola Adewale"
+   543→                    className="mt-1 h-11 rounded-xl bg-muted/60 font-semibold"
+   544→                  />
+   545→                </div>
+   546→                <div>
+   547→                  <label htmlFor="bk-contact" className="text-[12px] font-extrabold text-foreground">
+   548→                    Email or phone
+   549→                  </label>
+   550→                  <Input
+   551→                    id="bk-contact"
+   552→                    value={bookingForm.clientContact}
+   553→                    onChange={(e) => setBookingForm({ ...bookingForm, clientContact: e.target.value })}
+   554→                    placeholder="So they can reach you"
+   555→                    className="mt-1 h-11 rounded-xl bg-muted/60 font-semibold"
+   556→                  />
+   557→                </div>
+   558→                <div>
+   559→                  <label htmlFor="bk-note" className="text-[12px] font-extrabold text-foreground">
+   560→                    Note <span className="font-semibold text-muted-foreground">(optional)</span>
+   561→                  </label>
+   562→                  <Textarea
+   563→                    id="bk-note"
+   564→                    value={bookingForm.note}
+   565→                    onChange={(e) => setBookingForm({ ...bookingForm, note: e.target.value.slice(0, 300) })}
+   566→                    placeholder={`Anything ${creator.name.split(" ")[0]} should know?`}
+   567→                    className="mt-1 min-h-16 rounded-xl bg-muted/60 font-semibold"
+   568→                  />
+   569→                </div>
+   570→              </div>
+   571→
+   572→              <Button className="h-12 w-full rounded-xl font-bold" disabled={busy} onClick={submitBooking}>
+   573→                {busy ? (
+   574→                  <Loader2 className="h-4.5 w-4.5 animate-spin" />
+   575→                ) : (
+   576→                  <>
+   577→                    Send booking request <ArrowRight className="ml-1 h-4.5 w-4.5" />
+   578→                  </>
+   579→                )}
+   580→              </Button>
+   581→            </>
+   582→          )}
+   583→        </DialogContent>
+   584→      </Dialog>
+   585→    </PublicFrame>
+   586→  );
+   587→}
+   588→
+   589→function formatDayLabel(date: string) {
+   590→  const d = new Date(`${date}T00:00:00`);
+   591→  if (Number.isNaN(d.getTime())) return date;
+   592→  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+   593→}
+   594→
+   595→/* ---------------- frame ---------------- */
+   596→
+   597→function PublicFrame({
+   598→  creator,
+   599→  onBook,
+   600→  children,
+   601→}: {
+   602→  creator: SafeUser;
+   603→  onBook: () => void;
+   604→  children: React.ReactNode;
+   605→}) {
+   606→  return (
+   607→    <div className="min-h-screen bg-[#edf3ef]">
+   608→      <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col bg-background shadow-[0_0_60px_rgba(14,31,51,0.10)] lg:max-w-4xl">
+   609→        <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur-md sm:px-6">
+   610→          <Logo />
+   611→          <button
+   612→            type="button"
+   613→            onClick={onBook}
+   614→            className="inline-flex items-center gap-1.5 rounded-full border border-accent bg-accent px-3.5 py-1.5 text-[13px] font-extrabold text-accent-foreground transition-colors hover:bg-primary hover:text-white"
+   615→          >
+   616→            <CalendarDays className="h-3.5 w-3.5" /> Book a session
+   617→          </button>
+   618→        </header>
+   619→        <main className="flex flex-1 flex-col">{children}</main>
+   620→        <p className="px-4 pb-6 text-center text-[11px] font-semibold text-muted-foreground">
+   621→          {creator.name.split(" ")[0]} uses DEAL for agreements, escrow payments and protected
+   622→          delivery.
+   623→        </p>
+   624→        <div className="pb-[env(safe-area-inset-bottom)]" />
+   625→      </div>
+   626→    </div>
+   627→  );
+   628→}
+   629→
+   630→/* ---------------- request form ---------------- */
+   631→
+   632→function RequestForm({
+   633→  creator,
+   634→  service,
+   635→  onBack,
+   636→  onSent,
+   637→}: {
+   638→  creator: SafeUser;
+   639→  service: Service;
+   640→  onBack: () => void;
+   641→  onSent: (ref: string) => void;
+   642→}) {
+   643→  const [form, setForm] = useState({
+   644→    clientName: "",
+   645→    clientContact: "",
+   646→    eventDate: "",
+   647→    location: "",
+   648→    description: "",
+   649→    notes: "",
+   650→  });
+   651→  const [busy, setBusy] = useState(false);
+   652→
+   653→  async function submit(e: React.FormEvent) {
+   654→    e.preventDefault();
+   655→    if (busy) return;
+   656→    if (!form.clientName.trim() || !form.clientContact.trim() || !form.description.trim()) {
+   657→      toast.error("Add your name, contact and a short project description.");
+   658→      return;
+   659→    }
+   660→    setBusy(true);
+   661→    try {
+   662→      const { request } = await api.sendRequest(creator.handle, {
+   663→        serviceId: service.id,
+   664→        clientName: form.clientName,
+   665→        clientContact: form.clientContact,
+   666→        eventDate: form.eventDate,
+   667→        location: form.location,
+   668→        budgetMin: Math.round(service.from * 0.8),
+   669→        budgetMax: Math.round(service.from * 1.3),
+   670→        description: form.description,
+   671→        notes: form.notes,
+   672→      });
+   673→      onSent(request.ref);
+   674→    } catch (err) {
+   675→      toast.error(err instanceof Error ? err.message : "Couldn't send your request.");
+   676→    } finally {
+   677→      setBusy(false);
+   678→    }
+   679→  }
+   680→
+   681→  return (
+   682→    <PublicFrame creator={creator} onBook={() => undefined}>
+   683→      <form onSubmit={submit} className="flex-1 px-4 pb-12 pt-5 sm:px-6 lg:py-10">
+   684→        <div className="mx-auto w-full max-w-md lg:max-w-lg">
+   685→          <button type="button" onClick={onBack} className="text-sm font-bold text-primary">
+   686→            ← Back to all services
+   687→          </button>
+   688→
+   689→          <div className="mt-4 rounded-2xl border border-border bg-card p-4">
+   690→            <div className="flex items-start justify-between gap-3">
+   691→              <div className="min-w-0">
+   692→                <p className="text-[16px] font-extrabold text-foreground">{service.title}</p>
+   693→                <p className="mt-0.5 text-[13px] font-medium text-muted-foreground">{service.desc}</p>
+   694→              </div>
+   695→              <div className="shrink-0 text-right">
+   696→                <p className="text-[10px] font-bold uppercase text-muted-foreground">From</p>
+   697→                <p className="text-[15px] font-extrabold text-primary">{formatNaira(service.from)}</p>
+   698→              </div>
+   699→            </div>
+   700→          </div>
+   701→
+   702→          <h1 className="mt-5 text-xl font-extrabold tracking-tight text-foreground lg:text-2xl">
+   703→            Tell {creator.name.split(" ")[0]} about your project
+   704→          </h1>
+   705→          <p className="mt-1 text-[14px] font-medium text-muted-foreground">
+   706→            The more details you provide, the better they can understand your needs.
+   707→          </p>
+   708→
+   709→          <div className="mt-5 space-y-4">
+   710→            <div>
+   711→              <label htmlFor="rq-name" className="text-[13px] font-extrabold text-foreground">
+   712→                Your name
+   713→              </label>
+   714→              <Input
+   715→                id="rq-name"
+   716→                value={form.clientName}
+   717→                onChange={(e) => setForm({ ...form, clientName: e.target.value })}
+   718→                placeholder="e.g. Lola & Tunde"
+   719→                className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   720→              />
+   721→            </div>
+   722→            <div>
+   723→              <label htmlFor="rq-contact" className="text-[13px] font-extrabold text-foreground">
+   724→                Email or phone
+   725→              </label>
+   726→              <Input
+   727→                id="rq-contact"
+   728→                value={form.clientContact}
+   729→                onChange={(e) => setForm({ ...form, clientContact: e.target.value })}
+   730→                placeholder="So they can reach you"
+   731→                className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   732→              />
+   733→            </div>
+   734→            <div className="grid gap-3 sm:grid-cols-2">
+   735→              <div>
+   736→                <label htmlFor="rq-date" className="text-[13px] font-extrabold text-foreground">
+   737→                  Event date
+   738→                </label>
+   739→                <Input
+   740→                  id="rq-date"
+   741→                  value={form.eventDate}
+   742→                  onChange={(e) => setForm({ ...form, eventDate: e.target.value })}
+   743→                  type="date"
+   744→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   745→                />
+   746→              </div>
+   747→              <div>
+   748→                <label htmlFor="rq-location" className="text-[13px] font-extrabold text-foreground">
+   749→                  Location
+   750→                </label>
+   751→                <Input
+   752→                  id="rq-location"
+   753→                  value={form.location}
+   754→                  onChange={(e) => setForm({ ...form, location: e.target.value })}
+   755→                  placeholder="e.g. Ikoyi, Lagos"
+   756→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   757→                />
+   758→              </div>
+   759→            </div>
+   760→            <div>
+   761→              <label htmlFor="rq-desc" className="text-[13px] font-extrabold text-foreground">
+   762→                Project description
+   763→              </label>
+   764→              <Textarea
+   765→                id="rq-desc"
+   766→                value={form.description}
+   767→                onChange={(e) => setForm({ ...form, description: e.target.value.slice(0, 500) })}
+   768→                placeholder="What do you have in mind? Any inspiration, ideas or specific requirements?"
+   769→                className="mt-1.5 min-h-24 rounded-xl bg-muted/60 font-semibold"
+   770→              />
+   771→            </div>
+   772→            <div>
+   773→              <label htmlFor="rq-notes" className="text-[13px] font-extrabold text-foreground">
+   774→                Additional notes <span className="font-semibold text-muted-foreground">(optional)</span>
+   775→              </label>
+   776→              <Textarea
+   777→                id="rq-notes"
+   778→                value={form.notes}
+   779→                onChange={(e) => setForm({ ...form, notes: e.target.value.slice(0, 300) })}
+   780→                placeholder="Budget range, preferred time, anything else…"
+   781→                className="mt-1.5 min-h-16 rounded-xl bg-muted/60 font-semibold"
+   782→              />
+   783→            </div>
+   784→          </div>
+   785→
+   786→          <Button type="submit" disabled={busy} className="mt-6 h-13 w-full rounded-xl text-[15px] font-bold">
+   787→            {busy ? (
+   788→              <Loader2 className="h-4.5 w-4.5 animate-spin" />
+   789→            ) : (
+   790→              <>
+   791→                Send request <ArrowRight className="ml-1 h-4.5 w-4.5" />
+   792→              </>
+   793→            )}
+   794→          </Button>
+   795→          <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs font-semibold text-muted-foreground">
+   796→            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+   797→            You&rsquo;ll review and agree on everything before any payment.
+   798→          </p>
+   799→        </div>
+   800→      </form>
+   801→    </PublicFrame>
+   802→  );
+   803→}
+   804→

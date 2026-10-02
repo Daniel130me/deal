@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import {
   BellRing,
-  CalendarCheck,
+  FileLock,
   FileText,
   Layers,
   ShieldCheck,
@@ -15,7 +15,7 @@ const FEATURES = [
   {
     title: "Protected payments",
     description:
-      "Clients pay into Payaza escrow before you start. You're covered before you move a pixel.",
+      "Clients pay by card, transfer or USSD via Flutterwave or Paystack — straight into DEAL escrow before you start. You're covered before you move a pixel.",
     icon: ShieldCheck,
     iconClass: "text-primary",
     tileClass: "bg-accent",
@@ -47,18 +47,18 @@ const FEATURES = [
   {
     title: "Escrow that releases on approval",
     description:
-      "Money moves only when your client says the work is done — automatically, straight to your Payaza payout.",
+      "Every payment sits in DEAL escrow — not the gateway's. Money moves only when your client approves the work, then it's yours automatically.",
     icon: Unlock,
     iconClass: "text-violet-600",
     tileClass: "bg-violet-50",
   },
   {
-    title: "Bookings & your channels",
+    title: "Protected file delivery",
     description:
-      "Clients book sessions from your public page and reach you on WhatsApp, Instagram, Telegram, email — you choose.",
-    icon: CalendarCheck,
-    iconClass: "text-primary",
-    tileClass: "bg-accent",
+      "Clients get watermarked, reduced-quality previews until the deal is fully paid — full-quality files unlock on approval + full payment.",
+    icon: FileLock,
+    iconClass: "text-teal-600",
+    tileClass: "bg-teal-50",
   },
 ];
 

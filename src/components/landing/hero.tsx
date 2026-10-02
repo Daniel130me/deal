@@ -70,6 +70,26 @@ function DealMockupCard() {
         </div>
       </div>
 
+      {/* Payment rails */}
+      <div className="mt-3.5 flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
+        Payment processed by
+        <img
+          src="/flutterwave/logo.svg"
+          alt="Flutterwave"
+          width={86}
+          height={16}
+          className="h-4 w-auto"
+        />
+        <span className="text-muted-foreground/60">&</span>
+        <img
+          src="/paystack/logo.svg"
+          alt="Paystack"
+          width={69}
+          height={16}
+          className="h-4 w-auto"
+        />
+      </div>
+
       {/* Milestones */}
       <ul className="mt-5 space-y-3">
         <li className="flex items-center gap-3">
@@ -109,7 +129,7 @@ function DealMockupCard() {
       <div className="mt-5 flex items-center gap-2.5 rounded-xl bg-secondary px-4 py-3">
         <ShieldCheck className="h-4.5 w-4.5 shrink-0 text-primary" />
         <p className="text-[13px] font-semibold text-secondary-foreground">
-          Protected by Payaza escrow — money releases only on approval
+          Protected by DEAL escrow — money releases only on approval
         </p>
       </div>
     </div>
@@ -172,7 +192,7 @@ export function Hero() {
             className="mt-6 text-lg leading-relaxed text-muted-foreground"
           >
             Send clear agreements, get paid in deposits or installments —
-            every naira waits in escrow until your client approves the work.
+            every naira waits in DEAL escrow until your client approves the work.
           </motion.p>
 
           <motion.div
@@ -207,7 +227,7 @@ export function Hero() {
             {[
               "No monthly fees",
               "Money released the moment work is approved",
-              "Powered by Payaza payments",
+              "Payments via Flutterwave & Paystack",
             ].map((item) => (
               <li
                 key={item}
@@ -237,7 +257,7 @@ export function Hero() {
               </span>
               <div className="leading-tight">
                 <p className="text-[11px] font-semibold text-muted-foreground">
-                  Held in Payaza escrow
+                  Held in DEAL escrow
                 </p>
                 <p className="text-[13px] font-extrabold text-foreground">
                   ₦225,000

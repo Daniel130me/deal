@@ -11,6 +11,7 @@ import {
   Loader2,
   Plus,
   Share2,
+  ShieldCheck,
   Star,
   X,
 } from "lucide-react";
@@ -35,21 +36,18 @@ import {
 import { api } from "@/lib/api";
 import { useApp } from "@/components/app/context";
 import { CHANNEL_META, CHANNEL_TYPES } from "@/lib/channels";
-import { formatNaira, type ChannelType, type CreatorChannel } from "@/lib/types";
+import {
+  CREATOR_CRAFTS,
+  PROVIDERS,
+  PROVIDER_META,
+  formatNaira,
+  type ChannelType,
+  type CreatorChannel,
+  type PaymentProvider,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const ONBOARD_STEPS = ["Profile", "Services", "Preview", "Publish"];
-
-const CRAFTS = [
-  "Photographer",
-  "Graphic Designer",
-  "Videographer",
-  "Writer",
-  "Developer",
-  "Illustrator",
-  "Voice Artist",
-  "Motion Designer",
-];
 
 export default function OnboardingScreen() {
   const { user, setUser, navigate } = useApp();
@@ -62,6 +60,9 @@ export default function OnboardingScreen() {
   const [location, setLocation] = useState(user?.location ?? "");
   const [bio, setBio] = useState(user?.bio ?? "");
   const [craftOpen, setCraftOpen] = useState(false);
+  const [provider, setProvider] = useState<PaymentProvider>(
+    user?.preferredProvider === "paystack" ? "paystack" : "flutterwave"
+  );
 
   // channels state — "How clients reach you"
   const [channels, setChannels] = useState<CreatorChannel[]>(() => {
@@ -120,6 +121,7 @@ export default function OnboardingScreen() {
         location: location.trim(),
         bio: bio.trim(),
         channels,
+        preferredProvider: provider,
       });
       setUser(updated);
       setStep(1);
@@ -154,7 +156,11 @@ export default function OnboardingScreen() {
     if (!user) return;
     setBusy(true);
     try {
-      const { user: updated } = await api.updateUser(user.id, { onboarded: true, channels });
+      const { user: updated } = await api.updateUser(user.id, {
+        onboarded: true,
+        channels,
+        preferredProvider: provider,
+      });
       setUser(updated);
       setStep(3);
     } catch (err) {
@@ -282,7 +288,7 @@ export default function OnboardingScreen() {
                 </button>
                 {craftOpen && (
                   <ul className="absolute z-20 mt-1 w-full rounded-xl border border-border bg-white p-1 shadow-lg">
-                    {CRAFTS.map((c) => (
+                    {CREATOR_CRAFTS.map((c) => (
                       <li key={c}>
                         <button
                           type="button"
@@ -417,6 +423,56 @@ export default function OnboardingScreen() {
                     Tap the star to set your primary channel — that&rsquo;s the one shown first.
                   </p>
                 </div>
+              </div>
+
+              {/* preferred payment rail */}
+              <div>
+                <label className="text-[13px] font-extrabold text-foreground">
+                  Preferred payment rail
+                </label>
+                <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+                  How clients pay you on DEAL — pick your default.
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-2.5">
+                  {PROVIDERS.map((p) => {
+                    const meta = PROVIDER_META[p];
+                    const active = p === provider;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => setProvider(p)}
+                        className={cn(
+                          "rounded-2xl border p-3.5 text-left transition-all",
+                          active
+                            ? "border-primary bg-accent ring-2 ring-primary/15"
+                            : "border-border bg-card hover:border-primary/40"
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <img src={meta.logo} alt={meta.label} className="h-5 w-auto" />
+                          {active ? (
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-white">
+                              <Check className="h-3 w-3" strokeWidth={3} />
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-2 text-[13px] font-extrabold text-foreground">{meta.label}</p>
+                        <p className="mt-0.5 text-[11px] font-medium leading-relaxed text-muted-foreground">
+                          Process card, transfer &amp; USSD payments
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 flex items-start gap-1.5 rounded-xl bg-secondary p-3 text-[11px] font-medium leading-relaxed text-muted-foreground">
+                  <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                  <span>
+                    Escrow is still managed by <span className="font-bold text-foreground">DEAL</span>{" "}
+                    — the rail you pick only processes the charges. Clients can pay via either one.
+                  </span>
+                </p>
               </div>
             </div>
 

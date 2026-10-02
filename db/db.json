@@ -28,29 +28,8 @@
       "bio": "Story-driven photography for brands, weddings and people. 6 years behind the lens, 200+ happy clients across Nigeria.",
       "verified": true,
       "onboarded": true,
-      "createdAt": "2026-01-27T14:37:32.953Z"
-    },
-    {
-      "id": "u_1f4329dd8117",
-      "name": "Oluwagbenga Kosoko",
-      "handle": "oluwagbenga-kosoko",
-      "email": "kosokodaniel@gmail.com",
-      "phone": "",
-      "whatsapp": "",
-      "channels": [
-        {
-          "type": "email",
-          "value": "kosokodaniel@gmail.com",
-          "primary": true
-        }
-      ],
-      "password": "Daniel130me",
-      "craft": "",
-      "location": "",
-      "bio": "",
-      "verified": false,
-      "onboarded": false,
-      "createdAt": "2026-09-04T18:16:46.065Z"
+      "preferredProvider": "flutterwave",
+      "createdAt": "2026-02-24T02:18:33.249Z"
     }
   ],
   "services": [
@@ -122,14 +101,14 @@
       "serviceId": "sv_prewedding",
       "clientName": "Lola Adeyemi",
       "clientContact": "+234 802 555 1212",
-      "eventDate": "2026-10-09",
+      "eventDate": "2026-11-06",
       "location": "Ikoyi, Lagos",
       "budgetMin": 100000,
       "budgetMax": 150000,
       "description": "We got engaged in December and want a pre-wedding session that feels like us — warm, playful, maybe Lekki conservation centre at golden hour.",
       "notes": "Fiance is camera-shy, so a relaxed vibe is key.",
       "status": "new",
-      "createdAt": "2026-09-02T14:37:32.953Z"
+      "createdAt": "2026-09-30T02:18:33.249Z"
     },
     {
       "id": "r_tech",
@@ -138,14 +117,14 @@
       "serviceId": "sv_event",
       "clientName": "TechConnect Africa",
       "clientContact": "events@techconnect.africa",
-      "eventDate": "2026-09-25",
+      "eventDate": "2026-10-23",
       "location": "Landmark Centre, Victoria Island",
       "budgetMin": 120000,
       "budgetMax": 200000,
       "description": "Annual tech summit — about 300 guests. We need arrivals, panel sessions, networking and the after-party covered, plus a quick highlight set for press.",
       "notes": "Press team needs 10 photos within 24 hours.",
       "status": "new",
-      "createdAt": "2026-09-03T14:37:32.953Z"
+      "createdAt": "2026-10-01T02:18:33.249Z"
     },
     {
       "id": "r_glow",
@@ -154,14 +133,14 @@
       "serviceId": "sv_portrait",
       "clientName": "Glow Skincare",
       "clientContact": "+234 809 444 2020",
-      "eventDate": "2026-09-18",
+      "eventDate": "2026-10-16",
       "location": "Lekki Phase 1, Lagos",
       "budgetMin": 50000,
       "budgetMax": 90000,
       "description": "Founder portraits + team headshots for our new website launch.",
       "notes": "",
       "status": "replied",
-      "createdAt": "2026-08-29T14:37:32.953Z"
+      "createdAt": "2026-09-26T02:18:33.249Z"
     }
   ],
   "deals": [
@@ -178,7 +157,7 @@
         "contact": "+234 802 555 1212"
       },
       "summary": "Golden-hour couple session at Lekki Conservation Centre with 2 outfit changes and a same-week private gallery.",
-      "eventDate": "2026-10-09",
+      "eventDate": "2026-11-06",
       "location": "Lekki Conservation Centre, Lagos",
       "message": "Hi Lola! Thank you for reaching out on DEAL. Here is the full plan for your pre-wedding session — deposit is all I need to lock the date.",
       "scope": "Pre-shoot styling call, location scouting, 4-hour golden-hour session, 2 outfit changes, same-week gallery delivery.",
@@ -191,39 +170,39 @@
       "price": 120000,
       "depositPercent": 50,
       "installmentsCount": 2,
-      "startDate": "2026-10-07",
-      "dueDate": "2026-10-13",
+      "startDate": "2026-11-04",
+      "dueDate": "2026-11-10",
       "revisions": 2,
       "status": "active",
       "events": [
         {
-          "at": "2026-08-28T14:37:32.953Z",
+          "at": "2026-09-25T02:18:33.249Z",
           "type": "created",
           "label": "Deal created from Lola's request",
           "actor": "creator"
         },
         {
-          "at": "2026-08-28T14:37:32.953Z",
+          "at": "2026-09-25T02:18:33.249Z",
           "type": "sent",
           "label": "Deal sent to Lola Adeyemi",
           "actor": "creator"
         },
         {
-          "at": "2026-08-29T14:37:32.953Z",
+          "at": "2026-09-26T02:18:33.249Z",
           "type": "accepted",
           "label": "Deal accepted",
           "actor": "client"
         },
         {
-          "at": "2026-08-29T14:37:32.953Z",
+          "at": "2026-09-26T02:18:33.249Z",
           "type": "deposit_paid",
-          "label": "Deposit paid — ₦60,000 secured in Payaza escrow (ref PZ-8KD92MAQ)",
+          "label": "Deposit paid — ₦60,000 held in DEAL escrow via Paystack (ref PSK-8KD92MAQ)",
           "actor": "client"
         },
         {
-          "at": "2026-09-02T14:37:32.953Z",
+          "at": "2026-09-30T02:18:33.249Z",
           "type": "balance_paid",
-          "label": "Installment 1 of 2 paid — ₦30,000 secured in Payaza escrow (ref PZ-3FJ81XWP)",
+          "label": "Installment 1 of 2 paid — ₦30,000 held in DEAL escrow via Flutterwave (ref FLW-3FJ81XWP)",
           "actor": "client"
         }
       ],
@@ -235,10 +214,10 @@
           "amount": 60000,
           "method": "card",
           "methodLabel": "Card payment",
-          "provider": "payaza",
-          "reference": "PZ-8KD92MAQ",
+          "provider": "paystack",
+          "reference": "PSK-8KD92MAQ",
           "status": "held",
-          "paidAt": "2026-08-29T14:37:32.953Z"
+          "paidAt": "2026-09-26T02:18:33.249Z"
         },
         {
           "id": "p_lola_inst1",
@@ -247,18 +226,18 @@
           "amount": 30000,
           "method": "transfer",
           "methodLabel": "Bank transfer",
-          "provider": "payaza",
-          "reference": "PZ-3FJ81XWP",
+          "provider": "flutterwave",
+          "reference": "FLW-3FJ81XWP",
           "status": "held",
-          "paidAt": "2026-09-02T14:37:32.953Z"
+          "paidAt": "2026-09-30T02:18:33.249Z"
         }
       ],
       "deliveries": [],
       "finalFiles": [],
-      "createdAt": "2026-08-28T14:37:32.953Z",
-      "sentAt": "2026-08-28T14:37:32.953Z",
-      "acceptedAt": "2026-08-29T14:37:32.953Z",
-      "depositPaidAt": "2026-08-29T14:37:32.953Z"
+      "createdAt": "2026-09-25T02:18:33.249Z",
+      "sentAt": "2026-09-25T02:18:33.249Z",
+      "acceptedAt": "2026-09-26T02:18:33.249Z",
+      "depositPaidAt": "2026-09-26T02:18:33.249Z"
     },
     {
       "id": "d_deal002",
@@ -273,7 +252,7 @@
         "contact": "+234 809 444 2020"
       },
       "summary": "Founder portraits and product-in-hand shots for Glow Skincare's website relaunch, studio session.",
-      "eventDate": "2026-09-18",
+      "eventDate": "2026-10-16",
       "location": "Studio 9, Lekki Phase 1, Lagos",
       "message": "Hi Amara, lovely speaking with you. This covers the founder portraits and team headshots we discussed — accept and pay the deposit to lock the studio date.",
       "scope": "Studio session (3 hours), 2 backdrop looks, founder portraits + 4 team headshots, retouching included.",
@@ -286,19 +265,19 @@
       "price": 60000,
       "depositPercent": 50,
       "installmentsCount": 2,
-      "startDate": "2026-09-18",
-      "dueDate": "2026-09-22",
+      "startDate": "2026-10-16",
+      "dueDate": "2026-10-20",
       "revisions": 2,
       "status": "sent",
       "events": [
         {
-          "at": "2026-09-03T14:37:32.953Z",
+          "at": "2026-10-01T02:18:33.249Z",
           "type": "created",
           "label": "Deal created for Glow Skincare",
           "actor": "creator"
         },
         {
-          "at": "2026-09-03T14:37:32.953Z",
+          "at": "2026-10-01T02:18:33.249Z",
           "type": "sent",
           "label": "Deal sent to Amara Okafor",
           "actor": "creator"
@@ -307,8 +286,8 @@
       "payments": [],
       "deliveries": [],
       "finalFiles": [],
-      "createdAt": "2026-09-03T14:37:32.953Z",
-      "sentAt": "2026-09-03T14:37:32.953Z"
+      "createdAt": "2026-10-01T02:18:33.249Z",
+      "sentAt": "2026-10-01T02:18:33.249Z"
     },
     {
       "id": "d_deal003",
@@ -323,7 +302,7 @@
         "contact": "events@techconnect.africa"
       },
       "summary": "Full-day coverage of the annual summit at Landmark Centre — 300 guests, panels, networking and after-party.",
-      "eventDate": "2026-09-25",
+      "eventDate": "2026-10-23",
       "location": "Landmark Centre, Victoria Island, Lagos",
       "message": "Hello! Here's the coverage plan for TechConnect Summit. Everything you approved is inside — the 24-hour press set is included.",
       "scope": "8 hours on-site coverage, 2 photographers' shot list, 48-hour highlight set, press-priority edits within 24 hours.",
@@ -336,37 +315,37 @@
       "price": 150000,
       "depositPercent": 50,
       "installmentsCount": 2,
-      "startDate": "2026-09-25",
-      "dueDate": "2026-09-30",
+      "startDate": "2026-10-23",
+      "dueDate": "2026-10-28",
       "revisions": 2,
       "status": "delivered",
       "events": [
         {
-          "at": "2026-08-26T14:37:32.953Z",
+          "at": "2026-09-23T02:18:33.249Z",
           "type": "created",
           "label": "Deal created from TechConnect's request",
           "actor": "creator"
         },
         {
-          "at": "2026-08-26T14:37:32.953Z",
+          "at": "2026-09-23T02:18:33.249Z",
           "type": "sent",
           "label": "Deal sent to TechConnect Africa",
           "actor": "creator"
         },
         {
-          "at": "2026-08-27T14:37:32.953Z",
+          "at": "2026-09-24T02:18:33.249Z",
           "type": "accepted",
           "label": "Deal accepted",
           "actor": "client"
         },
         {
-          "at": "2026-08-27T14:37:32.953Z",
+          "at": "2026-09-24T02:18:33.249Z",
           "type": "deposit_paid",
-          "label": "Deposit paid — ₦75,000 secured in Payaza escrow (ref PZ-9QM41NTV)",
+          "label": "Deposit paid — ₦75,000 held in DEAL escrow via Flutterwave (ref FLW-9QM41NTV)",
           "actor": "client"
         },
         {
-          "at": "2026-09-03T14:37:32.953Z",
+          "at": "2026-10-01T02:18:33.249Z",
           "type": "delivered",
           "label": "Delivery submitted for review",
           "actor": "creator"
@@ -380,10 +359,10 @@
           "amount": 75000,
           "method": "ussd",
           "methodLabel": "USSD payment",
-          "provider": "payaza",
-          "reference": "PZ-9QM41NTV",
+          "provider": "flutterwave",
+          "reference": "FLW-9QM41NTV",
           "status": "held",
-          "paidAt": "2026-08-27T14:37:32.953Z"
+          "paidAt": "2026-09-24T02:18:33.249Z"
         }
       ],
       "deliveries": [
@@ -404,15 +383,15 @@
               "kind": "ZIP"
             }
           ],
-          "submittedAt": "2026-09-03T14:37:32.953Z"
+          "submittedAt": "2026-10-01T02:18:33.249Z"
         }
       ],
       "finalFiles": [],
-      "createdAt": "2026-08-26T14:37:32.953Z",
-      "sentAt": "2026-08-26T14:37:32.953Z",
-      "acceptedAt": "2026-08-27T14:37:32.953Z",
-      "depositPaidAt": "2026-08-27T14:37:32.953Z",
-      "deliveredAt": "2026-09-03T14:37:32.953Z"
+      "createdAt": "2026-09-23T02:18:33.249Z",
+      "sentAt": "2026-09-23T02:18:33.249Z",
+      "acceptedAt": "2026-09-24T02:18:33.249Z",
+      "depositPaidAt": "2026-09-24T02:18:33.249Z",
+      "deliveredAt": "2026-10-01T02:18:33.249Z"
     },
     {
       "id": "d_deal004",
@@ -427,7 +406,7 @@
         "contact": "+234 803 777 9090"
       },
       "summary": "Personal-brand studio portraits for Ezekiel's coaching business relaunch.",
-      "eventDate": "2026-09-07",
+      "eventDate": "2026-10-05",
       "location": "Studio 9, Lekki Phase 1, Lagos",
       "message": "Brother Ezekiel — here's our agreed plan. Paid in full upfront, so once you approve the work everything releases automatically.",
       "scope": "Studio session (2 hours), 1 backdrop look, 15 edited portraits, retouching included.",
@@ -439,51 +418,51 @@
       "price": 120000,
       "depositPercent": 100,
       "installmentsCount": 0,
-      "startDate": "2026-09-07",
-      "dueDate": "2026-09-09",
+      "startDate": "2026-10-05",
+      "dueDate": "2026-10-07",
       "revisions": 1,
       "status": "approved",
       "events": [
         {
-          "at": "2026-08-23T14:37:32.953Z",
+          "at": "2026-09-20T02:18:33.249Z",
           "type": "created",
           "label": "Deal created for Ezekiel Danjuma",
           "actor": "creator"
         },
         {
-          "at": "2026-08-23T14:37:32.953Z",
+          "at": "2026-09-20T02:18:33.249Z",
           "type": "sent",
           "label": "Deal sent to Ezekiel Danjuma",
           "actor": "creator"
         },
         {
-          "at": "2026-08-24T14:37:32.953Z",
+          "at": "2026-09-21T02:18:33.249Z",
           "type": "accepted",
           "label": "Deal accepted",
           "actor": "client"
         },
         {
-          "at": "2026-08-24T14:37:32.953Z",
+          "at": "2026-09-21T02:18:33.249Z",
           "type": "deposit_paid",
-          "label": "Full payment paid — ₦120,000 secured in Payaza escrow (ref PZ-77AXQ2LM)",
+          "label": "Full payment paid — ₦120,000 held in DEAL escrow via Paystack (ref PSK-77AXQ2LM)",
           "actor": "client"
         },
         {
-          "at": "2026-08-31T14:37:32.953Z",
+          "at": "2026-09-28T02:18:33.249Z",
           "type": "delivered",
           "label": "Delivery submitted for review",
           "actor": "creator"
         },
         {
-          "at": "2026-09-01T14:37:32.953Z",
+          "at": "2026-09-29T02:18:33.249Z",
           "type": "approved",
           "label": "Work approved by client — completed",
           "actor": "client"
         },
         {
-          "at": "2026-09-01T14:37:32.953Z",
+          "at": "2026-09-29T02:18:33.249Z",
           "type": "payment_released",
-          "label": "₦120,000 released from escrow to the creator's Payaza payout account",
+          "label": "₦120,000 released from escrow to the creator's payout account",
           "actor": "system"
         }
       ],
@@ -495,11 +474,11 @@
           "amount": 120000,
           "method": "card",
           "methodLabel": "Card payment",
-          "provider": "payaza",
-          "reference": "PZ-77AXQ2LM",
+          "provider": "paystack",
+          "reference": "PSK-77AXQ2LM",
           "status": "released",
-          "paidAt": "2026-08-24T14:37:32.953Z",
-          "releasedAt": "2026-09-01T14:37:32.953Z"
+          "paidAt": "2026-09-21T02:18:33.249Z",
+          "releasedAt": "2026-09-29T02:18:33.249Z"
         }
       ],
       "deliveries": [
@@ -514,17 +493,17 @@
               "kind": "ZIP"
             }
           ],
-          "submittedAt": "2026-08-31T14:37:32.953Z"
+          "submittedAt": "2026-09-28T02:18:33.249Z"
         }
       ],
       "finalFiles": [],
-      "createdAt": "2026-08-23T14:37:32.953Z",
-      "sentAt": "2026-08-23T14:37:32.953Z",
-      "acceptedAt": "2026-08-24T14:37:32.953Z",
-      "depositPaidAt": "2026-08-24T14:37:32.953Z",
-      "deliveredAt": "2026-08-31T14:37:32.953Z",
-      "approvedAt": "2026-09-01T14:37:32.953Z",
-      "paymentReleasedAt": "2026-09-01T14:37:32.953Z"
+      "createdAt": "2026-09-20T02:18:33.249Z",
+      "sentAt": "2026-09-20T02:18:33.249Z",
+      "acceptedAt": "2026-09-21T02:18:33.249Z",
+      "depositPaidAt": "2026-09-21T02:18:33.249Z",
+      "deliveredAt": "2026-09-28T02:18:33.249Z",
+      "approvedAt": "2026-09-29T02:18:33.249Z",
+      "paymentReleasedAt": "2026-09-29T02:18:33.249Z"
     },
     {
       "id": "d_deal005",
@@ -539,7 +518,7 @@
         "contact": "+234 805 222 3344"
       },
       "summary": "Cinematic walkthrough video of a 4-bedroom terrace for a realtor's listing.",
-      "eventDate": "2026-08-19",
+      "eventDate": "2026-09-16",
       "location": "Chevron Drive, Lekki, Lagos",
       "message": "Mr Chidi — full plan for the walkthrough video as agreed. It was a pleasure.",
       "scope": "On-site cinematic walkthrough (3 hours), drone shots, licensed music, vertical + landscape cuts.",
@@ -552,79 +531,79 @@
       "price": 80000,
       "depositPercent": 50,
       "installmentsCount": 1,
-      "startDate": "2026-08-19",
-      "dueDate": "2026-08-24",
+      "startDate": "2026-09-16",
+      "dueDate": "2026-09-21",
       "revisions": 2,
       "status": "completed",
       "events": [
         {
-          "at": "2026-08-11T14:37:32.953Z",
+          "at": "2026-09-08T02:18:33.249Z",
           "type": "created",
           "label": "Deal created for Chidi Bello",
           "actor": "creator"
         },
         {
-          "at": "2026-08-11T14:37:32.953Z",
+          "at": "2026-09-08T02:18:33.249Z",
           "type": "sent",
           "label": "Deal sent to Chidi Bello",
           "actor": "creator"
         },
         {
-          "at": "2026-08-12T14:37:32.953Z",
+          "at": "2026-09-09T02:18:33.249Z",
           "type": "accepted",
           "label": "Deal accepted",
           "actor": "client"
         },
         {
-          "at": "2026-08-12T14:37:32.953Z",
+          "at": "2026-09-09T02:18:33.249Z",
           "type": "deposit_paid",
-          "label": "Deposit paid — ₦40,000 secured in Payaza escrow (ref PZ-5HTR29KD)",
+          "label": "Deposit paid — ₦40,000 held in DEAL escrow via Paystack (ref PSK-5HTR29KD)",
           "actor": "client"
         },
         {
-          "at": "2026-08-19T14:37:32.953Z",
+          "at": "2026-09-16T02:18:33.249Z",
           "type": "delivered",
           "label": "Delivery submitted for review",
           "actor": "creator"
         },
         {
-          "at": "2026-08-23T14:37:32.953Z",
+          "at": "2026-09-20T02:18:33.249Z",
           "type": "changes_requested",
           "label": "Revision requested: “Make the opening drone shot slower”",
           "actor": "client"
         },
         {
-          "at": "2026-08-25T14:37:32.953Z",
+          "at": "2026-09-22T02:18:33.249Z",
           "type": "delivered",
           "label": "Revised delivery submitted",
           "actor": "creator"
         },
         {
-          "at": "2026-08-26T14:37:32.953Z",
+          "at": "2026-09-23T02:18:33.249Z",
           "type": "approved",
           "label": "Work approved by client — completed",
           "actor": "client"
         },
         {
-          "at": "2026-08-26T14:37:32.953Z",
+          "at": "2026-09-23T02:18:33.249Z",
           "type": "payment_released",
-          "label": "₦40,000 released from escrow to the creator's Payaza payout account",
+          "label": "₦40,000 released from escrow to the creator's payout account",
           "actor": "system"
         },
         {
-          "at": "2026-08-27T14:37:32.953Z",
+          "at": "2026-09-24T02:18:33.249Z",
           "type": "balance_paid",
-          "label": "Balance installment paid — ₦40,000 received by creator (work already approved, ref PZ-1WYB64FS)",
+          "label": "Balance installment paid — ₦40,000 received by creator instantly (work already approved, ref FLW-1WYB64FS)",
           "actor": "client"
         },
         {
-          "at": "2026-08-28T14:37:32.953Z",
+          "at": "2026-09-25T02:18:33.249Z",
           "type": "files_released",
           "label": "Final files released to client",
           "actor": "creator"
         },
         {
-          "at": "2026-08-29T14:37:32.953Z",
+          "at": "2026-09-26T02:18:33.249Z",
           "type": "completed",
           "label": "Client downloaded final files and left a 5-star review",
           "actor": "client"
@@ -638,11 +617,11 @@
           "amount": 40000,
           "method": "card",
           "methodLabel": "Card payment",
-          "provider": "payaza",
-          "reference": "PZ-5HTR29KD",
+          "provider": "paystack",
+          "reference": "PSK-5HTR29KD",
           "status": "released",
-          "paidAt": "2026-08-12T14:37:32.953Z",
-          "releasedAt": "2026-08-26T14:37:32.953Z"
+          "paidAt": "2026-09-09T02:18:33.249Z",
+          "releasedAt": "2026-09-23T02:18:33.249Z"
         },
         {
           "id": "p_lekki_bal",
@@ -651,11 +630,11 @@
           "amount": 40000,
           "method": "transfer",
           "methodLabel": "Bank transfer",
-          "provider": "payaza",
-          "reference": "PZ-1WYB64FS",
+          "provider": "flutterwave",
+          "reference": "FLW-1WYB64FS",
           "status": "released",
-          "paidAt": "2026-08-27T14:37:32.953Z",
-          "releasedAt": "2026-08-27T14:37:32.953Z"
+          "paidAt": "2026-09-24T02:18:33.249Z",
+          "releasedAt": "2026-09-24T02:18:33.249Z"
         }
       ],
       "deliveries": [
@@ -670,7 +649,7 @@
               "kind": "MP4"
             }
           ],
-          "submittedAt": "2026-08-19T14:37:32.953Z"
+          "submittedAt": "2026-09-16T02:18:33.249Z"
         },
         {
           "id": "dl_lekki2",
@@ -683,7 +662,7 @@
               "kind": "MP4"
             }
           ],
-          "submittedAt": "2026-08-25T14:37:32.953Z"
+          "submittedAt": "2026-09-22T02:18:33.249Z"
         }
       ],
       "finalFiles": [
@@ -706,16 +685,16 @@
           "kind": "ZIP"
         }
       ],
-      "createdAt": "2026-08-11T14:37:32.953Z",
-      "sentAt": "2026-08-11T14:37:32.953Z",
-      "acceptedAt": "2026-08-12T14:37:32.953Z",
-      "depositPaidAt": "2026-08-12T14:37:32.953Z",
-      "deliveredAt": "2026-08-25T14:37:32.953Z",
-      "approvedAt": "2026-08-26T14:37:32.953Z",
-      "paymentReleasedAt": "2026-08-26T14:37:32.953Z",
-      "balancePaidAt": "2026-08-27T14:37:32.953Z",
-      "filesReleasedAt": "2026-08-28T14:37:32.953Z",
-      "completedAt": "2026-08-29T14:37:32.953Z"
+      "createdAt": "2026-09-08T02:18:33.249Z",
+      "sentAt": "2026-09-08T02:18:33.249Z",
+      "acceptedAt": "2026-09-09T02:18:33.249Z",
+      "depositPaidAt": "2026-09-09T02:18:33.249Z",
+      "deliveredAt": "2026-09-22T02:18:33.249Z",
+      "approvedAt": "2026-09-23T02:18:33.249Z",
+      "paymentReleasedAt": "2026-09-23T02:18:33.249Z",
+      "balancePaidAt": "2026-09-24T02:18:33.249Z",
+      "filesReleasedAt": "2026-09-25T02:18:33.249Z",
+      "completedAt": "2026-09-26T02:18:33.249Z"
     }
   ],
   "bookings": [
@@ -727,11 +706,11 @@
       "sessionType": "Portrait Session",
       "clientName": "Lola Adeyemi",
       "clientContact": "+234 802 555 1212",
-      "date": "2026-09-07",
+      "date": "2026-10-05",
       "time": "11:00",
       "note": "Want to visit the studio and talk through our pre-wedding shoot ideas before we book the date.",
       "status": "requested",
-      "createdAt": "2026-09-03T14:37:32.953Z"
+      "createdAt": "2026-10-01T02:18:33.249Z"
     },
     {
       "id": "bk_002",
@@ -741,11 +720,11 @@
       "sessionType": "Event Photography",
       "clientName": "TechConnect Africa",
       "clientContact": "events@techconnect.africa",
-      "date": "2026-09-10",
+      "date": "2026-10-08",
       "time": "09:00",
       "note": "Venue walkthrough at Landmark Centre to plan the summit shot list.",
       "status": "confirmed",
-      "createdAt": "2026-09-01T14:37:32.953Z"
+      "createdAt": "2026-09-29T02:18:33.249Z"
     },
     {
       "id": "bk_003",
@@ -755,11 +734,11 @@
       "sessionType": "General consultation",
       "clientName": "Glow Skincare",
       "clientContact": "+234 809 444 2020",
-      "date": "2026-08-29",
+      "date": "2026-09-26",
       "time": "14:00",
       "note": "Brand planning call ahead of the website relaunch shoot.",
       "status": "completed",
-      "createdAt": "2026-08-26T14:37:32.953Z"
+      "createdAt": "2026-09-23T02:18:33.249Z"
     }
   ],
   "settings": {

@@ -66,6 +66,7 @@ export async function POST(request: Request) {
     bio: "",
     verified: false,
     onboarded: false,
+    preferredProvider: "flutterwave",
     createdAt: new Date().toISOString(),
   };
 
