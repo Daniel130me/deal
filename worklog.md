@@ -265,3 +265,22 @@ Work Log:
 
 Stage Summary:
 - Hydration warning from browser-extension-injected attributes is now suppressed on <body>; no app code affected. Note: pending major changes from user (Flutterwave+Paystack dual gateway, system-managed escrow, 7-creator niching, file protection before full payment) are still to be implemented.
+
+---
+Task ID: 8
+Agent: Z.ai Code (main)
+Task: Milestone completion — craft-aware wizard presets, copy sweep, full E2E verification, commit & push
+
+Work Log:
+- Added CRAFT_PRESETS (tap-to-add deliverable suggestions for all 7 crafts) + CRAFT_SCOPE_HINTS (craft-specific scope placeholder) to wizard.tsx; suggestion chips auto-hide once added
+- Copy consistency sweep across landing FAQ, public page, dashboard, money screen: all escrow wording already follows "DEAL holds funds, Flutterwave/Paystack only process charges" — no changes needed
+- Verified gateway preference chain: onboarding picker → user.preferredProvider → checkout preselect (client can still switch); seed has paystack for u_tobi
+- Reset seed revealed db.json/seed.json divergence on preferredProvider (flutterwave vs paystack) — synced db.json to seed (paystack)
+- bun run lint clean
+- Full E2E via agent-browser, desktop 1440x900: login → DEAL-002 → Preview as client → Accept → gateway screen (Paystack preselected "PREFERRED BY TOBI A.", switched to Flutterwave) → test-card deposit ₦30,000 → "secured in escrow" → Creator view → Deliver work → client watermarked ProtectedPreviewDialog (visually confirmed diagonal DEAL watermark) → Approve & release ₦30,000 → Pay all remaining via Paystack → deal completed → creator Upload final files → client sees unlocked "Download Final files" buttons
+- Mobile 390x844: wizard step 2 (chips + craft hint) and gateway selection render clean, no overflow
+- Console: zero errors (only HMR logs); seed reset after testing to restore pristine demo state
+- Commit 037bb3e "feat: craft-aware deliverable presets in deal wizard" pushed to Daniel130me/deal (main)
+
+Stage Summary:
+- Craft-aware presets live in wizard; all four milestone pillars (dual gateway, DEAL escrow messaging, 7-craft niching, file protection) verified working end-to-end on desktop and mobile. Repo pushed; demo state reset. Token again used ephemerally via askpass (not stored); user advised to rotate it.

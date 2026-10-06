@@ -1,0 +1,840 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useMemo, useState } from "react";
+     4→import {
+     5→  ArrowLeft,
+     6→  ArrowRight,
+     7→  CalendarDays,
+     8→  Check,
+     9→  Copy,
+    10→  Loader2,
+    11→  MapPin,
+    12→  Minus,
+    13→  PartyPopper,
+    14→  Plus,
+    15→  X,
+    16→} from "lucide-react";
+    17→import { toast } from "sonner";
+    18→import { AppCanvas } from "@/components/app/chrome";
+    19→import { Button } from "@/components/ui/button";
+    20→import { Input } from "@/components/ui/input";
+    21→import { Textarea } from "@/components/ui/textarea";
+    22→import { api } from "@/lib/api";
+    23→import { useApp } from "@/components/app/context";
+    24→import {
+    25→  formatNaira,
+    26→  formatDate,
+    27→  paymentSchedule,
+    28→  type ChannelType,
+    29→  type ClientRequest,
+    30→  type Deal,
+    31→  type DealPayment,
+    32→  type Service,
+    33→} from "@/lib/types";
+    34→import { CHANNEL_META } from "@/lib/channels";
+    35→import { cn } from "@/lib/utils";
+    36→
+    37→const WIZARD_STEPS = ["Deal details", "Scope", "Terms", "Review"];
+    38→
+    39→interface WizardState {
+    40→  title: string;
+    41→  clientName: string;
+    42→  clientContact: string;
+    43→  summary: string;
+    44→  eventDate: string;
+    45→  location: string;
+    46→  message: string;
+    47→  serviceTitle: string;
+    48→  scope: string;
+    49→  deliverables: string[];
+    50→  price: number;
+    51→  depositPercent: number;
+    52→  installmentsCount: number;
+    53→  startDate: string;
+    54→  dueDate: string;
+    55→  revisions: number;
+    56→}
+    57→
+    58→const SHARE_CHANNEL_TYPES: ChannelType[] = ["whatsapp", "telegram", "email"];
+    59→
+    60→function shareHref(type: ChannelType, url: string, text: string) {
+    61→  if (type === "whatsapp") return `https://wa.me/?text=${encodeURIComponent(text)}`;
+    62→  if (type === "telegram")
+    63→    return `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+    64→  return `mailto:?subject=${encodeURIComponent("A deal for you on DEAL")}&body=${encodeURIComponent(text)}`;
+    65→}
+    66→
+    67→export default function WizardScreen({ requestParam }: { requestParam: string | null }) {
+    68→  const { user, navigate } = useApp();
+    69→  const requestId = requestParam?.startsWith("r-") ? requestParam.slice(2) : null;
+    70→
+    71→  const [step, setStep] = useState(0);
+    72→  const [busy, setBusy] = useState(false);
+    73→  const [services, setServices] = useState<Service[]>([]);
+    74→  const [linkedRequest, setLinkedRequest] = useState<ClientRequest | null>(null);
+    75→  const [deliverableDraft, setDeliverableDraft] = useState("");
+    76→  const [sentDeal, setSentDeal] = useState<Deal | null>(null);
+    77→
+    78→  const [form, setForm] = useState<WizardState>({
+    79→    title: "",
+    80→    clientName: "",
+    81→    clientContact: "",
+    82→    summary: "",
+    83→    eventDate: "",
+    84→    location: "",
+    85→    message: "",
+    86→    serviceTitle: "",
+    87→    scope: "",
+    88→    deliverables: [],
+    89→    price: 0,
+    90→    depositPercent: 50,
+    91→    installmentsCount: 2,
+    92→    startDate: "",
+    93→    dueDate: "",
+    94→    revisions: 2,
+    95→  });
+    96→
+    97→  const set = <K extends keyof WizardState>(key: K, value: WizardState[K]) =>
+    98→    setForm((prev) => ({ ...prev, [key]: value }));
+    99→
+   100→  useEffect(() => {
+   101→    if (!user) return;
+   102→    api.deals(user.id).catch(() => undefined);
+   103→    fetch(`/api/users/${user.id}/services`)
+   104→      .then((r) => r.json())
+   105→      .then((d) => setServices(d.services ?? []))
+   106→      .catch(() => undefined);
+   107→    if (requestId) {
+   108→      api
+   109→        .requestDetail(requestId)
+   110→        .then(({ request: req, service }) => {
+   111→          setLinkedRequest(req);
+   112→          setForm((prev) => ({
+   113→            ...prev,
+   114→            title: service ? `${service.title}` : "Custom deal",
+   115→            serviceTitle: service?.title ?? "",
+   116→            clientName: req.clientName,
+   117→            clientContact: req.clientContact,
+   118→            eventDate: req.eventDate,
+   119→            location: req.location,
+   120→            price: service?.from ?? req.budgetMax ?? 0,
+   121→            summary: req.description,
+   122→            message: `Hi ${req.clientName},\n\nI'm excited to send you this custom deal. Please review the details and let me know if you have any questions.`,
+   123→            scope: req.description,
+   124→          }));
+   125→        })
+   126→        .catch(() => undefined);
+   127→    }
+   128→  }, [user, requestId]);
+   129→
+   130→  const deposit = useMemo(
+   131→    () => Math.round((form.price * form.depositPercent) / 100),
+   132→    [form.price, form.depositPercent]
+   133→  );
+   134→  const balance = useMemo(() => form.price - deposit, [form.price, deposit]);
+   135→
+   136→  // ideal schedule preview for the Review step (no deal exists yet, so we cast a minimal shape)
+   137→  const previewDeal = useMemo(
+   138→    () =>
+   139→      ({
+   140→        price: form.price,
+   141→        depositPercent: form.depositPercent,
+   142→        installmentsCount: form.depositPercent >= 100 ? 0 : form.installmentsCount,
+   143→        payments: [] as DealPayment[],
+   144→      } as Deal),
+   145→    [form.price, form.depositPercent, form.installmentsCount]
+   146→  );
+   147→  const previewSchedule = useMemo(() => paymentSchedule(previewDeal), [previewDeal]);
+   148→
+   149→  function validateStep(current: number): string | null {
+   150→    if (current === 0) {
+   151→      if (!form.title.trim()) return "Give this deal a clear title.";
+   152→      if (!form.clientName.trim()) return "Who is this deal for? Add the client's name.";
+   153→      if (!form.clientContact.trim()) return "Add an email or phone so the client can be reached.";
+   154→    }
+   155→    if (current === 1) {
+   156→      if (!form.scope.trim()) return "Describe the scope of work.";
+   157→      if (form.deliverables.length === 0) return "Add at least one deliverable.";
+   158→    }
+   159→    if (current === 2) {
+   160→      if (!form.price || form.price <= 0) return "Set a price for this deal.";
+   161→      if (!form.dueDate) return "Add a delivery due date.";
+   162→    }
+   163→    return null;
+   164→  }
+   165→
+   166→  function next() {
+   167→    const problem = validateStep(step);
+   168→    if (problem) {
+   169→      toast.error(problem);
+   170→      return;
+   171→    }
+   172→    setStep((s) => Math.min(s + 1, 3));
+   173→  }
+   174→
+   175→  async function submit(send: boolean) {
+   176→    if (!user) return;
+   177→    const problem = validateStep(0) ?? validateStep(1) ?? validateStep(2);
+   178→    if (problem) {
+   179→      toast.error(problem);
+   180→      return;
+   181→    }
+   182→    setBusy(true);
+   183→    try {
+   184→      const { deal } = await api.createDeal({
+   185→        creatorId: user.id,
+   186→        requestId: linkedRequest?.id ?? null,
+   187→        title: form.title,
+   188→        serviceTitle: form.serviceTitle,
+   189→        clientName: form.clientName,
+   190→        clientContact: form.clientContact,
+   191→      });
+   192→      await api.updateDeal(deal.id, {
+   193→        summary: form.summary,
+   194→        eventDate: form.eventDate,
+   195→        location: form.location,
+   196→        message: form.message,
+   197→        scope: form.scope,
+   198→        deliverables: form.deliverables,
+   199→        price: form.price,
+   200→        depositPercent: form.depositPercent,
+   201→        installmentsCount: form.depositPercent >= 100 ? 0 : form.installmentsCount,
+   202→        startDate: form.startDate,
+   203→        dueDate: form.dueDate,
+   204→        revisions: form.revisions,
+   205→      });
+   206→      if (send) {
+   207→        const { deal: sent } = await api.dealAction(deal.id, { action: "send" });
+   208→        setSentDeal(sent);
+   209→        toast.success("Deal sent!");
+   210→      } else {
+   211→        toast.success("Draft saved", {
+   212→          description: "Find it under Projects — you can finish and send it anytime.",
+   213→        });
+   214→        navigate("/deals");
+   215→      }
+   216→    } catch (err) {
+   217→      toast.error(err instanceof Error ? err.message : "Couldn't save this deal.");
+   218→    } finally {
+   219→      setBusy(false);
+   220→    }
+   221→  }
+   222→
+   223→  /* ---------------- sent confirmation ---------------- */
+   224→  if (sentDeal) {
+   225→    const shareUrl = `${window.location.origin}/#/c/${sentDeal.shareToken}`;
+   226→    const shareText = `Hi ${sentDeal.client.name}! I've sent you a deal on DEAL for "${sentDeal.title}" (${formatNaira(sentDeal.price)}). Review and accept here: ${shareUrl}`;
+   227→    const myChannels =
+   228→      user && (user.channels?.length ?? 0) > 0
+   229→        ? (user.channels ?? [])
+   230→        : user?.whatsapp
+   231→          ? [{ type: "whatsapp" as ChannelType, value: user.whatsapp, primary: true }]
+   232→          : [];
+   233→    const shareChannels = myChannels.filter((c) => SHARE_CHANNEL_TYPES.includes(c.type));
+   234→    return (
+   235→      <AppCanvas backHref="/dashboard">
+   236→        <div className="flex flex-1 flex-col px-5 pb-10 pt-8">
+   237→          <div className="flex justify-center">
+   238→            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-accent ring-8 ring-accent/40">
+   239→              <Check className="h-9 w-9 text-primary" strokeWidth={3} />
+   240→            </span>
+   241→          </div>
+   242→          <h1 className="mt-5 text-center text-2xl font-extrabold tracking-tight text-foreground">
+   243→            Your deal has been <span className="text-primary">sent!</span>
+   244→          </h1>
+   245→          <p className="mx-auto mt-2 max-w-xs text-center text-[15px] font-medium text-muted-foreground">
+   246→            {sentDeal.client.name} will review and accept. You'll be notified once they pay the
+   247→            deposit.
+   248→          </p>
+   249→
+   250→          <div className="mt-6 rounded-2xl border border-border bg-card p-4">
+   251→            <p className="text-[13px] font-extrabold text-foreground">Client link</p>
+   252→            <div className="mt-2 flex items-center gap-2 rounded-xl border border-border bg-muted/60 p-2 pl-3">
+   253→              <p className="min-w-0 flex-1 truncate text-[13px] font-bold text-foreground">{shareUrl}</p>
+   254→              <Button
+   255→                type="button"
+   256→                size="sm"
+   257→                className="shrink-0 rounded-lg font-bold"
+   258→                onClick={() => {
+   259→                  navigator.clipboard?.writeText(shareUrl).catch(() => undefined);
+   260→                  toast.success("Link copied!");
+   261→                }}
+   262→              >
+   263→                <Copy className="mr-1 h-3.5 w-3.5" /> Copy
+   264→              </Button>
+   265→            </div>
+   266→            <div className="mt-3 grid grid-cols-2 gap-2">
+   267→              {shareChannels.map((channel) => {
+   268→                const meta = CHANNEL_META[channel.type];
+   269→                const Icon = meta.icon;
+   270→                const label =
+   271→                  channel.type === "whatsapp"
+   272→                    ? "Share on WhatsApp"
+   273→                    : channel.type === "telegram"
+   274→                      ? "Share via Telegram"
+   275→                      : "Share via Email";
+   276→                return (
+   277→                  <a
+   278→                    key={`${channel.type}-${channel.value}`}
+   279→                    href={shareHref(channel.type, shareUrl, shareText)}
+   280→                    target="_blank"
+   281→                    rel="noreferrer"
+   282→                    className="flex h-11 items-center justify-center gap-2 rounded-xl border border-primary/30 bg-accent text-[13px] font-extrabold text-accent-foreground transition-colors hover:bg-primary hover:text-white"
+   283→                  >
+   284→                    <Icon className="h-4 w-4" />
+   285→                    {label}
+   286→                  </a>
+   287→                );
+   288→              })}
+   289→              <Button
+   290→                type="button"
+   291→                className="col-span-2 h-11 rounded-xl font-bold"
+   292→                onClick={() => {
+   293→                  navigator.clipboard?.writeText(shareUrl).catch(() => undefined);
+   294→                  toast.success("Link copied!");
+   295→                }}
+   296→              >
+   297→                <Copy className="mr-1.5 h-4 w-4" /> Copy link
+   298→              </Button>
+   299→            </div>
+   300→          </div>
+   301→
+   302→          <Button
+   303→            type="button"
+   304→            onClick={() => navigate(`/deals/${sentDeal.id}`)}
+   305→            className="mt-6 h-13 w-full rounded-xl font-bold"
+   306→          >
+   307→            View deal <ArrowRight className="ml-1 h-4.5 w-4.5" />
+   308→          </Button>
+   309→          <Button
+   310→            type="button"
+   311→            variant="outline"
+   312→            onClick={() => navigate("/dashboard")}
+   313→            className="mt-3 h-13 w-full rounded-xl font-bold"
+   314→          >
+   315→            Back to dashboard
+   316→          </Button>
+   317→        </div>
+   318→      </AppCanvas>
+   319→    );
+   320→  }
+   321→
+   322→  /* ---------------- wizard ---------------- */
+   323→  return (
+   324→    <AppCanvas backHref="/dashboard">
+   325→      <div className="flex-1 px-5 pb-10 pt-5">
+   326→        <div className="flex items-center justify-between">
+   327→          <h1 className="text-xl font-extrabold tracking-tight text-foreground">Create DEAL</h1>
+   328→          <p className="text-[13px] font-bold text-muted-foreground">
+   329→            Step {step + 1} of 4
+   330→          </p>
+   331→        </div>
+   332→
+   333→        {/* progress */}
+   334→        <ol className="mt-4 flex items-center">
+   335→          {WIZARD_STEPS.map((label, i) => (
+   336→            <li key={label} className={cn("flex items-center", i < WIZARD_STEPS.length - 1 && "flex-1")}>
+   337→              <div className="flex flex-col items-center">
+   338→                <span
+   339→                  className={cn(
+   340→                    "flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-extrabold",
+   341→                    i < step && "border-primary bg-primary text-white",
+   342→                    i === step && "border-primary bg-white text-primary",
+   343→                    i > step && "border-border bg-white text-muted-foreground"
+   344→                  )}
+   345→                >
+   346→                  {i < step ? <Check className="h-4 w-4" strokeWidth={3} /> : i + 1}
+   347→                </span>
+   348→                <span
+   349→                  className={cn(
+   350→                    "mt-1.5 whitespace-nowrap text-[11px] font-extrabold",
+   351→                    i === step ? "text-primary" : "text-muted-foreground"
+   352→                  )}
+   353→                >
+   354→                  {label}
+   355→                </span>
+   356→              </div>
+   357→              {i < WIZARD_STEPS.length - 1 && (
+   358→                <span className={cn("mx-2 mb-5 h-0.5 flex-1", i < step ? "bg-primary" : "bg-border")} />
+   359→              )}
+   360→            </li>
+   361→          ))}
+   362→        </ol>
+   363→
+   364→        {/* STEP 1 — deal details */}
+   365→        {step === 0 && (
+   366→          <div className="mt-6 space-y-4">
+   367→            {linkedRequest && (
+   368→              <p className="rounded-xl border border-primary/20 bg-accent/60 px-4 py-3 text-[13px] font-bold text-accent-foreground">
+   369→                Creating a proposal for {linkedRequest.clientName}'s request ({linkedRequest.ref})
+   370→              </p>
+   371→            )}
+   372→            <div>
+   373→              <label className="text-[13px] font-extrabold text-foreground">
+   374→                Deal title <span className="text-red-500">*</span>
+   375→              </label>
+   376→              <Input
+   377→                value={form.title}
+   378→                onChange={(e) => set("title", e.target.value)}
+   379→                placeholder="e.g. Pre-wedding Photography Package"
+   380→                className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   381→              />
+   382→            </div>
+   383→            <div className="grid grid-cols-2 gap-3">
+   384→              <div>
+   385→                <label className="text-[13px] font-extrabold text-foreground">
+   386→                  Client name <span className="text-red-500">*</span>
+   387→                </label>
+   388→                <Input
+   389→                  value={form.clientName}
+   390→                  onChange={(e) => set("clientName", e.target.value)}
+   391→                  placeholder="e.g. Lola & Tunde"
+   392→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   393→                />
+   394→              </div>
+   395→              <div>
+   396→                <label className="text-[13px] font-extrabold text-foreground">
+   397→                  Client contact <span className="text-red-500">*</span>
+   398→                </label>
+   399→                <Input
+   400→                  value={form.clientContact}
+   401→                  onChange={(e) => set("clientContact", e.target.value)}
+   402→                  placeholder="Email or phone"
+   403→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   404→                />
+   405→              </div>
+   406→            </div>
+   407→            <div>
+   408→              <label className="text-[13px] font-extrabold text-foreground">Short summary</label>
+   409→              <Textarea
+   410→                value={form.summary}
+   411→                onChange={(e) => set("summary", e.target.value.slice(0, 300))}
+   412→                placeholder="Briefly describe this deal and what it covers…"
+   413→                className="mt-1.5 min-h-20 rounded-xl bg-muted/60 font-semibold"
+   414→              />
+   415→            </div>
+   416→            <div className="grid grid-cols-2 gap-3">
+   417→              <div>
+   418→                <label className="text-[13px] font-extrabold text-foreground">Event date</label>
+   419→                <Input
+   420→                  value={form.eventDate}
+   421→                  onChange={(e) => set("eventDate", e.target.value)}
+   422→                  type="date"
+   423→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   424→                />
+   425→              </div>
+   426→              <div>
+   427→                <label className="text-[13px] font-extrabold text-foreground">Location</label>
+   428→                <Input
+   429→                  value={form.location}
+   430→                  onChange={(e) => set("location", e.target.value)}
+   431→                  placeholder="e.g. Ikoyi, Lagos"
+   432→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   433→                />
+   434→              </div>
+   435→            </div>
+   436→            <div>
+   437→              <label className="text-[13px] font-extrabold text-foreground">
+   438→                Message to client <span className="font-semibold text-muted-foreground">(optional)</span>
+   439→              </label>
+   440→              <Textarea
+   441→                value={form.message}
+   442→                onChange={(e) => set("message", e.target.value.slice(0, 1000))}
+   443→                placeholder={`Hi ${form.clientName || "there"}, I'm excited to send you this deal…`}
+   444→                className="mt-1.5 min-h-24 rounded-xl bg-muted/60 font-semibold"
+   445→              />
+   446→            </div>
+   447→          </div>
+   448→        )}
+   449→
+   450→        {/* STEP 2 — scope & deliverables */}
+   451→        {step === 1 && (
+   452→          <div className="mt-6 space-y-4">
+   453→            <div>
+   454→              <label className="text-[13px] font-extrabold text-foreground">Service</label>
+   455→              <div className="mt-2 flex flex-wrap gap-2">
+   456→                {services.map((svc) => (
+   457→                  <button
+   458→                    key={svc.id}
+   459→                    type="button"
+   460→                    onClick={() => {
+   461→                      set("serviceTitle", svc.title);
+   462→                      if (!form.price) set("price", svc.from);
+   463→                      if (form.deliverables.length === 0 && svc.includes.length) {
+   464→                        set("deliverables", svc.includes.slice(0, 4));
+   465→                      }
+   466→                    }}
+   467→                    className={cn(
+   468→                      "rounded-full border px-3.5 py-2 text-[13px] font-bold transition-colors",
+   469→                      form.serviceTitle === svc.title
+   470→                        ? "border-primary bg-accent text-accent-foreground"
+   471→                        : "border-border bg-card text-muted-foreground hover:bg-muted"
+   472→                    )}
+   473→                  >
+   474→                    {svc.title}
+   475→                  </button>
+   476→                ))}
+   477→                <button
+   478→                  type="button"
+   479→                  onClick={() => set("serviceTitle", "Custom service")}
+   480→                  className={cn(
+   481→                    "rounded-full border px-3.5 py-2 text-[13px] font-bold transition-colors",
+   482→                    form.serviceTitle === "Custom service"
+   483→                      ? "border-primary bg-accent text-accent-foreground"
+   484→                      : "border-dashed border-primary/40 text-primary hover:bg-accent/50"
+   485→                  )}
+   486→                >
+   487→                  + Custom
+   488→                </button>
+   489→              </div>
+   490→            </div>
+   491→            <div>
+   492→              <label className="text-[13px] font-extrabold text-foreground">
+   493→                Scope of work <span className="text-red-500">*</span>
+   494→              </label>
+   495→              <Textarea
+   496→                value={form.scope}
+   497→                onChange={(e) => set("scope", e.target.value)}
+   498→                placeholder="Describe exactly what you'll do — hours, locations, styles, what's included…"
+   499→                className="mt-1.5 min-h-28 rounded-xl bg-muted/60 font-semibold"
+   500→              />
+   501→            </div>
+   502→            <div>
+   503→              <label className="text-[13px] font-extrabold text-foreground">
+   504→                Deliverables <span className="text-red-500">*</span>
+   505→              </label>
+   506→              <div className="mt-2 space-y-2">
+   507→                {form.deliverables.map((d, i) => (
+   508→                  <div
+   509→                    key={`${d}-${i}`}
+   510→                    className="flex items-center justify-between gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5"
+   511→                  >
+   512→                    <p className="min-w-0 flex-1 truncate text-[13px] font-bold text-foreground">{d}</p>
+   513→                    <button
+   514→                      type="button"
+   515→                      aria-label={`Remove ${d}`}
+   516→                      onClick={() => set("deliverables", form.deliverables.filter((_, j) => j !== i))}
+   517→                      className="rounded-md p-1 text-muted-foreground hover:bg-muted"
+   518→                    >
+   519→                      <X className="h-4 w-4" />
+   520→                    </button>
+   521→                  </div>
+   522→                ))}
+   523→                <div className="flex gap-2">
+   524→                  <Input
+   525→                    value={deliverableDraft}
+   526→                    onChange={(e) => setDeliverableDraft(e.target.value)}
+   527→                    onKeyDown={(e) => {
+   528→                      if (e.key === "Enter" && deliverableDraft.trim()) {
+   529→                        e.preventDefault();
+   530→                        set("deliverables", [...form.deliverables, deliverableDraft.trim()]);
+   531→                        setDeliverableDraft("");
+   532→                      }
+   533→                    }}
+   534→                    placeholder="e.g. 40+ high-resolution edited photos"
+   535→                    className="h-11 flex-1 rounded-xl bg-muted/60 font-semibold"
+   536→                  />
+   537→                  <Button
+   538→                    type="button"
+   539→                    variant="outline"
+   540→                    className="h-11 rounded-xl border-primary/40 px-4 font-bold text-primary"
+   541→                    onClick={() => {
+   542→                      if (!deliverableDraft.trim()) return;
+   543→                      set("deliverables", [...form.deliverables, deliverableDraft.trim()]);
+   544→                      setDeliverableDraft("");
+   545→                    }}
+   546→                  >
+   547→                    <Plus className="h-4.5 w-4.5" />
+   548→                  </Button>
+   549→                </div>
+   550→              </div>
+   551→            </div>
+   552→          </div>
+   553→        )}
+   554→
+   555→        {/* STEP 3 — terms */}
+   556→        {step === 2 && (
+   557→          <div className="mt-6 space-y-4">
+   558→            <div>
+   559→              <label className="text-[13px] font-extrabold text-foreground">
+   560→                Price (₦) <span className="text-red-500">*</span>
+   561→              </label>
+   562→              <Input
+   563→                value={form.price ? String(form.price) : ""}
+   564→                onChange={(e) => set("price", Number(e.target.value.replace(/[^0-9]/g, "")))}
+   565→                placeholder="120000"
+   566→                inputMode="numeric"
+   567→                className="mt-1.5 h-12 rounded-xl bg-muted/60 text-lg font-extrabold"
+   568→              />
+   569→              <div className="mt-2 flex flex-wrap gap-2">
+   570→                {[50000, 80000, 120000, 150000].map((amount) => (
+   571→                  <button
+   572→                    key={amount}
+   573→                    type="button"
+   574→                    onClick={() => set("price", amount)}
+   575→                    className={cn(
+   576→                      "rounded-full border px-3 py-1.5 text-xs font-bold transition-colors",
+   577→                      form.price === amount
+   578→                        ? "border-primary bg-accent text-accent-foreground"
+   579→                        : "border-border bg-card text-muted-foreground"
+   580→                    )}
+   581→                  >
+   582→                    {formatNaira(amount)}
+   583→                  </button>
+   584→                ))}
+   585→              </div>
+   586→            </div>
+   587→
+   588→            <div>
+   589→              <label className="text-[13px] font-extrabold text-foreground">Payment structure</label>
+   590→              <div className="mt-2 grid grid-cols-3 gap-2">
+   591→                {[
+   592→                  { pct: 50, label: "50 / 50", sub: "Deposit first" },
+   593→                  { pct: 70, label: "70 / 30", sub: "Deposit first" },
+   594→                  { pct: 100, label: "100%", sub: "Upfront" },
+   595→                ].map((opt) => (
+   596→                  <button
+   597→                    key={opt.pct}
+   598→                    type="button"
+   599→                    onClick={() => {
+   600→                      set("depositPercent", opt.pct);
+   601→                      if (opt.pct >= 100) set("installmentsCount", 0);
+   602→                      else if (form.installmentsCount === 0) set("installmentsCount", 2);
+   603→                    }}
+   604→                    className={cn(
+   605→                      "rounded-xl border p-3 text-center transition-colors",
+   606→                      form.depositPercent === opt.pct
+   607→                        ? "border-primary bg-accent"
+   608→                        : "border-border bg-card hover:bg-muted"
+   609→                    )}
+   610→                  >
+   611→                    <p className="text-sm font-extrabold text-foreground">{opt.label}</p>
+   612→                    <p className="text-[10px] font-bold text-muted-foreground">{opt.sub}</p>
+   613→                  </button>
+   614→                ))}
+   615→              </div>
+   616→            </div>
+   617→
+   618→            <div>
+   619→              <label className="text-[13px] font-extrabold text-foreground">
+   620→                How should the balance be paid?
+   621→              </label>
+   622→              {form.depositPercent >= 100 ? (
+   623→                <p className="mt-2 rounded-xl bg-muted/60 p-3 text-[13px] font-semibold text-muted-foreground">
+   624→                  Deposit covers everything — no installments needed.
+   625→                </p>
+   626→              ) : (
+   627→                <>
+   628→                  <div className="mt-2 flex flex-wrap gap-2">
+   629→                    {[1, 2, 3].map((n) => (
+   630→                      <button
+   631→                        key={n}
+   632→                        type="button"
+   633→                        onClick={() => set("installmentsCount", n)}
+   634→                        className={cn(
+   635→                          "rounded-full border px-3.5 py-2 text-[13px] font-bold transition-colors",
+   636→                          form.installmentsCount === n
+   637→                            ? "border-primary bg-accent text-accent-foreground"
+   638→                            : "border-border bg-card text-muted-foreground hover:bg-muted"
+   639→                        )}
+   640→                      >
+   641→                        {n === 1 ? "1 payment" : `${n} installments`}
+   642→                      </button>
+   643→                    ))}
+   644→                  </div>
+   645→                  <p className="mt-1.5 text-[11px] font-medium text-muted-foreground">
+   646→                    Equal parts of the {formatNaira(balance)} balance — clients can always pay
+   647→                    everything left in one go.
+   648→                  </p>
+   649→                </>
+   650→              )}
+   651→            </div>
+   652→
+   653→            <div className="mt-2.5 rounded-xl bg-secondary p-3.5 text-[13px] font-semibold leading-relaxed text-secondary-foreground">
+   654→              Client pays <span className="font-extrabold text-primary">{formatNaira(deposit)}</span>{" "}
+   655→              deposit to start
+   656→              {form.depositPercent < 100 ? (
+   657→                <>
+   658→                  {" "}· the {formatNaira(balance)} balance is split into{" "}
+   659→                  <span className="font-extrabold text-foreground">
+   660→                    {form.installmentsCount} installment{form.installmentsCount === 1 ? "" : "s"}
+   661→                  </span>{" "}
+   662→                  (they can also pay it all at once)
+   663→                </>
+   664→              ) : null}
+   665→              . Every payment is held in{" "}
+   666→              <span className="font-extrabold text-foreground">DEAL escrow</span> until your client
+   667→              approves the work — they can pay via Flutterwave or Paystack, and final files unlock
+   668→              after full payment.
+   669→            </div>
+   670→
+   671→            <div className="grid grid-cols-2 gap-3">
+   672→              <div>
+   673→                <label className="text-[13px] font-extrabold text-foreground">Work starts</label>
+   674→                <Input
+   675→                  value={form.startDate}
+   676→                  onChange={(e) => set("startDate", e.target.value)}
+   677→                  type="date"
+   678→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   679→                />
+   680→              </div>
+   681→              <div>
+   682→                <label className="text-[13px] font-extrabold text-foreground">
+   683→                  Delivery due <span className="text-red-500">*</span>
+   684→                </label>
+   685→                <Input
+   686→                  value={form.dueDate}
+   687→                  onChange={(e) => set("dueDate", e.target.value)}
+   688→                  type="date"
+   689→                  className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
+   690→                />
+   691→              </div>
+   692→            </div>
+   693→
+   694→            <div>
+   695→              <label className="text-[13px] font-extrabold text-foreground">Revisions included</label>
+   696→              <div className="mt-2 flex items-center gap-4 rounded-xl border border-border bg-card px-4 py-3">
+   697→                <button
+   698→                  type="button"
+   699→                  aria-label="Fewer revisions"
+   700→                  onClick={() => set("revisions", Math.max(0, form.revisions - 1))}
+   701→                  className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-foreground hover:bg-muted"
+   702→                >
+   703→                  <Minus className="h-4 w-4" />
+   704→                </button>
+   705→                <p className="flex-1 text-center text-[15px] font-extrabold text-foreground">
+   706→                  {form.revisions} round{form.revisions === 1 ? "" : "s"}
+   707→                </p>
+   708→                <button
+   709→                  type="button"
+   710→                  aria-label="More revisions"
+   711→                  onClick={() => set("revisions", Math.min(5, form.revisions + 1))}
+   712→                  className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-foreground hover:bg-muted"
+   713→                >
+   714→                  <Plus className="h-4 w-4" />
+   715→                </button>
+   716→              </div>
+   717→            </div>
+   718→          </div>
+   719→        )}
+   720→
+   721→        {/* STEP 4 — review & send */}
+   722→        {step === 3 && (
+   723→          <div className="mt-6 space-y-4">
+   724→            <div className="rounded-2xl border border-border bg-card p-4">
+   725→              <p className="text-[11px] font-extrabold uppercase tracking-wide text-primary">
+   726→                What your client will see
+   727→              </p>
+   728→              <h2 className="mt-2 text-lg font-extrabold leading-snug text-foreground">{form.title}</h2>
+   729→              <p className="text-[13px] font-semibold text-muted-foreground">
+   730→                For {form.clientName} · {form.clientContact}
+   731→              </p>
+   732→              {form.summary ? (
+   733→                <p className="mt-2 text-[13px] font-medium leading-relaxed text-foreground">{form.summary}</p>
+   734→              ) : null}
+   735→              <div className="mt-3 grid grid-cols-2 gap-2 text-[13px] font-semibold text-muted-foreground">
+   736→                {form.eventDate ? (
+   737→                  <span className="inline-flex items-center gap-1.5">
+   738→                    <CalendarDays className="h-3.5 w-3.5" /> {formatDate(form.eventDate)}
+   739→                  </span>
+   740→                ) : null}
+   741→                {form.location ? (
+   742→                  <span className="inline-flex items-center gap-1.5">
+   743→                    <MapPin className="h-3.5 w-3.5" /> {form.location}
+   744→                  </span>
+   745→                ) : null}
+   746→              </div>
+   747→            </div>
+   748→
+   749→            <div className="rounded-2xl border border-border bg-card p-4">
+   750→              <p className="text-[13px] font-extrabold text-foreground">Scope</p>
+   751→              <p className="mt-1 text-[13px] font-medium leading-relaxed text-muted-foreground">{form.scope}</p>
+   752→              <p className="mt-3 text-[13px] font-extrabold text-foreground">Deliverables</p>
+   753→              <ul className="mt-1.5 space-y-1.5">
+   754→                {form.deliverables.map((d, i) => (
+   755→                  <li key={`${d}-${i}`} className="flex items-start gap-2 text-[13px] font-semibold text-foreground">
+   756→                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" strokeWidth={3} />
+   757→                    {d}
+   758→                  </li>
+   759→                ))}
+   760→              </ul>
+   761→              <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border pt-3 text-[13px]">
+   762→                <div>
+   763→                  <p className="font-bold text-muted-foreground">Timeline</p>
+   764→                  <p className="mt-0.5 font-extrabold text-foreground">
+   765→                    {form.startDate ? formatDate(form.startDate) : "On deposit"} → {formatDate(form.dueDate)}
+   766→                  </p>
+   767→                </div>
+   768→                <div>
+   769→                  <p className="font-bold text-muted-foreground">Revisions</p>
+   770→                  <p className="mt-0.5 font-extrabold text-foreground">
+   771→                    {form.revisions} round{form.revisions === 1 ? "" : "s"}
+   772→                  </p>
+   773→                </div>
+   774→              </div>
+   775→            </div>
+   776→
+   777→            <div className="rounded-2xl border border-primary/20 bg-accent/60 p-4">
+   778→              <div className="flex items-center justify-between">
+   779→                <p className="text-[13px] font-extrabold text-accent-foreground">Payment plan</p>
+   780→                <p className="text-lg font-extrabold text-foreground">{formatNaira(form.price)}</p>
+   781→              </div>
+   782→              <div className="mt-2 divide-y divide-primary/10 border-t border-primary/10">
+   783→                {previewSchedule.map((slot) => (
+   784→                  <div key={slot.label} className="flex items-center justify-between py-2 text-[13px]">
+   785→                    <span className="font-semibold text-muted-foreground">{slot.label}</span>
+   786→                    <span className="font-extrabold text-foreground">{formatNaira(slot.amount)}</span>
+   787→                  </div>
+   788→                ))}
+   789→              </div>
+   790→              <p className="mt-2 text-[11px] font-semibold leading-relaxed text-muted-foreground">
+   791→                Every payment is held in <span className="font-bold text-foreground">DEAL escrow</span> and
+   792→                released to you only when the client approves the completed work — they can pay via
+   793→                Flutterwave or Paystack.
+   794→              </p>
+   795→            </div>
+   796→
+   797→            <div className="flex gap-3">
+   798→              <Button
+   799→                type="button"
+   800→                variant="outline"
+   801→                disabled={busy}
+   802→                onClick={() => submit(false)}
+   803→                className="h-13 flex-1 rounded-xl font-bold"
+   804→              >
+   805→                Save as draft
+   806→              </Button>
+   807→              <Button type="button" disabled={busy} onClick={() => submit(true)} className="h-13 flex-[1.4] rounded-xl font-bold">
+   808→                {busy ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <>Send deal <PartyPopper className="ml-1 hidden h-4.5 w-4.5" /> <ArrowRight className="ml-1 h-4.5 w-4.5" /></>}
+   809→              </Button>
+   810→            </div>
+   811→            <p className="flex items-center justify-center gap-1.5 text-center text-xs font-semibold text-muted-foreground">
+   812→              <ArrowLeft className="hidden h-3.5 w-3.5" />
+   813→              You can always edit and resend the deal before the client accepts it.
+   814→            </p>
+   815→          </div>
+   816→        )}
+   817→
+   818→        {/* nav buttons for steps 0-2 */}
+   819→        {step < 3 && (
+   820→          <div className="mt-6 flex gap-3">
+   821→            {step > 0 && (
+   822→              <Button
+   823→                type="button"
+   824→                variant="outline"
+   825→                onClick={() => setStep((s) => s - 1)}
+   826→                className="h-13 flex-1 rounded-xl font-bold"
+   827→              >
+   828→                ← Back
+   829→              </Button>
+   830→            )}
+   831→            <Button type="button" onClick={next} className="h-13 flex-[1.6] rounded-xl font-bold">
+   832→              Continue <ArrowRight className="ml-1 h-4.5 w-4.5" />
+   833→            </Button>
+   834→          </div>
+   835→        )}
+   836→      </div>
+   837→    </AppCanvas>
+   838→  );
+   839→}
+   840→
