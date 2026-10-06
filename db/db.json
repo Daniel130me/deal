@@ -28,7 +28,7 @@
       "bio": "Story-driven photography for brands, weddings and people. 6 years behind the lens, 200+ happy clients across Nigeria.",
       "verified": true,
       "onboarded": true,
-      "preferredProvider": "flutterwave",
+      "preferredProvider": "paystack",
       "createdAt": "2026-02-24T02:18:33.249Z"
     }
   ],

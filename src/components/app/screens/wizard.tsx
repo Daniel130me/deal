@@ -36,6 +36,65 @@ import { cn } from "@/lib/utils";
 
 const WIZARD_STEPS = ["Deal details", "Scope", "Terms", "Review"];
 
+/** Craft-aware deliverable presets — DEAL only serves these 7 creator crafts. */
+const CRAFT_PRESETS: Record<string, string[]> = {
+  Photographer: [
+    "40+ high-resolution edited photos",
+    "Private online gallery (12 months)",
+    "Sneak-peaks within 48 hours",
+    "Print-ready images (300dpi)",
+  ],
+  Videographer: [
+    "4–6 min highlight film (4K)",
+    "60s vertical teaser for Reels",
+    "Full multi-cam event coverage",
+    "Color-graded master files",
+  ],
+  "Motion designer": [
+    "15s logo animation (4K, alpha)",
+    "Source project files (After Effects)",
+    "Sound design & music sync",
+    "Vertical + square cutdowns",
+  ],
+  "Graphic designer": [
+    "Primary logo (SVG, PNG, PDF)",
+    "Brand color & type palette",
+    "Social media kit (10 posts)",
+    "Print-ready files (CMYK)",
+  ],
+  "Video editor": [
+    "Up to 10-min edited video (4K)",
+    "60s vertical cut for TikTok/Reels",
+    "Color grade & audio cleanup",
+    "Captions & subtitles (SRT)",
+  ],
+  Illustrator: [
+    "High-res artwork (PNG, 300dpi)",
+    "Vector source file (SVG/AI)",
+    "3 initial sketch concepts",
+    "Commercial usage license",
+  ],
+  "Voice artist": [
+    "Final VO stems (WAV, 48kHz)",
+    "3 alternate takes per line",
+    "Raw + processed versions",
+    "Broadcast-ready mastering",
+  ],
+};
+
+const CRAFT_SCOPE_HINTS: Record<string, string> = {
+  Photographer: "e.g. 6 hours coverage across 2 locations, candid + portrait styles, 2 outfit changes…",
+  Videographer: "e.g. 8 hours multi-cam coverage, drone shots, highlight film + 60s teaser…",
+  "Motion designer": "e.g. 15s 2D logo animation, 2 style frames to approve first, AE source included…",
+  "Graphic designer": "e.g. logo + brand palette, 2 concepts to choose from, all source files handed over…",
+  "Video editor": "e.g. edit from your raw footage, story-first cut, trending captions + SFX…",
+  Illustrator: "e.g. 3 concepts to choose from, 2 refinement rounds, final files in PNG + SVG…",
+  "Voice artist": "e.g. 2 minutes of finished VO, up to 3 takes per line, clean + mastered versions…",
+};
+
+const DEFAULT_SCOPE_HINT =
+  "Describe exactly what you'll do — hours, locations, styles, what's included…";
+
 interface WizardState {
   title: string;
   clientName: string;
@@ -126,6 +185,14 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
         .catch(() => undefined);
     }
   }, [user, requestId]);
+
+  /* craft-aware suggestions: presets for this creator's craft, minus ones already added */
+  const craft = user?.craft ?? "";
+  const craftSuggestions = useMemo(
+    () => (CRAFT_PRESETS[craft] ?? []).filter((d) => !form.deliverables.includes(d)),
+    [craft, form.deliverables]
+  );
+  const craftPlural = craft ? `${craft.toLowerCase()}s` : "";
 
   const deposit = useMemo(
     () => Math.round((form.price * form.depositPercent) / 100),
@@ -495,7 +562,7 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
               <Textarea
                 value={form.scope}
                 onChange={(e) => set("scope", e.target.value)}
-                placeholder="Describe exactly what you'll do — hours, locations, styles, what's included…"
+                placeholder={CRAFT_SCOPE_HINTS[craft] ?? DEFAULT_SCOPE_HINT}
                 className="mt-1.5 min-h-28 rounded-xl bg-muted/60 font-semibold"
               />
             </div>
@@ -503,6 +570,26 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
               <label className="text-[13px] font-extrabold text-foreground">
                 Deliverables <span className="text-red-500">*</span>
               </label>
+              {craftSuggestions.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-[11px] font-bold text-muted-foreground">
+                    Common for {craftPlural} — tap to add
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {craftSuggestions.map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => set("deliverables", [...form.deliverables, d])}
+                        className="rounded-full border border-dashed border-primary/40 bg-card px-3 py-1.5 text-[12px] font-bold text-primary transition-colors hover:bg-accent/60"
+                      >
+                        <Plus className="mr-1 inline h-3 w-3" />
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="mt-2 space-y-2">
                 {form.deliverables.map((d, i) => (
                   <div
