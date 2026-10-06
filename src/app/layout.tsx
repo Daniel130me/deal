@@ -60,6 +60,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
+        suppressHydrationWarning
         className={`${jakarta.variable} ${geistMono.variable} antialiased bg-background text-foreground font-sans`}
       >
         {children}

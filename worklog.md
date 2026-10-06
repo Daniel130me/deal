@@ -252,3 +252,16 @@ Work Log:
 
 Stage Summary:
 - v3 is live and investor-clickable: dual payment rails with user choice (creator default + client checkout switcher), escrow owned by DEAL (gateways only process charges), 7-craft niche positioning everywhere (onboarding/landing), watermarked protected previews with downloads unlocking only on approval + full payment. Payaza fully removed.
+
+---
+Task ID: 7
+Agent: Z.ai Code (main)
+Task: Fix hydration mismatch console error on <body> tag
+
+Work Log:
+- Diagnosed console error: attributes data-new-gr-c-s-check-loaded / data-gr-ext-installed / data-gr-agent-presence-bridge-connection-id / data-new-gr-c-s-loaded injected into <body> by the user's Grammarly browser extension before React hydration
+- Fix: added suppressHydrationWarning to <body> in src/app/layout.tsx (<html> already had it)
+- Verified: page compiles (106ms), GET / 200, agent-browser check shows zero console errors
+
+Stage Summary:
+- Hydration warning from browser-extension-injected attributes is now suppressed on <body>; no app code affected. Note: pending major changes from user (Flutterwave+Paystack dual gateway, system-managed escrow, 7-creator niching, file protection before full payment) are still to be implemented.
