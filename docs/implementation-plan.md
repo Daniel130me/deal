@@ -28,11 +28,11 @@
 
 ## Phase 2 — NestJS Backend Foundation (backend/)
 
-- [ ] NestJS + TypeScript, global ValidationPipe, global exception filter ({success:false,error:{code,message}}), request IDs, structured logging
-- [ ] /api/v1 prefix, Swagger at /api/docs (dev only), CORS from FRONTEND_URL, health /health /health/live /health/ready
-- [ ] Empty module boundaries: auth, users, creators, services, requests, bookings, deals, payments, files, reviews, disputes, notifications, webhooks
-- [ ] backend/.env.example (only vars actually used); config validation; testing setup
-- Acceptance: boots independently, health + Swagger work, lint/tsc/tests pass
+- [x] NestJS + TypeScript, global ValidationPipe, global exception filter ({success:false,error:{code,message}}), request IDs, structured logging
+- [x] /api/v1 prefix, Swagger at /api/docs (dev only), CORS from FRONTEND_URL, health /health /health/live /health/ready
+- [x] Empty module boundaries: auth, users, creators, services, requests, bookings, deals, payments, files, reviews, disputes, notifications, webhooks
+- [x] backend/.env.example (only vars actually used); config validation; testing setup
+- Acceptance: boots independently, health + Swagger work, lint/tsc/tests pass ✅ (bun --hot dev; gateway `?XTransformPort=3001`; 10 tests green)
 - Commit: `feat(api): bootstrap NestJS backend foundation`
 
 ## Phase 3 — Neon PostgreSQL + Prisma

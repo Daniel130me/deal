@@ -5,9 +5,13 @@
   "scripts": {
     "dev": "cd frontend && next dev -p 3000 2>&1 | tee ../dev.log",
     "dev:frontend": "cd frontend && next dev -p 3000",
+    "dev:backend": "cd backend && bun run dev",
     "build": "cd frontend && bun run build",
     "lint": "cd frontend && bun run lint",
+    "lint:backend": "cd backend && bun run lint",
     "typecheck": "cd frontend && bun run typecheck",
+    "typecheck:backend": "cd backend && bun run typecheck",
+    "test:backend": "cd backend && bun run test",
     "db:push": "cd frontend && bun run db:push",
     "test": "cd frontend && bun run typecheck && cd .. && bun run lint"
   },
@@ -92,6 +96,7 @@
     "typescript": "^5"
   },
   "workspaces": [
-    "frontend"
+    "frontend",
+    "backend"
   ]
 }
