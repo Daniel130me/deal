@@ -14,6 +14,12 @@ export async function createApp() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
 
+  // Rate limiting keys on the client IP. Trust exactly ONE reverse-proxy hop:
+  // req.ip becomes the address our own gateway appended to X-Forwarded-For,
+  // which a client cannot spoof past the proxy. Direct (dev/test) access has
+  // no XFF and keeps its socket address.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   // Health probes live on fixed root paths; everything else is versioned under /api/v1.
   app.setGlobalPrefix('api/v1', {
     exclude: [

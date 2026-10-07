@@ -46,17 +46,19 @@
 
 ## Phase 4 — Authentication
 
-- [ ] POST /api/v1/auth/{signup,login,refresh,logout}, GET /api/v1/auth/me
-- [ ] Argon2 password hashing; never return passwordHash; short-lived access token + refresh rotation/revocation (RefreshToken table)
-- [ ] Guards + ownership decorators; frontend stops trusting localStorage["deal_user"]
-- Acceptance: security tests (wrong password, expired access, invalid/reused refresh)
+- [x] POST /api/v1/auth/{signup,login,refresh,logout}, GET /api/v1/auth/me
+- [x] Argon2 password hashing; never return passwordHash; short-lived access token + refresh rotation/revocation (RefreshToken table)
+- [x] Guards + ownership decorators; frontend stops trusting localStorage["deal_user"]
+- Acceptance: security tests (wrong password, expired access, invalid/reused refresh) ✅ (12 e2e tests: validation matrix, duplicate 409, timing-equalised unknown identifier, forged/expired tokens, rotation, reuse → family revocation, logout idempotence; jose + opaque refresh flagged non-standard — see worklog Task 13)
 - Commit: `feat(auth): implement secure authentication and sessions`
 
 ## Phase 5 — Creator Domain
 
-- [ ] CreatorProfile CRUD + unique handle; CreatorChannel (one primary enforced)
-- [ ] Services; ClientRequest (new/replied/archived/declined); Booking state machine (requested→confirmed→completed; declined/cancelled) enforced server-side
-- [ ] Ownership checks + rate limiting (signup, login, refresh, public submissions)
+- [x] CreatorProfile CRUD + unique handle; CreatorChannel (one primary enforced)
+- [x] Services; ClientRequest (new/replied/archived/declined); Booking state machine (requested→confirmed→completed; declined/cancelled) enforced server-side
+- [x] Ownership checks + rate limiting (signup, login, refresh, public submissions)
+- Acceptance: profile onboarding + role promotion, handle uniqueness, single-primary invariant, service catalogue + public visibility, public submissions (validation + foreign-service 404s), request/booking state machines with 409 on illegal transitions, cross-creator access → 404 (no existence leak), per-IP throttling on auth + public surface — 21 new integration tests, 50/50 green ✅
+- Deviations flagged: `me`-scoped owner routes instead of `/creators/:id` (identity from token, IDOR impossible); new PublicModule boundary hosting the whole unauthenticated surface (breaks creators↔services cycle, co-locates rate-limited attack surface); CreatorChannel FK → CASCADE (profile-owned child, unblocks profile deletion)
 - Commit: `feat(creators): implement creator services requests and bookings`
 
 ## Phase 6 — Deal Engine

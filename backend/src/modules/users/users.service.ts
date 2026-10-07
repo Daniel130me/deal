@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { User } from '@prisma/client';
+import type { Prisma, User } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 
 /**
@@ -64,5 +64,14 @@ export class UsersService {
     } catch {
       // A failed timestamp must not fail an otherwise valid authentication.
     }
+  }
+
+  /**
+   * Role changes (Phase 5 onboarding promotes CLIENT -> CREATOR). Accepts an
+   * optional transaction client so callers can keep role + domain writes atomic.
+   */
+  async setRole(id: string, role: User['role'], client?: Prisma.TransactionClient): Promise<void> {
+    const db = client ?? this.prisma;
+    await db.user.update({ where: { id }, data: { role } });
   }
 }

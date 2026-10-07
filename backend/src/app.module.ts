@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -15,6 +16,7 @@ import { FilesModule } from './modules/files/files.module';
 import { HealthModule } from './modules/health/health.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { PublicModule } from './modules/public/public.module';
 import { RequestsModule } from './modules/requests/requests.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { ServicesModule } from './modules/services/services.module';
@@ -32,6 +34,9 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     ConfigModule,
     PrismaModule,
     HealthModule,
+    // In-memory rate-limit storage (no external middleware). Only controllers
+    // that explicitly attach ThrottlerGuard use it — see common/rate-limit.
+    ThrottlerModule.forRoot({ throttlers: [{ limit: 120, ttl: 60_000 }] }),
     // Domain boundaries (empty shells in Phase 2, implemented phase by phase)
     AuthModule,
     UsersModule,
@@ -39,6 +44,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     ServicesModule,
     RequestsModule,
     BookingsModule,
+    PublicModule,
     DealsModule,
     PaymentsModule,
     FilesModule,

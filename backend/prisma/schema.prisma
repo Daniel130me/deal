@@ -198,7 +198,9 @@ model CreatorChannel {
   isPrimary Boolean     @default(false)
   createdAt DateTime    @default(now())
 
-  creator CreatorProfile @relation(fields: [creatorId], references: [id])
+  // Channels are profile-owned children (like refresh tokens are user-owned):
+  // they must never outlive — or block — the deletion of their profile.
+  creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
   @@unique([creatorId, type, value])
   @@index([creatorId])
