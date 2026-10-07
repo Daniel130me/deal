@@ -2,6 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '../../config/config.service';
 import { PrismaService } from '../../database/prisma.service';
+import { Public } from '../auth/decorators/public.decorator';
 
 /**
  * Liveness/readiness probes for load balancers and uptime checks.
@@ -10,6 +11,7 @@ import { PrismaService } from '../../database/prisma.service';
  * change when the API version bumps.
  */
 @Controller('health')
+@Public() // probes must answer without credentials — load balancers have no tokens
 export class HealthController {
   constructor(
     private readonly config: ConfigService,

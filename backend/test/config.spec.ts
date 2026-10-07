@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { parseEnv, parseOrigins } from '../src/config/env';
 
-const VALID_ENV = { NEON_DATABASE_URL: 'postgresql://user:pass@localhost:5432/deal' };
+const VALID_ENV = {
+  NEON_DATABASE_URL: 'postgresql://user:pass@localhost:5432/deal',
+  JWT_ACCESS_SECRET: 'unit-test-secret-0123456789abcdef0123456789abcdef',
+};
 
 describe('env config', () => {
   it('applies safe defaults when optional variables are absent', () => {
@@ -31,6 +34,12 @@ describe('env config', () => {
   it('rejects a missing or non-postgres NEON_DATABASE_URL', () => {
     expect(() => parseEnv({})).toThrow(/NEON_DATABASE_URL/);
     expect(() => parseEnv({ NEON_DATABASE_URL: 'mysql://nope' })).toThrow(/NEON_DATABASE_URL/);
+  });
+
+  it('rejects a missing or too-short JWT_ACCESS_SECRET', () => {
+    const { JWT_ACCESS_SECRET: _omit, ...withoutSecret } = VALID_ENV;
+    expect(() => parseEnv(withoutSecret)).toThrow(/JWT_ACCESS_SECRET/);
+    expect(() => parseEnv({ ...VALID_ENV, JWT_ACCESS_SECRET: 'too-short' })).toThrow(/JWT_ACCESS_SECRET/);
   });
 });
 

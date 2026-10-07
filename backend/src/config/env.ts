@@ -20,6 +20,11 @@ const EnvSchema = z.object({
   NEON_DATABASE_URL: z
     .string()
     .regex(/^postgresql:\/\//, 'must be a postgresql:// connection string'),
+  /** HMAC secret for short-lived access-token JWTs (HS256).
+   *  ≥32 chars = ≥256 bits of entropy; generate with `openssl rand -base64 48`.
+   *  Required (no dev default): a silently-weak secret in dev tends to survive
+   *  into production untouched — fail-fast keeps that class of mistake impossible. */
+  JWT_ACCESS_SECRET: z.string().min(32, 'must be at least 32 characters'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

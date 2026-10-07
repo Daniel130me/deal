@@ -25,4 +25,8 @@ export class ConfigService {
   get corsOrigins(): string[] {
     return parseOrigins(this.values.FRONTEND_URL);
   }
+
+  get jwtAccessSecret(): string {
+    return this.values.JWT_ACCESS_SECRET;
+  }
 }
