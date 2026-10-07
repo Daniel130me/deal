@@ -337,3 +337,20 @@ Work Log:
 
 Stage Summary:
 - Neon PostgreSQL is live end-to-end: schema migrated, demo data seeded 1:1 with kobo money and preserved refs, backend connects with DB-aware readiness, constraints proven by integration tests. Repo hygiene fixed (gitignore scoping). Non-standard choices flagged: NEON_* env naming (sandbox DATABASE_URL collision), bun test over Jest, @node-rs/argon2, seed earnings-series omission (Phase 9 aggregation), shared User/CreatorProfile id value "u_tobi" (demo link continuity), placeholder file storageKeys (real R2 keys in Phase 7). Next: Phase 4 Authentication (Argon2, JWT access + rotating refresh, guards).
+
+---
+Task ID: 12
+Agent: Z.ai Code (main)
+Task: Break down agent.md (standing implementation standards) into a per-task checkable todo.md checklist, commit it, and summarize.
+
+Work Log:
+- Read agent.md in full: 10 code standards (A-section), implementation discipline (no patches / root causes), avoid list (over-engineering, magic values, hard-coded assumptions), mandatory post-implementation check.
+- Confirmed todo.md did not exist; confirmed existing worklog Task IDs (1-11) so this entry uses Task ID 12.
+- Created todo.md: agent.md converted into 20 verifiable checkbox items grouped as A1-A10 (code standards, with security and performance sub-checks), B1-B2 (implementation discipline), C1-C3 (avoid list), D1-D5 (mandatory post-implementation check with fill-in prompts, e.g. "List non-standard items here").
+- Added usage instructions (before / during / after coding) and a copy-paste template so every walkthrough + worklog entry can include the Section D check verbatim.
+- Committed ONLY todo.md (repo had unrelated modified files from prior phases; left untouched): commit c6561cb "docs(standards): add todo.md checklist derived from agent.md".
+
+Stage Summary:
+- todo.md is now the standing per-task checklist: every future implementation must walk A-C and include the Section D post-implementation check (honest, per-item) in its walkthrough and worklog entry.
+- Section D requires explicit statements on: security applied, performance/query decisions, flagged non-standard implementations, and fix-vs-patch justification (patches are forbidden).
+- Next: proceed to Phase 4 Authentication (Argon2, JWT access + rotating refresh, guards) per worklog Task 11, running each implementation through the todo.md checklist.
