@@ -284,3 +284,16 @@ Work Log:
 
 Stage Summary:
 - Craft-aware presets live in wizard; all four milestone pillars (dual gateway, DEAL escrow messaging, 7-craft niching, file protection) verified working end-to-end on desktop and mobile. Repo pushed; demo state reset. Token again used ephemerally via askpass (not stored); user advised to rotate it.
+
+---
+Task ID: 9
+Agent: Z.ai Code (main)
+Task: Production platform program — save phase plan, execute Phase 0 (audit) + Phase 1 (restructure)
+
+Work Log:
+- Distilled 67-section production brief into docs/implementation-plan.md (13 checkable phases, acceptance gates, commit messages) — reference for all future phases
+- PHASE 0: audited repo (18 API routes, JSON in-memory store, state machines, payment/file flows, auth weaknesses incl. plaintext passwords + localStorage identity + spoofable creatorId; found corrupted `public/andle]` route dir and .env/SQLite tracked in git); baseline lint clean + 0 TS errors in src/; wrote docs/current-system-audit.md, docs/target-architecture.md, docs/migration-plan.md; commit 43356f7
+- PHASE 1: git mv Next.js app → frontend/ (history preserved); root bun workspace with forwarding scripts; untracked .env + custom.db; gitignore hardened; UPGRADE_SPEC → docs/legacy-upgrade-spec.md; fixed dev boot by adding @types/node (Next type auto-install failed in workspace); server restart required double-fork `(cmd &)` to persist across tool sessions; verified: GET / 200, APIs 200, assets 200, login+dashboard browser-verified (desktop), lint+tsc clean; commit d8582d1
+
+Stage Summary:
+- Repo is now two-app ready: frontend/ standalone + root workspace; no functionality changed; demo state preserved (frontend/db/*). Next: Phase 2 NestJS backend foundation in backend/. agent.md standards: security flags documented in audit (§10-11), no patches taken (root-cause fixes: @types/node hoisting, gitignore hygiene), non-standard interim items flagged (andle] dir deferred to Phase 11, sandbox single-port routing noted in migration plan).
