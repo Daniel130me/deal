@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { RequestStatus, type ClientRequest, type Service } from '@prisma/client';
+import { Prisma, RequestStatus, type ClientRequest, type Service } from '@prisma/client';
 import { retryOnUniqueViolation, nextSequentialRef } from '../../common/ids/ref.util';
 import { PrismaService } from '../../database/prisma.service';
 import { ServicesService } from '../services/services.service';
@@ -82,14 +82,19 @@ export class RequestsService {
    * Phase 6 seam: creating a deal from a request marks it REPLIED. Idempotent
    * on REPLIED (a second deal from the same thread is legitimate) and refuses
    * dead threads so closed conversations cannot be resurrected.
+   *
+   * Pass `tx` to run inside the caller's transaction — deal creation marks the
+   * request in the SAME transaction that writes the deal, so a crash can never
+   * leave a deal linked to a request still sitting in the inbox as NEW.
    */
-  async markReplied(requestId: string): Promise<void> {
-    const request = await this.prisma.clientRequest.findUnique({ where: { id: requestId }, select: { status: true } });
+  async markReplied(requestId: string, tx?: Prisma.TransactionClient): Promise<void> {
+    const client = tx ?? this.prisma;
+    const request = await client.clientRequest.findUnique({ where: { id: requestId }, select: { status: true } });
     if (!request) {
       throw new HttpException({ code: 'REQUEST_NOT_FOUND', message: 'Request not found' }, HttpStatus.NOT_FOUND);
     }
     if (request.status === RequestStatus.NEW) {
-      await this.prisma.clientRequest.update({ where: { id: requestId }, data: { status: RequestStatus.REPLIED } });
+      await client.clientRequest.update({ where: { id: requestId }, data: { status: RequestStatus.REPLIED } });
     }
   }
 

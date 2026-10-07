@@ -24,4 +24,15 @@ export const RATE_LIMITS = {
     /** Anonymous form submissions into the DB: the abuse surface. */
     submission: { default: { limit: 5, ttl: 60_000 } },
   },
+  shared: {
+    /** Capability-link deal reads: client + any listener they forward the page to. */
+    dealRead: { default: { limit: 30, ttl: 60_000 } },
+    /**
+     * Capability-link actions (decline/approve/...): one-click human decisions,
+     * but also Phase 8's payment attempts from the share page — card retries
+     * legitimately repeat, so the budget keeps headroom while still bounding
+     * the only writable anonymous surface on a deal.
+     */
+    action: { default: { limit: 20, ttl: 60_000 } },
+  },
 } as const;

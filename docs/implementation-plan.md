@@ -63,10 +63,12 @@
 
 ## Phase 6 — Deal Engine
 
-- [ ] Deal CRUD + send; capability share tokens (random, high entropy, rate-limited, minimal payload)
-- [ ] DealStateService centralizes transitions: draft→sent→(changes_requested/declined)→active→delivered→revision→approved→files_released→completed; disputed; balance_paid legacy-only
-- [ ] Server-authoritative money: depositAmount/paidTotal/remainingBalance/isFullyPaid/paymentSchedule/nextDueSlot; integer minor units; no floats
-- [ ] Immutable DealEvent audit trail; disputes; file-release eligibility
+- [x] Deal CRUD + send; capability share tokens (random, high entropy, rate-limited, minimal payload)
+- [x] DealStateService centralizes transitions: draft→sent→(changes_requested/declined)→active→delivered→revision→approved→files_released→completed; disputed; balance_paid legacy-only
+- [x] Server-authoritative money: depositAmount/paidTotal/remainingBalance/isFullyPaid/paymentSchedule/nextDueSlot; integer minor units; no floats
+- [x] Immutable DealEvent audit trail; disputes; file-release eligibility
+- Acceptance: full lifecycle + failure matrix, 70/70 tests green ✅ (20 new e2e: draft defaults + 256-bit tokens, request-link→REPLIED in one transaction, foreign-request 404, kobo wizard PATCH with replace-set deliverables + 100%-deposit schedule, edit window (DRAFT/CHANGES_REQUESTED only), send validation + changes-requested→re-send loop, decline terminal, whitelist share projection (no events/payments/clientContact/internal ids), deliver→revision→deliver→approve with escrow release (held→released + PAYMENT_RELEASED system event), zero-payment approve invents nothing, finals gated on full payment (DEAL_NOT_FULLY_PAID), dispute requires reason + OPEN Dispute row, cross-creator 404, unauthenticated 401, 429 on the 21st shared action)
+- Deviations flagged: SENT→ACTIVE is legal in the transition table but has NO route trigger until Phase 8 wires payment verification (a state no client can fake beats an "accept without money" action); deal PATCH restricted to DRAFT/CHANGES_REQUESTED (prototype allowed edits any time — escrow terms must not move under a sent offer); dispute requires a reason (prototype's was optional); money helpers are pure functions in deal-money.ts, not a DI "MoneyService" (no state/IO to inject — flagged vs the doc's naming); shared surface lives in DealsModule (SharedDealsController), not PublicModule — it projects deal state and drives the deal machine, so it stays with the domain
 - Commit: `feat(deals): implement deal lifecycle and state machine`
 
 ## Phase 7 — Cloudflare R2
