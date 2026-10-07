@@ -11,14 +11,14 @@ node_modules
 !.yarn/versions
 
 # testing
-/coverage
+coverage
 
 # next.js
-/.next/
+.next/
 /out/
 
 # production
-/build
+build/
 
 # misc
 .DS_Store
@@ -52,3 +52,11 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# legacy untracked runtime data
+*.db
+*.db-journal
+
+# sandbox tool artifacts
+tool-results/
+upload/
