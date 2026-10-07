@@ -1,0 +1,527 @@
+// DEAL — Neon PostgreSQL domain schema (Phase 3)
+// Source of truth: docs/target-architecture.md §4 (model list) and §3 (API surface).
+// Conventions:
+//   - Money is ALWAYS integer minor units (kobo): *Minor fields. No floats anywhere.
+//   - `ref`/`reference`/`shareToken` are externally visible identifiers — unique + indexed.
+//   - Deletion policy: domain data RESTRICTs (never silently cascade-destroy deals);
+//     only auth artifacts (RefreshToken) and the 1:1 profile cascade with the user.
+//   - Scalar arrays (String[]) are PostgreSQL text[] — fine for short fixed lists.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("NEON_DATABASE_URL")
+  // Migrations (and the shadow database they need) must bypass PgBouncer:
+  // Neon's non-pooler host, provided as DIRECT_URL.
+  directUrl = env("NEON_DIRECT_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  CREATOR
+  CLIENT
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum ChannelType {
+  WHATSAPP
+  TELEGRAM
+  INSTAGRAM
+  EMAIL
+  PHONE_CALL
+  SMS
+  X_TWITTER
+  LINKEDIN
+  TIKTOK
+}
+
+enum PaymentProvider {
+  FLUTTERWAVE
+  PAYSTACK
+}
+
+enum PaymentMethod {
+  CARD
+  TRANSFER
+  USSD
+}
+
+enum PaymentType {
+  DEPOSIT
+  INSTALLMENT
+  BALANCE
+}
+
+// Escrow state is DEAL's own authority — never derived from the gateway.
+enum EscrowStatus {
+  HELD
+  RELEASED
+  REFUNDED
+  DISPUTED
+}
+
+enum RequestStatus {
+  NEW
+  REPLIED
+  ARCHIVED
+  DECLINED
+}
+
+enum BookingStatus {
+  REQUESTED
+  CONFIRMED
+  COMPLETED
+  DECLINED
+  CANCELLED
+}
+
+enum DealStatus {
+  DRAFT
+  SENT
+  CHANGES_REQUESTED
+  DECLINED
+  ACTIVE
+  DELIVERED
+  REVISION
+  APPROVED
+  // Legacy status kept only for historical compatibility; the state machine never writes it.
+  BALANCE_PAID
+  FILES_RELEASED
+  COMPLETED
+  DISPUTED
+}
+
+enum DealEventType {
+  CREATED
+  SENT
+  ACCEPTED
+  DEPOSIT_PAID
+  DELIVERED
+  CHANGES_REQUESTED
+  APPROVED
+  BALANCE_PAID
+  FILES_RELEASED
+  PAYMENT_RELEASED
+  COMPLETED
+  DECLINED
+  DISPUTED
+}
+
+enum ActorType {
+  CREATOR
+  CLIENT
+  SYSTEM
+}
+
+enum FileRole {
+  PREVIEW
+  FINAL
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum NotificationAudience {
+  CREATOR
+  CLIENT
+}
+
+// ─── Identity ─────────────────────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(cuid())
+  email        String?    @unique
+  phone        String?    @unique
+  passwordHash String
+  role         UserRole   @default(CLIENT)
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  creatorProfile CreatorProfile?
+  refreshTokens  RefreshToken[]
+  payoutAccounts PayoutAccount[]
+  notifications  Notification[]
+
+  @@index([status])
+}
+
+model CreatorProfile {
+  id                String          @id @default(cuid())
+  userId            String          @unique
+  name              String
+  handle            String          @unique
+  // Free-form by design: validated against the 7 supported crafts at the DTO layer,
+  // so adding a craft never needs a DB migration.
+  craft             String?
+  location          String?
+  bio               String?
+  verified          Boolean         @default(false)
+  onboarded         Boolean         @default(false)
+  preferredProvider PaymentProvider @default(FLUTTERWAVE)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channels CreatorChannel[]
+  services Service[]
+  requests ClientRequest[]
+  bookings Booking[]
+  deals    Deal[]
+  reviews  Review[]
+  disputes Dispute[]
+
+  @@index([handle])
+}
+
+model CreatorChannel {
+  id        String      @id @default(cuid())
+  creatorId String
+  type      ChannelType
+  value     String
+  // ≤1 primary is enforced in the service layer (cannot be expressed as a plain unique index).
+  isPrimary Boolean     @default(false)
+  createdAt DateTime    @default(now())
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [id])
+
+  @@unique([creatorId, type, value])
+  @@index([creatorId])
+}
+
+// ─── Creator commerce ─────────────────────────────────────────────────────────
+
+model Service {
+  id                 String   @id @default(cuid())
+  creatorId          String
+  title              String
+  description        String
+  startingPriceMinor Int
+  duration           String?
+  isPopular          Boolean  @default(false)
+  isActive           Boolean  @default(true)
+  includes           String[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  creator  CreatorProfile  @relation(fields: [creatorId], references: [id])
+  requests ClientRequest[]
+  bookings Booking[]
+
+  @@index([creatorId])
+}
+
+model ClientRequest {
+  id             String        @id @default(cuid())
+  ref            String        @unique
+  creatorId      String
+  serviceId      String?
+  clientName     String
+  clientContact  String
+  eventDate      DateTime?
+  location       String?
+  budgetMinMinor Int?
+  budgetMaxMinor Int?
+  description    String?
+  notes          String?
+  status         RequestStatus @default(NEW)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  creator CreatorProfile  @relation(fields: [creatorId], references: [id])
+  service Service?        @relation(fields: [serviceId], references: [id])
+  deals   Deal[]
+
+  @@index([creatorId])
+  @@index([serviceId])
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  ref           String        @unique
+  creatorId     String
+  serviceId     String?
+  sessionType   String
+  clientName    String
+  clientContact String
+  date          DateTime      @db.Date
+  time          String
+  note          String?
+  status        BookingStatus @default(REQUESTED)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [id])
+  service Service?       @relation(fields: [serviceId], references: [id])
+
+  @@index([creatorId])
+  @@index([date])
+}
+
+// ─── Deal engine ──────────────────────────────────────────────────────────────
+
+model Deal {
+  id                String     @id @default(cuid())
+  ref               String     @unique
+  creatorId         String
+  requestId         String?
+  shareToken        String     @unique
+  title             String
+  serviceTitle      String
+  clientName        String
+  clientContact     String
+  summary           String?
+  eventDate         DateTime?
+  location          String?
+  message           String?
+  scope             String?
+  priceMinor        Int
+  depositPercent    Int
+  installmentsCount Int        @default(0)
+  revisions         Int        @default(0)
+  startDate         DateTime?
+  dueDate           DateTime?
+  status            DealStatus @default(DRAFT)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  sentAt            DateTime?
+  acceptedAt        DateTime?
+  depositPaidAt     DateTime?
+  deliveredAt       DateTime?
+  approvedAt        DateTime?
+  balancePaidAt     DateTime?
+  filesReleasedAt   DateTime?
+  paymentReleasedAt DateTime?
+  completedAt       DateTime?
+
+  creator      CreatorProfile       @relation(fields: [creatorId], references: [id])
+  request      ClientRequest?       @relation(fields: [requestId], references: [id])
+  deliverables DealDeliverable[]
+  payments     DealPayment[]
+  transactions PaymentTransaction[]
+  deliveries   DealDelivery[]
+  files        FileAsset[]
+  events       DealEvent[]
+  review       Review?
+  disputes     Dispute[]
+
+  @@index([creatorId])
+  @@index([status])
+  @@index([requestId])
+}
+
+model DealDeliverable {
+  id       String @id @default(cuid())
+  dealId   String
+  name     String
+  position Int    @default(0)
+
+  deal Deal @relation(fields: [dealId], references: [id])
+
+  @@index([dealId])
+}
+
+model DealPayment {
+  id           String          @id @default(cuid())
+  dealId       String
+  type         PaymentType
+  label        String
+  amountMinor  Int
+  method       PaymentMethod
+  provider     PaymentProvider
+  reference    String          @unique
+  escrowStatus EscrowStatus    @default(HELD)
+  paidAt       DateTime
+  releasedAt   DateTime?
+  createdAt    DateTime        @default(now())
+
+  deal         Deal                 @relation(fields: [dealId], references: [id])
+  transactions PaymentTransaction[]
+
+  @@index([dealId])
+  @@index([escrowStatus])
+}
+
+// One row per gateway interaction — the gateway's view of a charge.
+// Escrow state (DealPayment.escrowStatus) is DEAL's; gatewayStatus is the provider's.
+model PaymentTransaction {
+  id            String          @id @default(cuid())
+  dealId        String
+  paymentId     String?
+  provider      PaymentProvider
+  providerRef   String          @unique
+  amountMinor   Int
+  currency      String          @default("NGN")
+  gatewayStatus String
+  verifiedAt    DateTime?
+  raw           Json?
+  createdAt     DateTime        @default(now())
+
+  deal    Deal         @relation(fields: [dealId], references: [id])
+  payment DealPayment? @relation(fields: [paymentId], references: [id])
+
+  @@index([dealId])
+}
+
+model DealDelivery {
+  id          String   @id @default(cuid())
+  dealId      String
+  note        String?
+  submittedAt DateTime @default(now())
+
+  deal  Deal        @relation(fields: [dealId], references: [id])
+  files FileAsset[]
+
+  @@index([dealId])
+}
+
+model FileAsset {
+  id         String    @id @default(cuid())
+  dealId     String
+  deliveryId String?
+  role       FileRole
+  storageKey String
+  filename   String
+  sizeBytes  Int
+  mime       String
+  uploadedBy String
+  // Finals get a release timestamp only after approval + full payment (FilesService enforces).
+  releasedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  deal     Deal          @relation(fields: [dealId], references: [id])
+  delivery DealDelivery? @relation(fields: [deliveryId], references: [id])
+
+  @@index([dealId])
+  @@index([deliveryId])
+}
+
+// Append-only audit trail — services must only INSERT here, never update or delete.
+model DealEvent {
+  id        String        @id @default(cuid())
+  dealId    String
+  type      DealEventType
+  actor     ActorType
+  actorId   String?
+  label     String
+  metadata  Json?
+  createdAt DateTime      @default(now())
+
+  deal Deal @relation(fields: [dealId], references: [id])
+
+  @@index([dealId])
+  @@index([createdAt])
+}
+
+// ─── Platform ─────────────────────────────────────────────────────────────────
+
+model Review {
+  id        String   @id @default(cuid())
+  dealId    String   @unique
+  creatorId String
+  // 1..5 validated at the DTO/service layer (Prisma has no CHECK constraints).
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+
+  deal    Deal           @relation(fields: [dealId], references: [id])
+  creator CreatorProfile @relation(fields: [creatorId], references: [id])
+
+  @@index([creatorId])
+}
+
+model Dispute {
+  id         String        @id @default(cuid())
+  dealId     String
+  raisedBy   ActorType
+  raisedById String?
+  reason     String
+  status     DisputeStatus @default(OPEN)
+  resolvedAt DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  deal    Deal            @relation(fields: [dealId], references: [id])
+  profile CreatorProfile? @relation(fields: [raisedById], references: [id])
+
+  @@index([dealId])
+}
+
+model PayoutAccount {
+  id         String          @id @default(cuid())
+  userId     String
+  provider   PaymentProvider
+  accountRef String
+  isDefault  Boolean         @default(false)
+  createdAt  DateTime        @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@unique([userId, provider])
+}
+
+// ─── Auth sessions & integrations ─────────────────────────────────────────────
+
+model RefreshToken {
+  id           String    @id @default(cuid())
+  userId       String
+  // Only the SHA-256 hash of the token is stored — raw refresh tokens are never persisted.
+  tokenHash    String    @unique
+  familyId     String
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model Notification {
+  id        String               @id @default(cuid())
+  userId    String?
+  audience  NotificationAudience
+  type      String
+  payload   Json?
+  readAt    DateTime?
+  createdAt DateTime             @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([readAt])
+}
+
+// Webhook idempotency ledger — unique (provider, eventId) is the dedup anchor.
+model WebhookEvent {
+  id            String          @id @default(cuid())
+  provider      PaymentProvider
+  eventId       String
+  eventType     String
+  payloadHash   String
+  payload       Json?
+  processed     Boolean         @default(false)
+  processedAt   DateTime?
+  failureReason String?
+  createdAt     DateTime        @default(now())
+
+  @@unique([provider, eventId])
+}

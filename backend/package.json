@@ -9,26 +9,13 @@
     "start": "node dist/main.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "bun prisma/seed.ts"
   },
-  "dependencies": {
-    "@nestjs/common": "^11",
-    "@nestjs/core": "^11",
-    "@nestjs/platform-express": "^11",
-    "@nestjs/swagger": "^11",
-    "class-transformer": "^0.5.1",
-    "class-validator": "^0.15.1",
-    "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2",
-    "zod": "^4.6.5"
-  },
-  "devDependencies": {
-    "@nestjs/testing": "^11",
-    "@types/express": "^5.0.6",
-    "@types/node": "^26.6.4",
-    "bun-types": "^1.4.2",
-    "eslint": "^10.12.0",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.71.1"
+  "prisma": {
+    "seed": "bun prisma/seed.ts"
   }
 }

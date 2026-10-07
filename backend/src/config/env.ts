@@ -13,6 +13,13 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   /** Browser origin(s) allowed by CORS. Comma-separated; never a wildcard in production. */
   FRONTEND_URL: z.string().default('http://localhost:3000'),
+  /** Neon PostgreSQL pooled connection string (Prisma runtime). Required since Phase 3.
+   *  Named NEON_* on purpose: the sandbox platform exports a workspace-global
+   *  DATABASE_URL (the frontend prototype's SQLite file) that would otherwise
+   *  shadow this file's value — see .env for the full rationale. */
+  NEON_DATABASE_URL: z
+    .string()
+    .regex(/^postgresql:\/\//, 'must be a postgresql:// connection string'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

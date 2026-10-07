@@ -37,11 +37,11 @@
 
 ## Phase 3 — Neon PostgreSQL + Prisma
 
-- [ ] backend/prisma/schema.prisma with models: User, CreatorProfile, CreatorChannel, Service, ClientRequest, Booking, Deal, DealDeliverable, DealPayment, PaymentTransaction, DealDelivery, FileAsset, DealEvent, Review, Dispute, PayoutAccount, RefreshToken, Notification, WebhookEvent
-- [ ] Indexes: users.email/phone, profiles.handle, services.creatorId, requests.creatorId/ref, bookings.creatorId/ref, deals.creatorId/ref/shareToken/status, deal_payments.dealId/providerReference, deal_events.dealId, file_assets.dealId, webhook_events(provider,eventId)
-- [ ] Migration (not db push) + seed.ts from useful JSON records; passwords Argon2-hashed; demo credentials documented as non-production
-- [ ] PrismaModule; constraints verified
-- Acceptance: migration + seed succeed, backend connects (needs user-provided Neon DATABASE_URL — flag if unavailable)
+- [x] backend/prisma/schema.prisma with models: User, CreatorProfile, CreatorChannel, Service, ClientRequest, Booking, Deal, DealDeliverable, DealPayment, PaymentTransaction, DealDelivery, FileAsset, DealEvent, Review, Dispute, PayoutAccount, RefreshToken, Notification, WebhookEvent
+- [x] Indexes: users.email/phone, profiles.handle, services.creatorId, requests.creatorId/ref, bookings.creatorId/ref, deals.creatorId/ref/shareToken/status, deal_payments.dealId/providerReference, deal_events.dealId, file_assets.dealId, webhook_events(provider,eventId)
+- [x] Migration (not db push) + seed.ts from useful JSON records; passwords Argon2-hashed; demo credentials documented as non-production
+- [x] PrismaModule; constraints verified
+- Acceptance: migration + seed succeed, backend connects ✅ (`20261007090659_init` applied to Neon via DIRECT_URL; seed 1:1 with kobo money; /health/ready pings the DB; 5 integration constraint tests green)
 - Commit: `feat(db): add Neon PostgreSQL domain schema`
 
 ## Phase 4 — Authentication

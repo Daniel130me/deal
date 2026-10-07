@@ -5,6 +5,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { ConfigModule } from './config/config.module';
+import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { CreatorsModule } from './modules/creators/creators.module';
@@ -29,6 +30,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
 @Module({
   imports: [
     ConfigModule,
+    PrismaModule,
     HealthModule,
     // Domain boundaries (empty shells in Phase 2, implemented phase by phase)
     AuthModule,
