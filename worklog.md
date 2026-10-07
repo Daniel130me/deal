@@ -297,3 +297,43 @@ Work Log:
 
 Stage Summary:
 - Repo is now two-app ready: frontend/ standalone + root workspace; no functionality changed; demo state preserved (frontend/db/*). Next: Phase 2 NestJS backend foundation in backend/. agent.md standards: security flags documented in audit (§10-11), no patches taken (root-cause fixes: @types/node hoisting, gitignore hygiene), non-standard interim items flagged (andle] dir deferred to Phase 11, sandbox single-port routing noted in migration plan).
+
+---
+Task ID: 10
+Agent: Z.ai Code (main)
+Task: Phase 2 — NestJS backend foundation (backend/) per docs/migration-plan.md; unblocked by user-provided Neon credentials arriving.
+
+Work Log:
+- Scaffolded backend/ as an independent NestJS 11 app in the bun workspace: @nestjs/{common,core,platform-express,swagger}@11.2.7, class-validator/transform, zod; TS 5.9 (bun installed TS 7 by default — pinned back to ^5.9.3, repo standard), nodenext module resolution (TS 5.9 removed node10).
+- Config: zod-validated env parsed once at boot (env.ts), fail-fast with readable issues; ConfigService global module (NODE_ENV/PORT/FRONTEND_URL in Phase 2).
+- API contract plumbing: global ValidationPipe (whitelist+forbidNonWhitelisted+transform), AllExceptionsFilter -> {success:false,error:{code,message}} (no internals for 5xx), TransformInterceptor -> {success:true,data}, LoggingInterceptor (one structured JSON line per successful request), status->code map (error-codes.ts).
+- Request correlation: RequestIdMiddleware sanitizes/echoes x-request-id and opens an AsyncLocalStorage request context; logJson joins requestId automatically.
+- app.ts (side-effect-free createApp factory: /api/v1 prefix with health excluded to root, CORS allow-list from FRONTEND_URL, dev-only Swagger at /api/docs) + main.ts (bootstrap on port 3001). HealthController: /health, /health/live, /health/ready.
+- 13 domain module shells (auth, users, creators, services, requests, bookings, deals, payments, files, reviews, disputes, notifications, webhooks) with service exports as cross-module seams.
+- Tests (bun test — flagged deviation from the doc's Jest: zero-config under repo toolchain, describe/it/expect portable): 6 e2e (boot real app on ephemeral port: health probes, request-id echo, 404 envelope, swagger) + 5 config tests.
+- Root package.json: backend workspace + dev:backend/lint:backend/typecheck:backend/test:backend scripts.
+- Verified: boots under bun --hot on :3001 (Bun supports Nest DI incl. emitDecoratorMetadata — empirically probed), gateway ?XTransformPort=3001 routes /health + /api/docs, CORS withholds ACAO for unknown origins, lint 0 / tsc 0 / 10 tests green, prod tsc build emits dist/.
+- DEBUGGED (root cause, not patch): test run EADDRINUSE:3001 — app.ts (moved from main.ts) still contained void bootstrap(), so IMPORTING the module booted a server; split main.ts (entrypoint, side effect) from app.ts (factory, none). Also killed a zombie dev process holding :3001 after a --hot crash on the moved entry file.
+- Commit 6ce2d7a feat(api): bootstrap NestJS backend foundation. NOTE: backend/test/* silently missed this commit — bare `test` pattern in root .gitignore (fixed in Task 11's commit).
+
+Stage Summary:
+- Backend boots standalone on :3001 with the full API contract (envelope, request ids, structured logs, health probes, dev Swagger, CORS allow-list, validated config) and 13 module boundaries ready for domain phases. Bun+NestJS viability confirmed (dev: bun --hot; tests: bun test; prod: tsc -> node dist/main.js). Sandbox quirk documented: Swagger UI assets need the backend origin (gateway drops XTransformPort on relative asset paths); /api/docs-json works through the gateway.
+
+---
+Task ID: 11
+Agent: Z.ai Code (main)
+Task: Phase 3 — Neon PostgreSQL + Prisma (schema, migration, seed, PrismaModule) using the user-provided Neon connection string.
+
+Work Log:
+- Deps: prisma/@prisma/client@^6.19, @node-rs/argon2 (prebuilt napi — works under bun+node; flagged vs native argon2).
+- schema.prisma: postgresql provider with url=env(NEON_DATABASE_URL) + directUrl=env(NEON_DIRECT_URL) (migrations must bypass PgBouncer). 19 models per target-architecture §4 (User, CreatorProfile, CreatorChannel, Service, ClientRequest, Booking, Deal, DealDeliverable, DealPayment, PaymentTransaction, DealDelivery, FileAsset, DealEvent, Review, Dispute, PayoutAccount, RefreshToken, Notification, WebhookEvent) + 13 enums incl. legacy balance_paid; all plan indexes (unique ref/shareToken/reference, composite webhook (provider,eventId)); money in kobo *Minor Int; deletion policy RESTRICT for domain data, CASCADE only user->profile/refreshTokens, SET NULL for optional refs.
+- ENV COLLISION root-caused: sandbox exports a workspace-global DATABASE_URL (frontend prototype's SQLite file) into every process; env vars beat .env files so backend/.env could never win — even --env-file couldn't override. Fix (flagged non-standard, justified in .env): backend owns NEON_DATABASE_URL/NEON_DIRECT_URL names; schema/env/service/seed all switched. Also moved frontend's SQLite URL from root .env to frontend/.env and deleted root .env (frontend prisma reads its own .env via Prisma CLI).
+- Migration 20261007090659_init created and applied to Neon via `prisma migrate dev` (channel_binding=require accepted; shadow DB worked on direct host); migrate status green.
+- PrismaModule (global) + PrismaService (singleton, $connect/$disconnect lifecycle, isHealthy SELECT 1); /health/ready now pings the DB and returns 503 (ServiceUnavailableException) when down — liveness stays dependency-free by design.
+- Seed (backend/prisma/seed-data.ts + seed.ts): prototype records embedded as typed constants (backend stays deployable standalone — no frontend file reads), ids/refs/shareTokens preserved 1:1, naira->kobo x100, Argon2id-hashed demo password (tobi@deal.ng, NON-PRODUCTION), embedded arrays -> relational rows (19 deliverables, 6 payments each backed by a verified PaymentTransaction, 4 deliveries, 8 FileAssets with derived bytes/mime + placeholder R2-shaped keys, 31 events), production guard + FK-safe wipe. NOT ported (documented): settings.earningsSeries (Phase 9 will aggregate from released DealPayments) and DEAL-005's mentioned review (no record; Phase 9 feature).
+- Constraint verification (test/db-constraints.spec.ts, integration vs live Neon, skips if no URL): seeded shape (5 deals, kobo math), unique email/phone/handle/shareToken/payment reference, webhook (provider,eventId) dedup is per-provider, RESTRICT blocks deleting a creator with deals. FLAG: under bun, FK violations surface as PrismaClientUnknownRequestError (no P2003 code) — test asserts the invariant; later phases must not rely on catching P2003 for FK errors under bun.
+- Gates: lint 0, tsc 0, 16 tests pass; /health/ready via gateway shows checks.db=ok (live Neon through the Nest stack); landing + demo-login regression-verified in browser; gitignore hardened (.env* scoped with !.env.example negation, bare `test` -> /test).
+- Commit ad2a789 feat(db): add Neon PostgreSQL domain schema.
+
+Stage Summary:
+- Neon PostgreSQL is live end-to-end: schema migrated, demo data seeded 1:1 with kobo money and preserved refs, backend connects with DB-aware readiness, constraints proven by integration tests. Repo hygiene fixed (gitignore scoping). Non-standard choices flagged: NEON_* env naming (sandbox DATABASE_URL collision), bun test over Jest, @node-rs/argon2, seed earnings-series omission (Phase 9 aggregation), shared User/CreatorProfile id value "u_tobi" (demo link continuity), placeholder file storageKeys (real R2 keys in Phase 7). Next: Phase 4 Authentication (Argon2, JWT access + rotating refresh, guards).
