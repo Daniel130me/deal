@@ -24,6 +24,7 @@ import {
   formatNaira,
   isPaymentProvider,
   type Deal,
+  type DealPayment,
   type PaymentProvider,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -53,7 +54,7 @@ interface PaymentRow {
   amount: number;
   provider: PaymentProvider;
   reference: string;
-  status: "held" | "released";
+  status: DealPayment["status"];
   paidAt: string;
   releasedAt?: string;
 }
@@ -104,7 +105,7 @@ export default function MoneyScreen() {
   useEffect(() => {
     if (!user) return;
     let alive = true;
-    Promise.all([api.overview(user.id), api.deals(user.id)])
+    Promise.all([api.overview(), api.deals()])
       .then(([o, d]) => {
         if (!alive) return;
         setOverview(o);
@@ -148,8 +149,8 @@ export default function MoneyScreen() {
     if (!user || next === provider || switching) return;
     setSwitching(true);
     try {
-      const { user: updated } = await api.updateUser(user.id, { preferredProvider: next });
-      setUser(updated);
+      await api.updateProfile({ preferredProvider: next });
+      setUser({ ...user, preferredProvider: next });
       toast.success(`Payout rail set to ${PROVIDER_META[next].label}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't update your payout rail.");

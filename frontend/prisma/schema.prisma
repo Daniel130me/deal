@@ -1,5 +1,8 @@
 generator client {
   provider = "prisma-client-js"
+  // Own output dir: the backend's Postgres client generates into the shared
+  // @prisma/client — this SQLite remnant must never clobber it.
+  output   = "../src/generated/prisma"
 }
 
 datasource db {

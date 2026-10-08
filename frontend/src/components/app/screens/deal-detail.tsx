@@ -44,7 +44,9 @@ import {
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
-import { api, type SafeUser } from "@/lib/api";
+import { api, humanFileSize, type SessionUser } from "@/lib/api";
+import { useApp } from "@/components/app/context";
+import { cn } from "@/lib/utils";
 import {
   formatNaira,
   formatDate,
@@ -55,6 +57,7 @@ import {
   paidTotal,
   remainingBalance,
   type Deal,
+  type DealFile,
   type PaymentProvider,
 } from "@/lib/types";
 
@@ -72,15 +75,47 @@ function HashLink({ onClick, ...rest }: React.ComponentPropsWithoutRef<"a">) {
   );
 }
 
-const DELIVERY_FILES = [
-  { name: "Preview photos (High Res).zip", size: "45.6 MB" },
-  { name: "Preview photos (Web Size).zip", size: "18.9 MB" },
-];
+/**
+ * Files a creative workflow produces, matched to the backend's MIME allowlist.
+ * Some OSes give empty file.type (e.g. .heic) — fall back by extension so the
+ * upload-url request validates.
+ */
+const MIME_BY_EXTENSION: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+  avif: "image/avif",
+  heic: "image/heic",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  m4a: "audio/mp4",
+  pdf: "application/pdf",
+  zip: "application/zip",
+};
 
-const FINAL_FILES = [
-  { name: "Final files — High Res.zip", size: "204.3 MB" },
-  { name: "Final files — Web Exports.zip", size: "28.9 MB" },
-];
+function mimeFor(file: File): string {
+  if (file.type) return file.type;
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return MIME_BY_EXTENSION[extension] ?? "application/octet-stream";
+}
+
+/**
+ * Open a signed, time-limited URL for one of the deal's files.
+ * Owner side: any role, any time — the gate only binds the client surface.
+ */
+async function openFile(file: DealFile) {
+  try {
+    const url = await api.fileDownloadUrl(file.id);
+    window.open(url, "_blank", "noopener,noreferrer");
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "Couldn't open the file.");
+  }
+}
 
 const HELD_STATUSES: Deal["status"][] = [
   "active",
@@ -99,7 +134,7 @@ function heldTotal(deal: Deal) {
 
 /** The rail this deal's money actually moved on — released payments first, then any
  *  payment, then the creator's preferred rail, then Paystack as a last-resort default. */
-function dealProviderOf(deal: Deal, creator: SafeUser | null): PaymentProvider {
+function dealProviderOf(deal: Deal, creator: SessionUser | null): PaymentProvider {
   const released = deal.payments.find((p) => p.status === "released");
   if (released) return released.provider;
   if (deal.payments[0]) return deal.payments[0].provider;
@@ -152,8 +187,8 @@ function UploadDialog({
   title,
   hint,
   files,
+  onFilesChange,
   submitLabel,
-  progress,
   submitting,
   onSubmit,
   children,
@@ -162,9 +197,10 @@ function UploadDialog({
   onOpenChange: (open: boolean) => void;
   title: string;
   hint?: string;
-  files: { name: string; size: string }[];
+  /** Files picked for this submission (real files, uploaded to R2). */
+  files: File[];
+  onFilesChange: (files: File[]) => void;
   submitLabel: string;
-  progress: number;
   submitting: boolean;
   onSubmit: () => void;
   children?: React.ReactNode;
@@ -173,60 +209,83 @@ function UploadDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!submitting && progress === 0) onOpenChange(next);
+        if (!submitting) onOpenChange(next);
       }}
     >
       <DialogContent aria-describedby={undefined} className="max-w-md rounded-2xl">
         <DialogHeader>
           <DialogTitle className="text-lg font-extrabold">{title}</DialogTitle>
         </DialogHeader>
-        {progress > 0 ? (
-          <div className="py-6 text-center">
-            <p className="text-sm font-extrabold text-foreground">Uploading files… {progress}%</p>
-            <Progress value={progress} className="mx-auto mt-4 h-2.5 max-w-xs" />
-            <p className="mt-2 text-xs font-semibold text-muted-foreground">
-              Simulated upload for this demo
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {hint ? (
-              <p className="text-[13px] font-medium leading-relaxed text-muted-foreground">{hint}</p>
-            ) : null}
+        <div className="space-y-4">
+          {hint ? (
+            <p className="text-[13px] font-medium leading-relaxed text-muted-foreground">{hint}</p>
+          ) : null}
+          <label
+            className={cn(
+              "flex cursor-pointer flex-col items-center gap-1 rounded-xl border border-dashed border-primary/40 bg-accent/50 p-5 text-center transition-colors hover:bg-accent",
+              submitting && "pointer-events-none opacity-60"
+            )}
+          >
+            <FileUp className="h-5 w-5 text-primary" />
+            <span className="text-[13px] font-extrabold text-foreground">Choose files</span>
+            <span className="text-[11px] font-medium text-muted-foreground">
+              Up to 200 MB per file · images, video, audio, PDF, ZIP
+            </span>
+            <input
+              type="file"
+              multiple
+              className="sr-only"
+              disabled={submitting}
+              onChange={(e) => {
+                onFilesChange(Array.from(e.target.files ?? []));
+                e.target.value = ""; // allow re-picking the same file after a retry
+              }}
+            />
+          </label>
+          {files.length > 0 ? (
             <div className="space-y-2.5">
-              {files.map((file) => (
-                <MiniFileRow key={file.name} name={file.name} size={file.size} />
+              {files.map((file, index) => (
+                <MiniFileRow
+                  key={`${file.name}-${index}`}
+                  name={file.name}
+                  size={humanFileSize(file.size)}
+                />
               ))}
             </div>
-            {children}
-            <Button
-              className="h-12 w-full rounded-xl font-bold"
-              disabled={submitting}
-              onClick={onSubmit}
-            >
-              {submitting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <FileUp className="mr-2 h-4 w-4" />
-              )}
-              {submitLabel}
-            </Button>
-          </div>
-        )}
+          ) : (
+            <p className="rounded-xl bg-muted/60 p-3 text-[12px] font-semibold text-muted-foreground">
+              No files selected yet.
+            </p>
+          )}
+          {children}
+          <Button
+            className="h-12 w-full rounded-xl font-bold"
+            disabled={submitting || files.length === 0}
+            onClick={onSubmit}
+          >
+            {submitting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <FileUp className="mr-2 h-4 w-4" />
+            )}
+            {submitLabel}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
 
 export default function DealDetailScreen({ dealId }: { dealId: string }) {
+  const { user } = useApp();
   const [deal, setDeal] = useState<Deal | null>(null);
-  const [creator, setCreator] = useState<SafeUser | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deliverOpen, setDeliverOpen] = useState(false);
   const [finalOpen, setFinalOpen] = useState(false);
   const [note, setNote] = useState("");
-  const [progress, setProgress] = useState(0);
+  const [deliveryPicks, setDeliveryPicks] = useState<File[]>([]);
+  const [finalPicks, setFinalPicks] = useState<File[]>([]);
   const agreementRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -236,7 +295,6 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
       .then((d) => {
         if (!alive) return;
         setDeal(d.deal);
-        setCreator(d.creator);
       })
       .catch((err) => {
         if (alive) setLoadError(err instanceof Error ? err.message : "Deal not found.");
@@ -260,7 +318,7 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
     );
   }
 
-  if (!deal || !creator) {
+  if (!deal || !user) {
     return (
       <AppCanvas activeTab="deals" backHref="/deals">
         <div className="flex min-h-[50vh] items-center justify-center">
@@ -270,6 +328,7 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
     );
   }
 
+  const creator: SessionUser = user;
   const remaining = remainingBalance(deal);
   const paid = paidTotal(deal);
   const pct = deal.price > 0 ? Math.min(100, Math.round((paid / deal.price) * 100)) : 0;
@@ -279,10 +338,15 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
   const shareUrl =
     typeof window !== "undefined" ? `${window.location.origin}/#/c/${deal.shareToken}` : "";
 
-  async function simulateUpload() {
-    for (const step of [10, 26, 44, 62, 78, 90, 100]) {
-      setProgress(step);
-      await new Promise((r) => setTimeout(r, 150));
+  /** Upload the picked files to R2, then run the deal action. */
+  async function uploadPicks(role: "PREVIEW" | "FINAL", picks: File[]) {
+    for (const file of picks) {
+      await api.uploadDealFile(deal!.id, role, {
+        name: file.name,
+        mime: mimeFor(file),
+        size: file.size,
+        blob: file,
+      });
     }
   }
 
@@ -303,7 +367,8 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
     const wasRevision = deal.status === "revision";
     setBusy(true);
     try {
-      await simulateUpload();
+      // Files first, then the transition: the delivery record bundles them.
+      await uploadPicks("PREVIEW", deliveryPicks);
       const { deal: updated } = await api.dealAction(deal.id, {
         action: "deliver",
         note: note.trim() || undefined,
@@ -311,11 +376,11 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
       setDeal(updated);
       setDeliverOpen(false);
       setNote("");
+      setDeliveryPicks([]);
       toast.success(wasRevision ? "Revised delivery submitted!" : "Delivery submitted for review!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't submit the delivery.");
     } finally {
-      setProgress(0);
       setBusy(false);
     }
   };
@@ -323,15 +388,15 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
   const submitRelease = async () => {
     setBusy(true);
     try {
-      await simulateUpload();
+      await uploadPicks("FINAL", finalPicks);
       const { deal: updated } = await api.dealAction(deal.id, { action: "release-files" });
       setDeal(updated);
       setFinalOpen(false);
+      setFinalPicks([]);
       toast.success("Final files released to client!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't release the final files.");
     } finally {
-      setProgress(0);
       setBusy(false);
     }
   };
@@ -746,12 +811,7 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
                           name={file.name}
                           size={file.size}
                           kind={file.kind}
-                          onPreview={() =>
-                            toast.info("File preview is simulated in this demo", {
-                              description:
-                                "In production this opens the file in a secure viewer.",
-                            })
-                          }
+                          onPreview={() => openFile(file)}
                         />
                       ))}
                     </div>
@@ -771,7 +831,7 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
                     name={file.name}
                     size={file.size}
                     kind={file.kind}
-                    onPreview={() => toast.info("File preview is simulated in this demo")}
+                    onPreview={() => openFile(file)}
                   />
                 ))}
               </div>
@@ -789,9 +849,9 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
         onOpenChange={setDeliverOpen}
         title={deal.status === "revision" ? "Submit revised delivery" : "Deliver work for review"}
         hint={`Attach your preview files and add a note for ${deal.client.name}. Final high-resolution files are uploaded after approval.`}
-        files={DELIVERY_FILES}
+        files={deliveryPicks}
+        onFilesChange={setDeliveryPicks}
         submitLabel="Submit delivery"
-        progress={progress}
         submitting={busy}
         onSubmit={submitDelivery}
       >
@@ -816,9 +876,9 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
         onOpenChange={setFinalOpen}
         title="Upload final files"
         hint="These are the high-resolution files your client will download once you release them."
-        files={FINAL_FILES}
+        files={finalPicks}
+        onFilesChange={setFinalPicks}
         submitLabel="Upload & release"
-        progress={progress}
         submitting={busy}
         onSubmit={submitRelease}
       />

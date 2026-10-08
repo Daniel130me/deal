@@ -350,13 +350,21 @@ describe.skipIf(!dbConfigured || !secretConfigured)('deal engine (integration, e
     expect(res.status).toBe(200);
     const payload = res.body.data as { deal: Record<string, unknown>; creator: Record<string, unknown>; amounts: Record<string, unknown> };
 
-    // Minimal payload: whitelist projection, no internal surface.
+    // Minimal payload: whitelist projection, no internal surface. Phase 10:
+    // the deal RECORD (events, deliveries) is client-visible through a
+    // restricted whitelist — but internal ids and payment rows never are.
     expect(payload.deal.ref).toMatch(/^DEAL-\d+$/);
     expect(payload.deal.status).toBe('DRAFT');
     expect(payload.deal.deliverables).toEqual(['Teaser']);
-    for (const forbidden of ['id', 'creatorId', 'requestId', 'shareToken', 'events', 'payments', 'clientContact']) {
+    for (const forbidden of ['id', 'creatorId', 'requestId', 'shareToken', 'payments', 'clientContact']) {
       expect(payload.deal).not.toHaveProperty(forbidden);
     }
+    // Events are whitelisted down to {type, actor, label, createdAt} — no ids or metadata.
+    expect(Array.isArray(payload.deal.events)).toBe(true);
+    for (const event of payload.deal.events as Record<string, unknown>[]) {
+      expect(Object.keys(event).sort()).toEqual(['actor', 'createdAt', 'label', 'type']);
+    }
+    expect(payload.deal.deliveries).toEqual([]); // nothing delivered yet — no file names leak
     expect(payload.creator).toMatchObject({ handle: HANDLE_A });
     expect(payload.amounts.totalMinor).toBe(4_000_000);
     expect(payload.amounts.depositMinor).toBe(2_000_000);

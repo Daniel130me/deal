@@ -158,7 +158,7 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
 
   useEffect(() => {
     if (!user) return;
-    api.deals(user.id).catch(() => undefined);
+    api.deals().catch(() => undefined);
     fetch(`/api/users/${user.id}/services`)
       .then((r) => r.json())
       .then((d) => setServices(d.services ?? []))
@@ -249,7 +249,6 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
     setBusy(true);
     try {
       const { deal } = await api.createDeal({
-        creatorId: user.id,
         requestId: linkedRequest?.id ?? null,
         title: form.title,
         serviceTitle: form.serviceTitle,

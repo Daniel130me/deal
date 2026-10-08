@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { ChannelButtons } from "@/components/app/kit";
 import { CHANNEL_META, primaryChannel } from "@/lib/channels";
-import { api, type SafeUser } from "@/lib/api";
+import { api, type PublicCreator } from "@/lib/api";
 import { formatNaira, type Booking, type Service } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +43,7 @@ const EMPTY_BOOKING = {
 type BookingForm = typeof EMPTY_BOOKING;
 
 export default function PublicPageScreen({ handle }: { handle: string }) {
-  const [data, setData] = useState<{ creator: SafeUser; services: Service[] } | null>(null);
+  const [data, setData] = useState<{ creator: PublicCreator; services: Service[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Service | null>(null);
   const [requestResult, setRequestResult] = useState<{ ref: string } | null>(null);
@@ -599,7 +599,7 @@ function PublicFrame({
   onBook,
   children,
 }: {
-  creator: SafeUser;
+  creator: PublicCreator;
   onBook: () => void;
   children: React.ReactNode;
 }) {
@@ -635,7 +635,7 @@ function RequestForm({
   onBack,
   onSent,
 }: {
-  creator: SafeUser;
+  creator: PublicCreator;
   service: Service;
   onBack: () => void;
   onSent: (ref: string) => void;

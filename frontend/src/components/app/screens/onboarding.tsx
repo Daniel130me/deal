@@ -33,7 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { api } from "@/lib/api";
+import { api, ApiError, takeStashedSignupName, type SessionUser } from "@/lib/api";
 import { useApp } from "@/components/app/context";
 import { CHANNEL_META, CHANNEL_TYPES } from "@/lib/channels";
 import {
@@ -49,17 +49,70 @@ import { cn } from "@/lib/utils";
 
 const ONBOARD_STEPS = ["Profile", "Services", "Preview", "Publish"];
 
+const HANDLE_PATTERN = /^[a-z0-9-]{3,30}$/;
+
+/** "Tobi A. Studios" -> "tobi-a-studios" — the public-page URL slug. */
+function deriveHandleFromName(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/[\s-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 26);
+  return base.length >= 3 ? base : "creator";
+}
+
+/**
+ * First-save use case: create the profile when the account has none
+ * (fresh signup), otherwise update the existing one. Handles are immutable
+ * server-side, so the handle is only sent on create; HANDLE_TAKEN retries
+ * with a short random suffix so "Skip" never traps a common name.
+ */
+async function ensureProfile(
+  user: SessionUser,
+  body: { name: string; handle: string; craft?: string; location?: string; bio?: string; preferredProvider: "flutterwave" | "paystack" },
+): Promise<void> {
+  if (user.handle) {
+    await api.updateProfile({
+      name: body.name,
+      craft: body.craft,
+      location: body.location,
+      bio: body.bio,
+      preferredProvider: body.preferredProvider,
+    });
+    return;
+  }
+  let handle = body.handle;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await api.createProfile({ ...body, handle });
+      return;
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "HANDLE_TAKEN") {
+        handle = `${body.handle}-${Math.random().toString(36).slice(2, 6)}`;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new ApiError("HANDLE_TAKEN", "That link is taken — try another one.", 409);
+}
+
 export default function OnboardingScreen() {
   const { user, setUser, navigate } = useApp();
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
 
-  // profile state
-  const [name, setName] = useState(user?.name ?? "");
+  // profile state — the signup form's name is handed over via sessionStorage
+  const [initialName] = useState(() => user?.name || takeStashedSignupName());
+  const [name, setName] = useState(initialName);
+  const [handle, setHandle] = useState(() => user?.handle ?? deriveHandleFromName(initialName));
   const [craft, setCraft] = useState(user?.craft ?? "");
   const [location, setLocation] = useState(user?.location ?? "");
   const [bio, setBio] = useState(user?.bio ?? "");
   const [craftOpen, setCraftOpen] = useState(false);
+  const [handleTouched, setHandleTouched] = useState(false);
   const [provider, setProvider] = useState<PaymentProvider>(
     user?.preferredProvider === "paystack" ? "paystack" : "flutterwave"
   );
@@ -107,23 +160,37 @@ export default function OnboardingScreen() {
     });
   }
 
+  /** After a profile write, rebuild the merged session (name/handle/channels). */
+  async function refreshSessionUser() {
+    const fresh = await api.me();
+    setUser(fresh);
+    return fresh;
+  }
+
   async function saveProfile() {
     if (!user) return;
     if (!name.trim() || !craft) {
       toast.error("Add your display name and main service first.");
       return;
     }
+    if (!user.handle && !HANDLE_PATTERN.test(handle.trim())) {
+      toast.error("Pick a deal link first", {
+        description: "3–30 characters: lowercase letters, numbers and dashes.",
+      });
+      return;
+    }
     setBusy(true);
     try {
-      const { user: updated } = await api.updateUser(user.id, {
+      await ensureProfile(user, {
         name: name.trim(),
+        handle: handle.trim(),
         craft,
         location: location.trim(),
         bio: bio.trim(),
-        channels,
         preferredProvider: provider,
       });
-      setUser(updated);
+      await api.updateChannels(channels);
+      await refreshSessionUser();
       setStep(1);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't save profile.");
@@ -141,7 +208,7 @@ export default function OnboardingScreen() {
     setBusy(true);
     try {
       for (const svc of services) {
-        await api.addService(user.id, svc);
+        await api.addService(svc);
       }
       setServices([]);
       setStep(2);
@@ -156,12 +223,19 @@ export default function OnboardingScreen() {
     if (!user) return;
     setBusy(true);
     try {
-      const { user: updated } = await api.updateUser(user.id, {
-        onboarded: true,
-        channels,
-        preferredProvider: provider,
-      });
-      setUser(updated);
+      if (!user.handle) {
+        // The profile step was skipped — create a minimal profile so the
+        // account has a public page, then publish it.
+        const fallbackName = name.trim() || user.name || "Creator";
+        await ensureProfile(user, {
+          name: fallbackName,
+          handle: deriveHandleFromName(fallbackName),
+          preferredProvider: provider,
+        });
+        if (channels.length) await api.updateChannels(channels);
+      }
+      await api.updateProfile({ onboarded: true, preferredProvider: provider });
+      await refreshSessionUser();
       setStep(3);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't publish your page.");
@@ -182,10 +256,26 @@ export default function OnboardingScreen() {
           <Logo />
           <button
             type="button"
-            onClick={() => {
-              if (user) {
-                setUser({ ...user, onboarded: true });
+            onClick={async () => {
+              if (!user || busy) return;
+              setBusy(true);
+              try {
+                if (!user.handle) {
+                  const fallbackName = name.trim() || user.name || "Creator";
+                  await ensureProfile(user, {
+                    name: fallbackName,
+                    handle: deriveHandleFromName(fallbackName),
+                    preferredProvider: provider,
+                  });
+                  if (channels.length) await api.updateChannels(channels);
+                }
+                await api.updateProfile({ onboarded: true });
+                await refreshSessionUser();
                 navigate("/dashboard");
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Couldn't skip onboarding.");
+              } finally {
+                setBusy(false);
               }
             }}
             className="text-sm font-extrabold text-primary"
@@ -269,10 +359,37 @@ export default function OnboardingScreen() {
                 <label className="text-[13px] font-extrabold text-foreground">Display name</label>
                 <Input
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    // Suggest a deal link from the name until the creator picks one.
+                    if (!user?.handle && !handleTouched) setHandle(deriveHandleFromName(e.target.value));
+                  }}
                   placeholder="e.g. Tobi A."
                   className="mt-1.5 h-12 rounded-xl bg-muted/60 font-semibold"
                 />
+              </div>
+              <div>
+                <label className="text-[13px] font-extrabold text-foreground">Your deal link</label>
+                <div className="mt-1.5 flex items-center overflow-hidden rounded-xl border border-input bg-muted/60">
+                  <span className="border-r border-border bg-white px-3 py-3.5 text-[13px] font-semibold text-muted-foreground">
+                    deal.ng/#/u/
+                  </span>
+                  <Input
+                    value={handle}
+                    disabled={Boolean(user?.handle)}
+                    onChange={(e) => {
+                      setHandleTouched(true);
+                      setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""));
+                    }}
+                    placeholder="your-name"
+                    className="h-12 rounded-none border-0 bg-transparent font-semibold"
+                  />
+                </div>
+                <p className="mt-1 text-xs font-medium text-muted-foreground">
+                  {user?.handle
+                    ? "Your link is set — it can't change."
+                    : "3–30 characters: lowercase letters, numbers and dashes."}
+                </p>
               </div>
               <div className="relative">
                 <label className="text-[13px] font-extrabold text-foreground">What do you do?</label>

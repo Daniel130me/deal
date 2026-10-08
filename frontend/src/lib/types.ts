@@ -31,6 +31,11 @@ export interface User {
   onboarded: boolean;
   preferredProvider: PaymentProvider;
   createdAt: string;
+  /** Present on API-backed sessions (auth user fields); prototype rows omit them. */
+  role?: "CREATOR" | "CLIENT" | "ADMIN";
+  status?: "ACTIVE" | "SUSPENDED" | "DELETED";
+  lastLoginAt?: string | null;
+  updatedAt?: string;
 }
 
 export interface Service {
@@ -42,6 +47,8 @@ export interface Service {
   duration: string;
   popular: boolean;
   includes: string[];
+  /** API-backed rows carry the active flag; prototype rows omit it. */
+  isActive?: boolean;
 }
 
 export interface ClientRequest {
@@ -59,6 +66,8 @@ export interface ClientRequest {
   notes: string;
   status: "new" | "replied" | "archived" | "declined";
   createdAt: string;
+  /** Joined service (API rows include it); prototype rows may omit it. */
+  service?: Service | null;
 }
 
 export interface Booking {
@@ -74,6 +83,8 @@ export interface Booking {
   note: string;
   status: "requested" | "confirmed" | "completed" | "declined" | "cancelled";
   createdAt: string;
+  /** Joined service (API rows include it); prototype rows may omit it. */
+  service?: Service | null;
 }
 
 export interface DealEvent {
@@ -91,9 +102,11 @@ export interface DealEvent {
     | "payment_released"
     | "completed"
     | "declined"
-    | "disputed";
+    | "disputed"
+    | "review"
+    | "dispute_resolved";
   label: string;
-  actor: "creator" | "client" | "system";
+  actor: "creator" | "client" | "system" | "admin";
 }
 
 export type PaymentMethod = "card" | "transfer" | "ussd";
@@ -149,7 +162,7 @@ export interface DealPayment {
   methodLabel: string;
   provider: PaymentProvider;
   reference: string; // FLW-XXXXXXXX (Flutterwave) | PSK-XXXXXXXX (Paystack)
-  status: "held" | "released";
+  status: "held" | "released" | "refunded" | "disputed";
   paidAt: string;
   releasedAt?: string;
 }
@@ -159,6 +172,9 @@ export interface DealFile {
   name: string;
   size: string;
   kind: string;
+  /** API-backed rows carry the storage role + mime; prototype rows omit them. */
+  role?: "PREVIEW" | "FINAL";
+  mime?: string;
 }
 
 export interface DealDelivery {

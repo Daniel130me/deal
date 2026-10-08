@@ -3,6 +3,7 @@ import { ActorType, DealEventType, DealStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreatorsService, type PublicProfile } from '../creators/creators.service';
 import { DisputesService } from '../disputes/disputes.service';
+import { FINAL_RELEASED_STATUSES, PREVIEW_VISIBLE_STATUSES } from '../files/files.constants';
 import { NOTIFICATION_TYPES, type NotificationType } from '../notifications/notifications.constants';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ReviewsService } from '../reviews/reviews.service';
@@ -10,14 +11,19 @@ import { formatNairaMinor } from './deal-money';
 import { DealStateService } from './deal-state.service';
 import { DealEscrowService, type EscrowReleaseResult } from './deal-escrow.service';
 import { DealsService } from './deals.service'; // value import: injected class (Nest DI)
-import type { DealListItem, DealWithAmounts } from './deals.service';
+import type { DealSharedSource, DealWithAmounts } from './deals.service';
 import type { SharedDealActionDto } from './dto/deal.dto';
 
 /**
  * What the client sees through a capability link — a strict WHITELIST
- * projection (plan Phase 6: "minimal payload"; §7: "no internal
- * events/passwords"). Internal ids, audit events, payment rows and the
- * client's own contact details never leave the server.
+ * projection (plan Phase 6: "minimal payload"). Internal ids, payment rows,
+ * event metadata and the client's own contact details never leave the server.
+ *
+ * Phase 10 addition — the deal RECORD is client-visible: events (type, label,
+ * actor, time — no ids/metadata) and deliveries with their gated files. The
+ * client is a party to the deal, the prototype's share page rendered this
+ * record, and file visibility re-uses Phase 7's status gates exactly, so the
+ * projection can never show a file the files endpoints would refuse.
  */
 export interface SharedDealProjection {
   deal: {
@@ -40,10 +46,30 @@ export interface SharedDealProjection {
     createdAt: Date;
     sentAt: Date | null;
     acceptedAt: Date | null;
+    depositPaidAt: Date | null;
     deliveredAt: Date | null;
     approvedAt: Date | null;
     filesReleasedAt: Date | null;
     completedAt: Date | null;
+    events: {
+      type: DealEventType;
+      actor: ActorType;
+      label: string;
+      createdAt: Date;
+    }[];
+    deliveries: {
+      note: string | null;
+      submittedAt: Date;
+      files: {
+        id: string;
+        role: 'PREVIEW' | 'FINAL';
+        filename: string;
+        sizeBytes: number;
+        mime: string;
+        createdAt: Date;
+        releasedAt: Date | null;
+      }[];
+    }[];
   };
   creator: PublicProfile;
   amounts: DealWithAmounts['amounts'];
@@ -98,10 +124,38 @@ export class SharedDealsService {
         createdAt: deal.createdAt,
         sentAt: deal.sentAt,
         acceptedAt: deal.acceptedAt,
+        depositPaidAt: deal.depositPaidAt,
         deliveredAt: deal.deliveredAt,
         approvedAt: deal.approvedAt,
         filesReleasedAt: deal.filesReleasedAt,
         completedAt: deal.completedAt,
+        events: deal.events.map((event) => ({
+          type: event.type,
+          actor: event.actor,
+          label: event.label,
+          createdAt: event.createdAt,
+        })),
+        deliveries: deal.deliveries.map((delivery) => ({
+          note: delivery.note,
+          submittedAt: delivery.submittedAt,
+          // Same gate the shared files endpoints enforce (files.constants) —
+          // the projection cannot reveal a file those endpoints would 404.
+          files: delivery.files
+            .filter((file) =>
+              file.role === 'PREVIEW'
+                ? PREVIEW_VISIBLE_STATUSES.includes(deal.status)
+                : FINAL_RELEASED_STATUSES.includes(deal.status),
+            )
+            .map((file) => ({
+              id: file.id,
+              role: file.role,
+              filename: file.filename,
+              sizeBytes: file.sizeBytes,
+              mime: file.mime,
+              createdAt: file.createdAt,
+              releasedAt: file.releasedAt,
+            })),
+        })),
       },
       creator: this.creators.toPublicProfile(profile),
       amounts: deal.amounts,
@@ -236,7 +290,7 @@ export class SharedDealsService {
    * straight-to-creator rule — never stranded as HELD.
    */
   private async approveWithEscrowRelease(
-    deal: DealListItem & DealWithAmounts,
+    deal: DealSharedSource & DealWithAmounts,
   ): Promise<EscrowReleaseResult> {
     return this.prisma.$transaction(async (tx) => {
       await this.state.transition(
@@ -263,7 +317,7 @@ export class SharedDealsService {
     await this.notifications.notify({ userId: profile.userId, type, payload });
   }
 
-  private async findDeal(token: string): Promise<DealListItem & DealWithAmounts> {
+  private async findDeal(token: string): Promise<DealSharedSource & DealWithAmounts> {
     const deal = await this.deals.findByShareToken(token);
     if (!deal) {
       throw this.fail('DEAL_NOT_FOUND', 'Deal not found. Check your link.', HttpStatus.NOT_FOUND);

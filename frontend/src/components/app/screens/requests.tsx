@@ -51,7 +51,7 @@ function RequestList() {
     if (!user) return;
     let alive = true;
     api
-      .creatorRequests(user.id)
+      .creatorRequests()
       .then((d) => alive && setRequests(d.requests))
       .catch((err) => toast.error(err instanceof Error ? err.message : "Couldn't load requests."));
     return () => {

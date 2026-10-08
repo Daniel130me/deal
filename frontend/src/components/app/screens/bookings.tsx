@@ -167,7 +167,7 @@ export default function BookingsScreen() {
     if (!user) return;
     let alive = true;
     api
-      .bookings(user.id)
+      .bookings()
       .then((d) => {
         if (alive) setBookings(d.bookings);
       })
@@ -186,7 +186,7 @@ export default function BookingsScreen() {
     try {
       const { booking: updated } = await api.bookingAction(booking.id, action);
       toast.success(actionToast(action, updated.clientName));
-      const { bookings: fresh } = await api.bookings(creatorId);
+      const { bookings: fresh } = await api.bookings();
       setBookings(fresh);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't update the booking.");

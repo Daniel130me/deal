@@ -55,7 +55,7 @@ export default function DealsListScreen() {
     if (!user) return;
     let alive = true;
     api
-      .deals(user.id)
+      .deals()
       .then((d) => {
         if (alive) setDeals(d.deals);
       })

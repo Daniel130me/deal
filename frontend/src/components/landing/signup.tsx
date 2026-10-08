@@ -109,7 +109,7 @@ export function Signup() {
         password: values.password,
       });
       setUser(user);
-      toast.success(`Welcome to DEAL, ${user.name.split(" ")[0]}!`, {
+      toast.success(`Welcome to DEAL, ${values.name.split(" ")[0]}!`, {
         description: "Let's set up your creator profile.",
       });
       reset();

@@ -9,9 +9,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { api, type SafeUser } from "@/lib/api";
-
-const USER_KEY = "deal_user";
+import { api, getSessionUser, setSessionUser, type SessionUser } from "@/lib/api";
 
 /* ---- hash-based route store (no setState-in-effect) ---- */
 
@@ -29,8 +27,8 @@ function getServerRouteSnapshot() {
 }
 
 export interface AppContextValue {
-  user: SafeUser | null;
-  setUser: (user: SafeUser | null) => void;
+  user: SessionUser | null;
+  setUser: (user: SessionUser | null) => void;
   route: string;
   navigate: (to: string) => void;
   logout: () => void;
@@ -40,25 +38,25 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const route = useSyncExternalStore(subscribeToHash, getRouteSnapshot, getServerRouteSnapshot);
-  const [user, setUserState] = useState<SafeUser | null>(null);
+  const [user, setUserState] = useState<SessionUser | null>(null);
 
-  // hydrate the signed-in user after mount (avoids SSR hydration mismatch)
+  // Hydrate the persisted session after mount (avoids SSR hydration mismatch),
+  // then silently revalidate against the API: tokens may have expired while
+  // away, and the profile may have changed since this device last saw it.
   useEffect(() => {
-    let parsed: SafeUser | null = null;
-    try {
-      const raw = localStorage.getItem(USER_KEY);
-      if (raw) parsed = JSON.parse(raw) as SafeUser;
-    } catch {
-      parsed = null;
+    const stored = getSessionUser();
+    if (stored) {
+      queueMicrotask(() => setUserState(stored));
+      api
+        .me()
+        .then((fresh) => setUserState(fresh))
+        .catch(() => undefined); // offline / expired — the stored session still renders
     }
-    if (!parsed) return;
-    queueMicrotask(() => setUserState(parsed));
   }, []);
 
-  const setUser = useCallback((next: SafeUser | null) => {
+  const setUser = useCallback((next: SessionUser | null) => {
     setUserState(next);
-    if (next) localStorage.setItem(USER_KEY, JSON.stringify(next));
-    else localStorage.removeItem(USER_KEY);
+    setSessionUser(next);
   }, []);
 
   const navigate = useCallback((to: string) => {
@@ -72,6 +70,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    // Server-side token revocation first; the local session dies either way.
+    void api.logout();
     setUser(null);
     navigate("/");
   }, [navigate, setUser]);
@@ -92,7 +92,7 @@ export function useApp(): AppContextValue {
 
 export async function quickDemoLogin(
   navigate: (to: string) => void,
-  setUser: (u: SafeUser | null) => void
+  setUser: (u: SessionUser | null) => void
 ) {
   const { user } = await api.login({ contact: "tobi@deal.ng", password: "demo1234" });
   setUser(user);

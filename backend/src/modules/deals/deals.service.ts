@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { ActorType, DealEventType, DealStatus, Prisma, type Deal, type DealPayment } from '@prisma/client';
+import { ActorType, DealEventType, DealStatus, FileRole, Prisma, type Deal, type DealPayment } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { nextSequentialRef, retryOnUniqueViolation } from '../../common/ids/ref.util';
 import { PrismaService } from '../../database/prisma.service';
@@ -33,6 +33,17 @@ export type DealDetail = Prisma.DealGetPayload<{
 /** Deal with the lighter relations the dashboard list needs (no events). */
 export type DealListItem = Prisma.DealGetPayload<{
   include: { deliverables: { orderBy: { position: 'asc' } }; payments: { orderBy: { paidAt: 'asc' } } };
+}>;
+
+/** Deal source for the shared (capability-link) projection: adds the audit
+ *  timeline and the deliveries + files the client-facing whitelist exposes. */
+export type DealSharedSource = Prisma.DealGetPayload<{
+  include: {
+    deliverables: { orderBy: { position: 'asc' } };
+    payments: { orderBy: { paidAt: 'asc' } };
+    events: { orderBy: { createdAt: 'asc' } };
+    deliveries: { include: { files: true }; orderBy: { submittedAt: 'desc' } };
+  };
 }>;
 
 export type DealWithAmounts = { amounts: DealAmounts };
@@ -227,7 +238,15 @@ export class DealsService {
     return this.getOwned(creatorId, updated.id);
   }
 
-  /** deliver: ACTIVE|REVISION -> DELIVERED, opening a delivery record. */
+  /**
+   * deliver: ACTIVE|REVISION -> DELIVERED, opening a delivery record.
+   *
+   * Preview files uploaded for this deal but not yet part of a delivery are
+   * attached to the new record in the same transaction — a delivery is the
+   * bundle "note + what was delivered", and the client-facing share page
+   * renders exactly that bundle. (Finals are never attached here: they unlock
+   * through the release gate, keyed on status, not on a delivery row.)
+   */
   async deliver(creatorId: string, dealId: string, note?: string): Promise<DealDetail & DealWithAmounts> {
     const deal = await this.getOwned(creatorId, dealId);
     await this.prisma.$transaction(async (tx) => {
@@ -242,11 +261,15 @@ export class DealsService {
         },
         tx,
       );
-      await tx.dealDelivery.create({
+      const delivery = await tx.dealDelivery.create({
         data: {
           dealId: deal.id,
           note: note?.trim() || DEFAULT_DELIVERY_NOTE,
         },
+      });
+      await tx.fileAsset.updateMany({
+        where: { dealId: deal.id, deliveryId: null, role: FileRole.PREVIEW },
+        data: { deliveryId: delivery.id },
       });
     });
     return this.getOwned(creatorId, deal.id);
@@ -292,11 +315,21 @@ export class DealsService {
     return dealAmounts(deal.status, deal, deal.payments);
   }
 
-  /** Find a deal by its capability token (the shared surface's credential). */
-  async findByShareToken(token: string): Promise<(DealListItem & DealWithAmounts) | null> {
+  /**
+   * Find a deal by its capability token (the shared surface's credential).
+   * Carries the audit timeline and deliveries so the share-page projection can
+   * whitelist what the client — a party to the deal — legitimately sees
+   * (Phase 10: the client UI renders the record timeline and deliveries).
+   */
+  async findByShareToken(token: string): Promise<(DealSharedSource & DealWithAmounts) | null> {
     const deal = await this.prisma.deal.findUnique({
       where: { shareToken: token },
-      include: { deliverables: { orderBy: { position: 'asc' } }, payments: { orderBy: { paidAt: 'asc' } } },
+      include: {
+        deliverables: { orderBy: { position: 'asc' } },
+        payments: { orderBy: { paidAt: 'asc' } },
+        events: { orderBy: { createdAt: 'asc' } },
+        deliveries: { include: { files: true }, orderBy: { submittedAt: 'desc' } },
+      },
     });
     return deal ? { ...deal, amounts: this.amountsOf(deal) } : null;
   }

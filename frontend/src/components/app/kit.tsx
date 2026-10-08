@@ -22,6 +22,7 @@ import {
   type DealStatus,
   type CreatorChannel,
   type PaymentProvider,
+  type ScheduleSlot,
 } from "@/lib/types";
 import { CHANNEL_META, channelHref } from "@/lib/channels";
 import { cn } from "@/lib/utils";
@@ -256,9 +257,19 @@ function PayChip({ tone, children }: { tone: "green" | "amber" | "gray" | "viole
   );
 }
 
-export function PaymentSummary({ deal }: { deal: Deal }) {
-  const schedule = paymentSchedule(deal);
-  const remaining = remainingBalance(deal);
+export function PaymentSummary({
+  deal,
+  /** Server-computed schedule (capability link) — overrides deal-derived math. */
+  schedule: scheduleOverride,
+  /** Server-computed outstanding total — overrides deal-derived math. */
+  remaining: remainingOverride,
+}: {
+  deal: Deal;
+  schedule?: ScheduleSlot[];
+  remaining?: number;
+}) {
+  const schedule = scheduleOverride ?? paymentSchedule(deal);
+  const remaining = remainingOverride ?? remainingBalance(deal);
   const approved = isApproved(deal);
 
   return (

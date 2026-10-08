@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Logo } from "@/components/landing/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api, type SafeUser } from "@/lib/api";
+import { api, type SessionUser } from "@/lib/api";
 import { useApp } from "@/components/app/context";
 
 export default function AuthScreen({
@@ -22,7 +22,7 @@ export default function AuthScreen({
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function enter(user: SafeUser) {
+  async function enter(user: SessionUser) {
     setUser(user);
     navigate(user.onboarded ? (redirectTo ? `/${redirectTo}` : "/dashboard") : "/onboarding");
   }
@@ -42,7 +42,7 @@ export default function AuthScreen({
         const { user } = await api.signup({ name, contact, password });
         setUser(user);
         navigate("/onboarding");
-        toast.success(`Welcome to DEAL, ${user.name.split(" ")[0]}!`);
+        toast.success(`Welcome to DEAL, ${name.split(" ")[0]}!`);
       } else {
         const { user } = await api.login({ contact, password });
         setUser(user);

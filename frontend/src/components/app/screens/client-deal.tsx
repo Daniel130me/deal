@@ -32,7 +32,6 @@ import {
   FileRow,
   GatewayMarks,
   PaymentSummary,
-  ProtectedPreviewDialog,
   RecordTimeline,
   SectionCard,
   Stepper,
@@ -40,50 +39,15 @@ import {
 } from "@/components/app/kit";
 import PaymentCheckout from "@/components/app/payment-checkout";
 import { useApp } from "@/components/app/context";
-import { api, type PayMethod } from "@/lib/api";
+import { api, ApiError, type PayMethod, type PublicCreator, type SharedData } from "@/lib/api";
 import {
-  depositAmount,
-  formatNaira,
   formatDate,
-  isApproved,
-  isFullyPaid,
-  nextDueSlot,
-  paidTotal,
-  paymentSchedule,
-  remainingBalance,
-  type CreatorChannel,
+  formatNaira,
   type Deal,
   type DealFile,
   type PaymentProvider,
-  type ScheduleSlot,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-interface SharedData {
-  deal: Deal;
-  creator: {
-    id: string;
-    name: string;
-    handle: string;
-    craft: string;
-    location: string;
-    verified: boolean;
-    whatsapp: string;
-    channels: CreatorChannel[];
-    preferredProvider: PaymentProvider;
-  };
-  amounts: {
-    total: number;
-    deposit: number;
-    paid: number;
-    due: number;
-    held: number;
-    schedule: ScheduleSlot[];
-    nextDue: ScheduleSlot | null;
-    fullyPaid: boolean;
-    approved: boolean;
-  };
-}
 
 type PayKind = "deposit" | "next" | "remaining";
 
@@ -94,17 +58,38 @@ interface PayContext {
   label: string;
 }
 
+/** sessionStorage hand-off so the returning hosted checkout can be verified. */
+function pendingPaymentKey(token: string) {
+  return `deal_pending_payment:${token}`;
+}
+
 export default function ClientDealScreen({ token }: { token: string }) {
   const { user } = useApp();
   const [data, setData] = useState<SharedData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [payCtx, setPayCtx] = useState<PayContext | null>(null);
-  const [previewFile, setPreviewFile] = useState<DealFile | null>(null);
   const [changesOpen, setChangesOpen] = useState(false);
   const [changesNote, setChangesNote] = useState("");
   const [approveOpen, setApproveOpen] = useState(false);
   const [rating, setRating] = useState(5);
+
+  /**
+   * Open a deal file through a signed, time-limited URL — previews render
+   * inline in a new tab; released finals download as attachments (R2 serves
+   * the disposition the backend picks per role).
+   */
+  async function openFile(file: DealFile) {
+    try {
+      const url = await api.sharedFileDownloadUrl(token, file.id);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      // Hidden files answer the same non-committal 404 as missing ones.
+      toast.error(err instanceof Error ? err.message : "Couldn't open the file.");
+    }
+  }
+
+  const openPreview = openFile;
 
   useEffect(() => {
     let alive = true;
@@ -136,13 +121,70 @@ export default function ClientDealScreen({ token }: { token: string }) {
     }
   }
 
-  /** Pay action for the checkout — the client's chosen rail goes along; errors bubble to the checkout's inline error box. */
-  async function pay(kind: PayKind, method: PayMethod, provider: PaymentProvider): Promise<Deal> {
-    const action = kind === "deposit" ? "pay-deposit" : kind === "next" ? "pay-next" : "pay-remaining";
-    const { deal: updated } = await api.sharedAction(token, { action, method, provider });
-    applyDeal(updated);
-    return updated;
+  /**
+   * Real-rail checkout: mint a hosted link (the amount is the server-computed
+   * next due slot), remember the reference, and let the checkout hand the
+   * browser to the rail. Verification happens when the client returns.
+   */
+  async function pay(
+    kind: PayKind,
+    method: PayMethod,
+    provider: PaymentProvider
+  ): Promise<{ link: string }> {
+    const init = await api.initializeSharedPayment(token, { provider, method });
+    sessionStorage.setItem(pendingPaymentKey(token), JSON.stringify({ reference: init.reference }));
+    return { link: init.link };
   }
+
+  /**
+   * A hosted checkout ends with the rail redirecting back here (tx_ref query
+   * param) — or, when the redirect lands on a different origin than this
+   * page (sandbox), the pending reference from sessionStorage. Either way we
+   * ask the backend to verify the charge and refresh the projection.
+   */
+  useEffect(() => {
+    if (!data) return;
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("tx_ref") ?? params.get("reference");
+    let reference = fromUrl ?? "";
+    let pending = sessionStorage.getItem(pendingPaymentKey(token));
+    if (!reference && pending) {
+      try {
+        reference = (JSON.parse(pending) as { reference?: string }).reference ?? "";
+      } catch {
+        reference = "";
+      }
+    }
+    if (!reference) return;
+    if (pending) {
+      sessionStorage.removeItem(pendingPaymentKey(token));
+      pending = null;
+    }
+    // Clean the rail's query params out of the address bar (they sit before
+    // the #/c/:token hash, which IS the SPA route).
+    if (fromUrl) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+    }
+    let alive = true;
+    (async () => {
+      try {
+        const result = await api.verifySharedPayment(token, reference);
+        if (!alive) return;
+        const fresh = await api.sharedDeal(token);
+        if (!alive) return;
+        setData(fresh);
+        if (result.status === "successful") toast.success("Payment confirmed — thank you!");
+        else if (result.status === "pending") toast.info("Payment is still processing — check back shortly.");
+        else toast.error("The payment didn't go through — no money was taken.");
+      } catch (err) {
+        if (!alive) return;
+        toast.error(err instanceof Error ? err.message : "Couldn't verify the payment.");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [data === null, token]);
 
   if (error) {
     return (
@@ -172,18 +214,18 @@ export default function ClientDealScreen({ token }: { token: string }) {
     );
   }
 
-  const { deal, creator } = data;
-  const paid = paidTotal(deal);
-  const due = remainingBalance(deal);
-  const held = deal.payments.filter((p) => p.status === "held").reduce((s, p) => s + p.amount, 0);
-  const releasedTotal = deal.payments
-    .filter((p) => p.status === "released")
-    .reduce((s, p) => s + p.amount, 0);
-  const schedule = paymentSchedule(deal);
-  const nextDue = nextDueSlot(deal);
-  const fullyPaid = isFullyPaid(deal);
-  const approved = isApproved(deal);
-  const deposit = depositAmount(deal);
+  const { deal, creator, amounts } = data;
+  // Money facts come from the server's amounts block — the capability
+  // projection carries no payment rows to recompute from.
+  const paid = amounts.paid;
+  const due = amounts.due;
+  const held = amounts.held;
+  const releasedTotal = amounts.released;
+  const schedule = amounts.schedule;
+  const nextDue = amounts.nextDue;
+  const fullyPaid = amounts.fullyPaid;
+  const approved = amounts.approved;
+  const deposit = amounts.deposit;
   const latestDelivery = deal.deliveries.at(-1);
   const firstName = creator.name.split(" ")[0];
 
@@ -192,10 +234,10 @@ export default function ClientDealScreen({ token }: { token: string }) {
     const label =
       kind === "deposit"
         ? (schedule[0]?.label ?? `Deposit (${deal.depositPercent}%)`)
-        : kind === "next"
-          ? (nextDue?.label ?? "Next payment")
-          : "Balance payment";
-    const amount = kind === "deposit" ? deposit : kind === "next" ? (nextDue?.amount ?? due) : due;
+        : (nextDue?.label ?? "Next payment");
+    // Every charge is for the server-computed next due slot; "remaining" only
+    // differs when a single slot is left (then it IS the next due amount).
+    const amount = kind === "deposit" ? deposit : (nextDue?.amount ?? due);
     setPayCtx({ kind, amount, label });
   }
 
@@ -374,7 +416,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
           </div>
         </div>
 
-        <PaymentSummary deal={deal} />
+        <PaymentSummary deal={deal} schedule={schedule} remaining={due} />
         <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[11px] font-bold text-muted-foreground">
           <GatewayMarks /> Charges processed by your chosen rail — escrow by DEAL
         </p>
@@ -395,13 +437,17 @@ export default function ClientDealScreen({ token }: { token: string }) {
                   Pay next installment · {nextDue.label} · {formatNaira(nextDue.amount)}
                 </Button>
               ) : null}
-              <Button
-                variant="ghost"
-                className="h-11 w-full rounded-xl font-bold text-primary hover:bg-accent"
-                onClick={() => openCheckout("remaining")}
-              >
-                Pay all remaining ({formatNaira(due)})
-              </Button>
+              {/* One charge always covers exactly the next due slot — offer
+                  "pay all remaining" only when a single slot is left. */}
+              {nextDue && nextDue.amount === due ? (
+                <Button
+                  variant="ghost"
+                  className="h-11 w-full rounded-xl font-bold text-primary hover:bg-accent"
+                  onClick={() => openCheckout("remaining")}
+                >
+                  Pay all remaining ({formatNaira(due)})
+                </Button>
+              ) : null}
               <p className="text-center text-[12px] font-medium leading-relaxed text-muted-foreground">
                 You can pay in parts — every part sits in DEAL escrow until you approve the work.
               </p>
@@ -448,14 +494,14 @@ export default function ClientDealScreen({ token }: { token: string }) {
                 size={file.size}
                 kind={file.kind}
                 protected
-                onPreview={() => setPreviewFile(file)}
+                onPreview={() => openPreview(file)}
               />
             ))}
           </div>
           <p className="mt-3 flex items-start gap-2 rounded-xl bg-muted/60 p-3 text-[11px] font-medium leading-relaxed text-muted-foreground">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-            Previews are watermarked and reduced-quality. Full-quality downloads unlock after you
-            approve and the deal is fully paid.
+            Previews are protected — full-quality downloads unlock after you approve and the deal is
+            fully paid.
           </p>
         </SectionCard>
 
@@ -538,18 +584,18 @@ export default function ClientDealScreen({ token }: { token: string }) {
                   size={file.size}
                   kind={file.kind}
                   protected
-                  onPreview={() => setPreviewFile(file)}
+                  onPreview={() => openPreview(file)}
                 />
               ))}
             </div>
             <p className="mt-3 flex items-start gap-2 rounded-xl bg-muted/60 p-3 text-[11px] font-medium leading-relaxed text-muted-foreground">
               <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-              Previews are watermarked and reduced-quality. Full-quality downloads unlock after you
-              approve and the deal is fully paid.
+              Previews are protected — full-quality downloads unlock after you approve and the deal is
+              fully paid.
             </p>
           </SectionCard>
         ) : null}
-        <PaymentSummary deal={deal} />
+        <PaymentSummary deal={deal} schedule={schedule} remaining={due} />
       </>
     );
   }
@@ -591,13 +637,15 @@ export default function ClientDealScreen({ token }: { token: string }) {
                   Pay next · {nextDue.label} · {formatNaira(nextDue.amount)}
                 </Button>
               ) : null}
-              <Button
-                variant="ghost"
-                className="h-11 w-full rounded-xl font-bold text-primary hover:bg-accent"
-                onClick={() => openCheckout("remaining")}
-              >
-                Pay all remaining ({formatNaira(due)})
-              </Button>
+              {nextDue && nextDue.amount === due ? (
+                <Button
+                  variant="ghost"
+                  className="h-11 w-full rounded-xl font-bold text-primary hover:bg-accent"
+                  onClick={() => openCheckout("remaining")}
+                >
+                  Pay all remaining ({formatNaira(due)})
+                </Button>
+              ) : null}
             </div>
           </SectionCard>
         ) : (
@@ -614,7 +662,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
           </div>
         )}
 
-        <PaymentSummary deal={deal} />
+        <PaymentSummary deal={deal} schedule={schedule} remaining={due} />
       </>
     );
   }
@@ -643,14 +691,14 @@ export default function ClientDealScreen({ token }: { token: string }) {
                 name={file.name}
                 size={file.size}
                 kind={file.kind}
-                onPreview={() => toast.success("Download started (demo)")}
+                onPreview={() => openFile(file)}
               />
             ))}
           </div>
           <Button
             variant="outline"
             className="mt-3 h-11 w-full rounded-xl font-bold"
-            onClick={() => toast.success("Download started (demo)")}
+            onClick={() => deal.finalFiles.forEach(openFile)}
           >
             <Download className="mr-2 h-4 w-4" /> Download all files
           </Button>
@@ -682,8 +730,23 @@ export default function ClientDealScreen({ token }: { token: string }) {
             className="mt-4 h-12 w-full rounded-xl font-bold"
             disabled={busy}
             onClick={async () => {
-              const updated = await act({ action: "complete", rating });
-              if (updated) toast.success("Deal completed — thank you!");
+              setBusy(true);
+              try {
+                // The API models review and completion as separate moves; a
+                // replayed rating (REVIEW_EXISTS) must not block completion.
+                try {
+                  await api.sharedAction(token, { action: "review", rating });
+                } catch (err) {
+                  if (!(err instanceof ApiError && err.code === "REVIEW_EXISTS")) throw err;
+                }
+                const fresh = await api.sharedAction(token, { action: "complete" });
+                applyDeal(fresh.deal);
+                toast.success("Deal completed — thank you!");
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Couldn't complete the deal.");
+              } finally {
+                setBusy(false);
+              }
             }}
           >
             {busy ? <Loader2 className="mr-2 h-4.5 w-4.5 animate-spin" /> : <Check className="mr-1.5 h-4.5 w-4.5" />}
@@ -719,14 +782,14 @@ export default function ClientDealScreen({ token }: { token: string }) {
                 name={file.name}
                 size={file.size}
                 kind={file.kind}
-                onPreview={() => toast.success("Download started (demo)")}
+                onPreview={() => openFile(file)}
               />
             ))}
           </div>
           <Button
             variant="outline"
             className="mt-3 h-11 w-full rounded-xl font-bold"
-            onClick={() => toast.success("Download started (demo)")}
+            onClick={() => deal.finalFiles.forEach(openFile)}
           >
             <Download className="mr-2 h-4 w-4" /> Download again
           </Button>
@@ -885,24 +948,9 @@ export default function ClientDealScreen({ token }: { token: string }) {
             ? `The work is already approved — this payment is released to ${creator.name} instantly (not held in escrow).`
             : undefined
         }
-        successNote={
-          approved
-            ? `Released to ${creator.name} instantly — the work was already approved.`
-            : undefined
-        }
-        onPaid={(method, provider) =>
+        onPay={(method, provider) =>
           payCtx ? pay(payCtx.kind, method, provider) : Promise.reject(new Error("Nothing to pay."))
         }
-      />
-
-      {/* watermarked protected preview for delivered work */}
-      <ProtectedPreviewDialog
-        open={previewFile !== null}
-        onOpenChange={(next) => {
-          if (!next) setPreviewFile(null);
-        }}
-        file={previewFile}
-        creatorName={creator.name}
       />
 
       {/* request changes dialog */}

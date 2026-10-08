@@ -207,7 +207,7 @@ export default function DashboardScreen() {
     if (!user) return;
     let alive = true;
     api
-      .overview(user.id)
+      .overview()
       .then((d) => {
         if (alive) setData(d);
       })
