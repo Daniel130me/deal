@@ -107,7 +107,9 @@
 
 ## Phase 11 — Remove Prototype Backend
 
-- [ ] Remove frontend/src/app/api/**, store.ts localStorage identity, JSON runtime persistence, SQLite/prisma remnants — only what is truly unused
+- [x] Remove frontend/src/app/api/**, store.ts localStorage identity, JSON runtime persistence, SQLite/prisma remnants — only what is truly unused
+- Acceptance: import graph proven closed before deletion (every consumer of lib/store, lib/db and the 18 prototype routes was inside the prototype tree itself — zero references from screens or the lib/api layer); frontend lint + typecheck clean; browser regression through the gateway origin re-verified every Phase 10 surface (landing, demo login → dashboard money tiles, deal detail escrow banner + audit trail, shared client view with installment CTAs + record timeline, public creator page with services/channels, money screen tiles + escrow/released rows, mobile footer flush); prototype routes now 404 on the Next dev server; bun workspace lockfile reconciled after prisma/@prisma/client removal from frontend and root manifests.
+- Deviations flagged: the verification pass surfaced a pre-existing SPA quirk (not a removal regression) — PublicPageScreen/ClientDealScreen kept a previous lookup's error/data when the identity prop (handle/token) changed without remount; fixed at the root by resetting fetch state in the identity effects (`fix(frontend): reset stale fetch state when capability identity changes`); docs/current-system-audit.md still describes the prototype era and is superseded by the Phase 12 docs deliverables.
 - Commit: `refactor(frontend): remove obsolete prototype backend`
 
 ## Phase 12 — Hardening + Complete E2E
