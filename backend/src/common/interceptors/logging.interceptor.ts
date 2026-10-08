@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { logJson } from '../logger/json-logger';
+import { redactUrl } from '../logger/redact';
 
 /**
  * One structured log line per SUCCESSFUL HTTP response (method, url, status, duration).
@@ -22,9 +23,9 @@ export class LoggingInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap(() => {
         const durationMs = Math.round(performance.now() - startedAt);
-        logJson('log', 'http', `${req.method} ${req.originalUrl} ${res.statusCode}`, {
+        logJson('log', 'http', `${req.method} ${redactUrl(req.originalUrl)} ${res.statusCode}`, {
           method: req.method,
-          url: req.originalUrl,
+          url: redactUrl(req.originalUrl),
           status: res.statusCode,
           durationMs,
         });

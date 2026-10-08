@@ -53,6 +53,21 @@ describe('env config', () => {
     expect(() => parseEnv({ ...VALID_ENV, R2_S3_ENDPOINT: 'http://insecure.example' })).toThrow(/R2_S3_ENDPOINT/);
   });
 
+  it('requires an https FRONTEND_URL in production but keeps the localhost default in dev', () => {
+    // Dev default is fine (friction-free boot).
+    expect(parseEnv(VALID_ENV).FRONTEND_URL).toBe('http://localhost:3000');
+    // Production: missing or non-https origin fails fast — it feeds CORS and
+    // the hosted-checkout redirect, so a silent localhost default would
+    // fail-open into a broken posture.
+    expect(() => parseEnv({ ...VALID_ENV, NODE_ENV: 'production' })).toThrow(/FRONTEND_URL/);
+    expect(() =>
+      parseEnv({ ...VALID_ENV, NODE_ENV: 'production', FRONTEND_URL: 'http://localhost:3000' }),
+    ).toThrow(/FRONTEND_URL/);
+    expect(
+      parseEnv({ ...VALID_ENV, NODE_ENV: 'production', FRONTEND_URL: 'https://deal.ng' }).FRONTEND_URL,
+    ).toBe('https://deal.ng');
+  });
+
   it('treats R2_PUBLIC_BASE_URL as optional but validated when present', () => {
     expect(parseEnv(VALID_ENV).R2_PUBLIC_BASE_URL).toBeUndefined();
     expect(() => parseEnv({ ...VALID_ENV, R2_PUBLIC_BASE_URL: 'http://nope.example' })).toThrow(/R2_PUBLIC_BASE_URL/);

@@ -232,7 +232,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     const res = await initialize(deal.shareToken);
     expect(res.status).toBe(201);
     const data = res.body.data as { reference: string; amountMinor: number; label: string; link: string; provider: string };
-    expect(data.reference).toMatch(/^FLW-DEAL-\d+-DEPOSIT-[0-9a-f]{8}$/);
+    expect(data.reference).toMatch(/^FLW-DEAL-\d+-DEPOSIT-[0-9a-f]{16}$/);
     expect(data.amountMinor).toBe(depositOf(4_000_000));
     expect(data.label).toBe('Deposit (50%)');
     expect(data.link).toContain(data.reference);
@@ -256,7 +256,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
       const failed = await db.paymentTransaction.findFirst({
         where: { dealId: deal.id, gatewayStatus: 'failed' },
       });
-      expect(failed?.providerRef).toMatch(/^FLW-DEAL-\d+-DEPOSIT-[0-9a-f]{8}$/);
+      expect(failed?.providerRef).toMatch(/^FLW-DEAL-\d+-DEPOSIT-[0-9a-f]{16}$/);
     } finally {
       broken.initializePayment = original;
     }

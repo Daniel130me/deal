@@ -56,27 +56,38 @@ export class ReviewsService {
 
   /**
    * The client's review action from the shared surface. The deal snapshot
-   * comes from the caller (already loaded + token-verified); the status gate
-   * is re-checked against that same snapshot inside the write transaction's
-   * conditional create, so a concurrent lifecycle move cannot slip a review
-   * onto a deal that just left the reviewable window.
+   * comes from the caller (already loaded + token-verified) for the fast
+   * pre-check; the authoritative gate is a status RE-READ inside the write
+   * transaction, so a lifecycle move committing between the snapshot and the
+   * insert (e.g. a concurrent dispute) cannot slip a review onto a deal that
+   * just left the reviewable window. The unique dealId constraint stays as
+   * the one-review-per-deal guard (P2002 -> 409 below).
    */
   async createForDeal(deal: Pick<Deal, 'id' | 'creatorId' | 'ref' | 'status'>, input: ReviewInput): Promise<Review> {
-    if (!REVIEWABLE_DEAL_STATUSES.includes(deal.status)) {
-      throw new HttpException(
+    const notReviewable = () =>
+      new HttpException(
         {
           code: 'DEAL_NOT_REVIEWABLE',
           message: 'You can review this deal once the work has been approved',
         },
         HttpStatus.CONFLICT,
       );
+
+    if (!REVIEWABLE_DEAL_STATUSES.includes(deal.status)) {
+      throw notReviewable();
     }
 
     const created = await this.prisma
       .$transaction(async (tx) => {
-        // Unique constraint on dealId is the real guard; the status WHERE
-        // makes the gate race-safe (a deal disputed concurrently is not
-        // reviewable anymore). P2002 surfaces as the 409 below.
+        // Authoritative gate: re-read the status INSIDE the transaction (the
+        // caller's snapshot may be stale under a concurrent approve/dispute).
+        const current = await tx.deal.findUnique({
+          where: { id: deal.id },
+          select: { status: true },
+        });
+        if (!current || !REVIEWABLE_DEAL_STATUSES.includes(current.status)) {
+          throw notReviewable();
+        }
         const review = await tx.review.create({
           data: {
             dealId: deal.id,

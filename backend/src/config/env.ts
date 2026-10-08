@@ -11,7 +11,11 @@ import { z } from 'zod';
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
-  /** Browser origin(s) allowed by CORS. Comma-separated; never a wildcard in production. */
+  /** Browser origin(s) allowed by CORS. Comma-separated; never a wildcard in production.
+   *  In production this is REQUIRED and must be https:// — it feeds both the
+   *  CORS allowlist and the hosted-checkout redirect base, so a silent
+   *  localhost default would fail-open into a broken security posture
+   *  (same fail-fast precedent as JWT_ACCESS_SECRET/R2/FLW keys). */
   FRONTEND_URL: z.string().default('http://localhost:3000'),
   /** Neon PostgreSQL pooled connection string (Prisma runtime). Required since Phase 3.
    *  Named NEON_* on purpose: the sandbox platform exports a workspace-global
@@ -56,6 +60,20 @@ const EnvSchema = z.object({
    *  rail stays dormant until keys are supplied: initializing via Paystack then
    *  answers 503 PAYMENT_PROVIDER_UNAVAILABLE, nothing silently falls back. */
   PAYSTACK_SECRET_KEY: z.string().min(1).optional(),
+}).superRefine((values, ctx) => {
+  // Production has no safe default for the browser origin: without it CORS
+  // allowlists localhost and checkout redirects point off-origin. Dev/test
+  // keep the localhost default for friction-free boot.
+  if (values.NODE_ENV === 'production') {
+    const url = values.FRONTEND_URL?.trim();
+    if (!url || !url.startsWith('https://')) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['FRONTEND_URL'],
+        message: 'is required in production and must start with https://',
+      });
+    }
+  }
 });
 
 export type Env = z.infer<typeof EnvSchema>;

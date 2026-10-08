@@ -2,6 +2,7 @@ import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from
 import type { Request, Response } from 'express';
 import { codeForStatus } from '../errors/error-codes';
 import { logJson } from '../logger/json-logger';
+import { redactUrl } from '../logger/redact';
 
 interface ErrorBody {
   code: string;
@@ -67,9 +68,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const { status, body } = describeError(exception);
 
     if (status >= 400) {
-      logJson(status >= 500 ? 'error' : 'warn', 'http', `${req.method} ${req.originalUrl} -> ${status} ${body.code}`, {
+      logJson(status >= 500 ? 'error' : 'warn', 'http', `${req.method} ${redactUrl(req.originalUrl)} -> ${status} ${body.code}`, {
         method: req.method,
-        url: req.originalUrl,
+        url: redactUrl(req.originalUrl),
         status,
         code: body.code,
       });

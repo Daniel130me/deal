@@ -13,12 +13,13 @@ export const PAYMENT_REF_PREFIX: Record<PaymentProvider, string> = {
 };
 
 /**
- * Transaction reference shape: {PREFIX}-{deal ref}-{slot type}-{hex4}.
+ * Transaction reference shape: {PREFIX}-{deal ref}-{slot type}-{hex8}.
  * Carries enough context to debug from the provider dashboard alone; the
- * random suffix (256 bits of space) plus the DB unique index on
- * PaymentTransaction.providerRef are the actual uniqueness authorities.
+ * random suffix (8 bytes = 64 bits of randomness on top of the per-deal,
+ * per-slot prefix) plus the DB unique index on PaymentTransaction.providerRef
+ * are the actual uniqueness authorities.
  */
-export const PAYMENT_REF_RANDOM_BYTES = 4;
+export const PAYMENT_REF_RANDOM_BYTES = 8;
 
 /** The only currency the rails are wired for (prototype scope: Nigeria). */
 export const PAYMENT_CURRENCY = 'NGN';
