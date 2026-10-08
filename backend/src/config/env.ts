@@ -25,6 +25,21 @@ const EnvSchema = z.object({
    *  Required (no dev default): a silently-weak secret in dev tends to survive
    *  into production untouched — fail-fast keeps that class of mistake impossible. */
   JWT_ACCESS_SECRET: z.string().min(32, 'must be at least 32 characters'),
+  /** Cloudflare R2 (S3-compatible) object storage — deal files.
+   *  Required since Phase 7: files are core domain data (deliverables), so a
+   *  boot without storage is a boot without a working product — fail-fast
+   *  beats a half-configured app that 500s on first upload.
+   *  IMPORTANT: deal files are PRIVATE — access only via presigned URLs.
+   *  R2_PUBLIC_BASE_URL (the optional public r2.dev host) is NOT used for
+   *  them; it is reserved for genuinely public assets (e.g. avatars). */
+  R2_BUCKET: z.string().min(1),
+  R2_ACCESS_KEY_ID: z.string().min(1),
+  R2_SECRET_ACCESS_KEY: z.string().min(1),
+  /** R2 S3 endpoint, e.g. https://<account-id>.r2.cloudflarestorage.com */
+  R2_S3_ENDPOINT: z.string().url().regex(/^https:\/\//, 'must be an https:// URL'),
+  /** Optional public CDN host (pub-xxxx.r2.dev). Reserved for public assets;
+   *  never used for deal files (their gating requires signed URLs). */
+  R2_PUBLIC_BASE_URL: z.string().url().regex(/^https:\/\//, 'must be an https:// URL').optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

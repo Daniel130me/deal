@@ -4,6 +4,10 @@ import { parseEnv, parseOrigins } from '../src/config/env';
 const VALID_ENV = {
   NEON_DATABASE_URL: 'postgresql://user:pass@localhost:5432/deal',
   JWT_ACCESS_SECRET: 'unit-test-secret-0123456789abcdef0123456789abcdef',
+  R2_BUCKET: 'dtg-test',
+  R2_ACCESS_KEY_ID: 'r2-key',
+  R2_SECRET_ACCESS_KEY: 'r2-secret',
+  R2_S3_ENDPOINT: 'https://acc123.r2.cloudflarestorage.com',
 };
 
 describe('env config', () => {
@@ -40,6 +44,20 @@ describe('env config', () => {
     const { JWT_ACCESS_SECRET: _omit, ...withoutSecret } = VALID_ENV;
     expect(() => parseEnv(withoutSecret)).toThrow(/JWT_ACCESS_SECRET/);
     expect(() => parseEnv({ ...VALID_ENV, JWT_ACCESS_SECRET: 'too-short' })).toThrow(/JWT_ACCESS_SECRET/);
+  });
+
+  it('rejects a missing or non-https R2 endpoint', () => {
+    const { R2_S3_ENDPOINT: _omit, ...withoutEndpoint } = VALID_ENV;
+    expect(() => parseEnv(withoutEndpoint)).toThrow(/R2_S3_ENDPOINT/);
+    expect(() => parseEnv({ ...VALID_ENV, R2_S3_ENDPOINT: 'http://insecure.example' })).toThrow(/R2_S3_ENDPOINT/);
+  });
+
+  it('treats R2_PUBLIC_BASE_URL as optional but validated when present', () => {
+    expect(parseEnv(VALID_ENV).R2_PUBLIC_BASE_URL).toBeUndefined();
+    expect(() => parseEnv({ ...VALID_ENV, R2_PUBLIC_BASE_URL: 'http://nope.example' })).toThrow(/R2_PUBLIC_BASE_URL/);
+    expect(
+      parseEnv({ ...VALID_ENV, R2_PUBLIC_BASE_URL: 'https://pub-x.r2.dev' }).R2_PUBLIC_BASE_URL,
+    ).toBe('https://pub-x.r2.dev');
   });
 });
 

@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { ActorType, DealEventType, DealStatus, Prisma, type DealPayment } from '@prisma/client';
+import { ActorType, DealEventType, DealStatus, Prisma, type Deal, type DealPayment } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { nextSequentialRef, retryOnUniqueViolation } from '../../common/ids/ref.util';
 import { PrismaService } from '../../database/prisma.service';
@@ -294,6 +294,23 @@ export class DealsService {
       include: { deliverables: { orderBy: { position: 'asc' } }, payments: { orderBy: { paidAt: 'asc' } } },
     });
     return deal ? { ...deal, amounts: this.amountsOf(deal) } : null;
+  }
+
+  /**
+   * Minimal ownership proof for sibling modules (files): the deal exists AND
+   * belongs to this creator, or it is the same 404 as every other owner path.
+   * Deliberately a single indexed query with a narrow select — file routes
+   * must not pay for the full detail projection they never read.
+   */
+  async getOwnedDealContext(creatorId: string, dealId: string): Promise<Pick<Deal, 'id' | 'status' | 'creatorId'>> {
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, creatorId },
+      select: { id: true, status: true, creatorId: true },
+    });
+    if (!deal) {
+      throw this.fail('DEAL_NOT_FOUND', 'Deal not found', HttpStatus.NOT_FOUND);
+    }
+    return deal;
   }
 
   private async nextDealRef(): Promise<string> {

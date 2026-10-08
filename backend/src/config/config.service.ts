@@ -29,4 +29,14 @@ export class ConfigService {
   get jwtAccessSecret(): string {
     return this.values.JWT_ACCESS_SECRET;
   }
+
+  /** Cloudflare R2 connection values for the storage adapter (integrations/storage). */
+  get r2(): { bucket: string; accessKeyId: string; secretAccessKey: string; endpoint: string } {
+    return {
+      bucket: this.values.R2_BUCKET,
+      accessKeyId: this.values.R2_ACCESS_KEY_ID,
+      secretAccessKey: this.values.R2_SECRET_ACCESS_KEY,
+      endpoint: this.values.R2_S3_ENDPOINT,
+    };
+  }
 }

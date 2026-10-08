@@ -402,7 +402,8 @@ model FileAsset {
   sizeBytes  Int
   mime       String
   uploadedBy String
-  // Finals get a release timestamp only after approval + full payment (FilesService enforces).
+  // Stamped when a FINAL file first reaches the client through the share link —
+  // reachable only after the release gate (approval + full payment). Previews stay null.
   releasedAt DateTime?
   createdAt  DateTime  @default(now())
 
@@ -411,6 +412,9 @@ model FileAsset {
 
   @@index([dealId])
   @@index([deliveryId])
+  // One registered asset per stored object: finalize is idempotent (P2002 ->
+  // 409) and no two rows can ever point at the same bytes.
+  @@unique([storageKey])
 }
 
 // Append-only audit trail — services must only INSERT here, never update or delete.

@@ -73,9 +73,11 @@
 
 ## Phase 7 — Cloudflare R2
 
-- [ ] StorageProvider interface + R2StorageProvider (@aws-sdk/client-s3 + presigner); keys creators/{creatorId}/deals/{dealId}/{previews|final}/{uuid}-{safeFilename}
-- [ ] Presigned PUT flow: auth → deal ownership → metadata validation → key generation → presign → direct upload → finalize+verify → FileAsset
-- [ ] File authorization: previews during review states; finals require approval + full payment + release; signed URLs only
+- [x] StorageProvider interface + R2StorageProvider (@aws-sdk/client-s3 + presigner); keys creators/{creatorId}/deals/{dealId}/{previews|final}/{uuid}-{safeFilename}
+- [x] Presigned PUT flow: auth → deal ownership → metadata validation → key generation → presign → direct upload → finalize+verify → FileAsset
+- [x] File authorization: previews during review states; finals require approval + full payment + release; signed URLs only
+- Acceptance: 91/91 tests green ✅ (21 new e2e vs live Neon + REAL R2: auth/validation matrix on upload-url, canonical namespaced keys, namespace-escape + traversal rejection, not-uploaded / empty / mime-mismatch finalize verification via live HeadObject, real browser-parity PUTs, duplicate finalize 409, owner downloads + foreign 404 (code leak plugged), shared gating pre-delivery/post-delivery/post-release with releasedAt stamping, cross-deal 404, unknown token 404; gateway smoke: login → upload → PUT → finalize → owner download → shared gating → cleanup pristine; browser regression clean)
+- Deviations flagged: plan's `objectExists` realised as `objectHead` (finalize needs stored size + content type anyway — a metadata head subsumes the boolean); `releasedAt` is stamped by FilesService on first client delivery (NOT by the release action) to keep the module dependency one-directional (files → deals); deal-status keyed finals gate re-uses the releaseFiles approval+full-payment enforcement instead of duplicating escrow logic; FileAsset.storageKey unique constraint added (idempotent finalize); shared file routes live in FilesModule (`shared/:token/files`) so ALL file policy sits behind one service; R2_* env vars required fail-fast (storage is core domain data), R2_PUBLIC_BASE_URL optional and deliberately unused for deal files (signed URLs only; public host reserved for future public assets)
 - Commit: `feat(storage): integrate Cloudflare R2 protected file storage`
 
 ## Phase 8 — Payment Infrastructure

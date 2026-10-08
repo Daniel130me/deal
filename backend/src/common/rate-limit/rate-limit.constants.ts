@@ -28,6 +28,13 @@ export const RATE_LIMITS = {
     /** Capability-link deal reads: client + any listener they forward the page to. */
     dealRead: { default: { limit: 30, ttl: 60_000 } },
     /**
+     * Capability-link file reads: the share page lists files and mints a
+     * presigned URL per preview render, so the budget mirrors dealRead.
+     * Downloading via a signed URL does NOT hit the API again (the store
+     * serves it), so this only bounds URL minting.
+     */
+    fileRead: { default: { limit: 30, ttl: 60_000 } },
+    /**
      * Capability-link actions (decline/approve/...): one-click human decisions,
      * but also Phase 8's payment attempts from the share page — card retries
      * legitimately repeat, so the budget keeps headroom while still bounding
