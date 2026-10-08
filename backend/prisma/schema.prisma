@@ -115,6 +115,12 @@ enum DealEventType {
   COMPLETED
   DECLINED
   DISPUTED
+  // Phase 9: a review is an audit-worthy deal event (no status change — the
+  // state machine is not involved; services insert this row directly).
+  REVIEW
+  // Phase 9: dispute closed by platform resolution (resolve or reject) —
+  // carries the outcome in its label/metadata while restoring deal status.
+  DISPUTE_RESOLVED
 }
 
 enum ActorType {
@@ -458,6 +464,10 @@ model Dispute {
   raisedById String?
   reason     String
   status     DisputeStatus @default(OPEN)
+  // The status the deal held when the dispute was raised — the restore point
+  // if the platform rejects the dispute (resolution needs to know where the
+  // lifecycle resumes; DealEvent metadata is not a reliable source of truth).
+  priorStatus DealStatus?
   resolvedAt DateTime?
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
@@ -466,6 +476,7 @@ model Dispute {
   profile CreatorProfile? @relation(fields: [raisedById], references: [id])
 
   @@index([dealId])
+  @@index([status])
 }
 
 model PayoutAccount {

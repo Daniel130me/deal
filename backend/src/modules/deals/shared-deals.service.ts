@@ -1,9 +1,14 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { ActorType, DealEventType, DealStatus, DisputeStatus, EscrowStatus } from '@prisma/client';
+import { ActorType, DealEventType, DealStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreatorsService, type PublicProfile } from '../creators/creators.service';
+import { DisputesService } from '../disputes/disputes.service';
+import { NOTIFICATION_TYPES, type NotificationType } from '../notifications/notifications.constants';
+import { NotificationsService } from '../notifications/notifications.service';
+import { ReviewsService } from '../reviews/reviews.service';
 import { formatNairaMinor } from './deal-money';
 import { DealStateService } from './deal-state.service';
+import { DealEscrowService, type EscrowReleaseResult } from './deal-escrow.service';
 import { DealsService } from './deals.service'; // value import: injected class (Nest DI)
 import type { DealListItem, DealWithAmounts } from './deals.service';
 import type { SharedDealActionDto } from './dto/deal.dto';
@@ -57,6 +62,10 @@ export class SharedDealsService {
     private readonly state: DealStateService,
     private readonly deals: DealsService,
     private readonly creators: CreatorsService,
+    private readonly escrow: DealEscrowService,
+    private readonly disputes: DisputesService,
+    private readonly reviews: ReviewsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** GET /shared/:token — the share-page payload. */
@@ -99,7 +108,14 @@ export class SharedDealsService {
     };
   }
 
-  /** POST /shared/:token/actions — the client's lifecycle moves. */
+  /**
+   * POST /shared/:token/actions — the client's lifecycle moves.
+   *
+   * Every accepted move nudges the deal's creator afterwards (best-effort,
+   * after the domain write committed) — the dispute and review cases carry
+   * their own notifications inside their owning services, so they are not
+   * repeated here.
+   */
   async act(token: string, dto: SharedDealActionDto): Promise<SharedDealProjection> {
     const deal = await this.findDeal(token);
 
@@ -126,6 +142,13 @@ export class SharedDealsService {
             metadata: dto.note ? { note: dto.note } : undefined,
           },
         );
+        await this.notifyCreator(deal.creatorId, NOTIFICATION_TYPES.DEAL_CHANGES_REQUESTED, {
+          dealId: deal.id,
+          dealRef: deal.ref,
+          label: dto.note
+            ? `Client requested changes on ${deal.ref}: “${dto.note}”`
+            : `Client requested changes on ${deal.ref}`,
+        });
         break;
       }
 
@@ -135,11 +158,24 @@ export class SharedDealsService {
           DealStatus.DECLINED,
           { type: DealEventType.DECLINED, actor: ActorType.CLIENT, label: 'Client declined the deal' },
         );
+        await this.notifyCreator(deal.creatorId, NOTIFICATION_TYPES.DEAL_DECLINED, {
+          dealId: deal.id,
+          dealRef: deal.ref,
+          label: `Client declined ${deal.ref}`,
+        });
         break;
       }
 
       case 'approve': {
-        await this.approveWithEscrowRelease(deal);
+        const released = await this.approveWithEscrowRelease(deal);
+        await this.notifyCreator(deal.creatorId, NOTIFICATION_TYPES.DEAL_APPROVED, {
+          dealId: deal.id,
+          dealRef: deal.ref,
+          label:
+            released.totalMinor > 0
+              ? `Client approved ${deal.ref} — ${formatNairaMinor(released.totalMinor)} released from escrow to you`
+              : `Client approved ${deal.ref}`,
+        });
         break;
       }
 
@@ -149,6 +185,21 @@ export class SharedDealsService {
           DealStatus.COMPLETED,
           { type: DealEventType.COMPLETED, actor: ActorType.CLIENT, label: 'Deal completed — client confirmed delivery' },
         );
+        await this.notifyCreator(deal.creatorId, NOTIFICATION_TYPES.DEAL_COMPLETED, {
+          dealId: deal.id,
+          dealRef: deal.ref,
+          label: `Client completed ${deal.ref} — congratulations!`,
+        });
+        break;
+      }
+
+      case 'review': {
+        // Rating presence is the service's job (the DTO keeps rating optional
+        // because the other actions don't carry one).
+        if (dto.rating === undefined) {
+          throw this.fail('REVIEW_RATING_REQUIRED', 'Pick a star rating to leave your review', HttpStatus.BAD_REQUEST);
+        }
+        await this.reviews.createForDeal(deal, { rating: dto.rating, comment: dto.note });
         break;
       }
 
@@ -157,30 +208,12 @@ export class SharedDealsService {
           // Deliberate tightening vs the prototype: the resolution team needs a reason.
           throw this.fail('DISPUTE_REASON_REQUIRED', 'Tell us what went wrong so our team can help', HttpStatus.BAD_REQUEST);
         }
+        // Owned by the disputes domain: the DISPUTED move, the row (with its
+        // priorStatus restore point) and the creator nudge land together there.
         if (deal.status !== DealStatus.DELIVERED && deal.status !== DealStatus.APPROVED) {
           throw this.fail('INVALID_DEAL_TRANSITION', "This deal can't be disputed right now", HttpStatus.CONFLICT);
         }
-        await this.prisma.$transaction(async (tx) => {
-          await this.state.transition(
-            { id: deal.id, status: deal.status },
-            DealStatus.DISPUTED,
-            {
-              type: DealEventType.DISPUTED,
-              actor: ActorType.CLIENT,
-              label: `Dispute raised — our team will step in`,
-              metadata: { reason: dto.note },
-            },
-            tx,
-          );
-          await tx.dispute.create({
-            data: {
-              dealId: deal.id,
-              raisedBy: ActorType.CLIENT,
-              reason: dto.note!,
-              status: DisputeStatus.OPEN,
-            },
-          });
-        });
+        await this.disputes.createClientDispute(deal, dto.note);
         break;
       }
     }
@@ -196,51 +229,38 @@ export class SharedDealsService {
    * flow, which reads the deal status at verification time.)
    *
    * The released total is computed INSIDE the transaction, after the status
-   * move: Phase 8's payment landing serializes on the Deal row lock, so a
-   * deposit racing this approve is either already committed (counted in the
-   * re-read, released by the updateMany below) or lands after with the
-   * post-approval straight-to-creator rule — never stranded as HELD.
+   * move, by the shared escrow writer (DealEscrowService): Phase 8's payment
+   * landing serializes on the Deal row lock, so a deposit racing this approve
+   * is either already committed (counted in the re-read, released by the
+   * updateMany inside the primitive) or lands after with the post-approval
+   * straight-to-creator rule — never stranded as HELD.
    */
   private async approveWithEscrowRelease(
     deal: DealListItem & DealWithAmounts,
-  ): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+  ): Promise<EscrowReleaseResult> {
+    return this.prisma.$transaction(async (tx) => {
       await this.state.transition(
         { id: deal.id, status: deal.status },
         DealStatus.APPROVED,
         { type: DealEventType.APPROVED, actor: ActorType.CLIENT, label: 'Work approved by client' },
         tx,
       );
-
-      // Re-read under the write: the pre-transaction snapshot may miss a
-      // payment that landed concurrently (deal-row lock ordering guarantees
-      // it is committed by now if it exists).
-      const held = await tx.dealPayment.findMany({
-        where: { dealId: deal.id, escrowStatus: EscrowStatus.HELD },
-        select: { amountMinor: true },
-      });
-
-      if (held.length > 0) {
-        const total = held.reduce((s, p) => s + p.amountMinor, 0);
-        await tx.dealPayment.updateMany({
-          where: { dealId: deal.id, escrowStatus: EscrowStatus.HELD },
-          data: { escrowStatus: EscrowStatus.RELEASED, releasedAt: new Date() },
-        });
-        await tx.deal.update({
-          where: { id: deal.id },
-          data: { paymentReleasedAt: new Date() },
-        });
-        await tx.dealEvent.create({
-          data: {
-            dealId: deal.id,
-            type: DealEventType.PAYMENT_RELEASED,
-            actor: ActorType.SYSTEM,
-            label: `${formatNairaMinor(total)} released from escrow to the creator's payout account`,
-            metadata: { releasedCount: held.length, totalMinor: total },
-          },
-        });
-      }
+      return this.escrow.releaseHeldEscrow(tx, deal);
     });
+  }
+
+  /** Advisory nudge to the deal's creator — best-effort, never fails the action. */
+  private async notifyCreator(
+    creatorId: string,
+    type: NotificationType,
+    payload: { dealId: string; dealRef: string; label: string },
+  ): Promise<void> {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { id: creatorId },
+      select: { userId: true },
+    });
+    if (!profile) return; // structurally impossible (deals RESTRICT profile deletion)
+    await this.notifications.notify({ userId: profile.userId, type, payload });
   }
 
   private async findDeal(token: string): Promise<DealListItem & DealWithAmounts> {

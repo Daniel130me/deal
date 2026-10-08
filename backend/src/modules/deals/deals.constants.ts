@@ -50,3 +50,34 @@ export const EDITABLE_DEAL_STATUSES: readonly DealStatus[] = [DealStatus.DRAFT, 
 
 /** Default delivery note when the creator submits work without one (prototype parity). */
 export const DEFAULT_DELIVERY_NOTE = 'Preview files for your review — final high-resolution set follows after approval.';
+
+/**
+ * Dashboard status classifications (Phase 9 overview aggregates). These mirror
+ * the prototype's dashboard groupings, mapped onto the production enum:
+ *
+ * - PENDING: an offer is with the client, awaiting their decision.
+ * - ONGOING: an open engagement — work in flight or awaiting final client
+ *   confirmation. DISPUTED counts here (the engagement is still open) and
+ *   BALANCE_PAID is legacy-parity; the machine never writes it.
+ * - EXPECTED_BALANCE: the subset of ONGOING whose remaining balance is still
+ *   collectible — DISPUTED money is contested and deliberately excluded from
+ *   the expected-balance sum.
+ */
+export const PENDING_DEAL_STATUSES: readonly DealStatus[] = [DealStatus.SENT, DealStatus.CHANGES_REQUESTED];
+export const ONGOING_DEAL_STATUSES: readonly DealStatus[] = [
+  DealStatus.ACTIVE,
+  DealStatus.DELIVERED,
+  DealStatus.REVISION,
+  DealStatus.APPROVED,
+  DealStatus.FILES_RELEASED,
+  DealStatus.DISPUTED,
+  DealStatus.BALANCE_PAID,
+];
+export const EXPECTED_BALANCE_DEAL_STATUSES: readonly DealStatus[] = [
+  DealStatus.ACTIVE,
+  DealStatus.DELIVERED,
+  DealStatus.REVISION,
+  DealStatus.APPROVED,
+  DealStatus.FILES_RELEASED,
+  DealStatus.BALANCE_PAID,
+];

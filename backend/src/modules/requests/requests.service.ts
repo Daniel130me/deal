@@ -2,6 +2,8 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, RequestStatus, type ClientRequest, type Service } from '@prisma/client';
 import { retryOnUniqueViolation, nextSequentialRef } from '../../common/ids/ref.util';
 import { PrismaService } from '../../database/prisma.service';
+import { NOTIFICATION_TYPES } from '../notifications/notifications.constants';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ServicesService } from '../services/services.service';
 import type { PublicRequestDto, RequestActionDto } from './dto/request.dto';
 
@@ -38,6 +40,7 @@ export class RequestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly services: ServicesService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ── Owner (authenticated creator) use cases ─────────────────────────────────
@@ -119,7 +122,29 @@ export class RequestsService {
     }
 
     const created = await this.createWithRef(creatorId, dto);
+    // Nudge the creator AFTER the row exists (advisory, best-effort): a new
+    // public request is the inbox's whole reason to be checked.
+    await this.notifyNewRequest(created, service.title);
     return { ...created, service };
+  }
+
+  /** Best-effort creator nudge for a public submission — never fails the intake. */
+  private async notifyNewRequest(request: ClientRequest, serviceTitle: string | null): Promise<void> {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { id: request.creatorId },
+      select: { userId: true },
+    });
+    if (!profile) return; // structurally impossible (requests RESTRICT profile deletion)
+    await this.notifications.notify({
+      userId: profile.userId,
+      type: NOTIFICATION_TYPES.REQUEST_NEW,
+      payload: {
+        requestId: request.id,
+        requestRef: request.ref,
+        label: `New request from ${request.clientName}${serviceTitle ? ` — ${serviceTitle}` : ''}`,
+        clientName: request.clientName,
+      },
+    });
   }
 
   /** Ref generated inside the closure so a P2002 retry re-allocates. */

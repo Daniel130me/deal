@@ -5,6 +5,7 @@ import { CreatorsService } from './creators.service';
 import { CurrentCreator } from './decorators/current-creator.decorator';
 import { CreatorProfileGuard, type CreatorRef } from './guards/creator-profile.guard';
 import { CreateProfileDto, ReplaceChannelsDto, UpdateProfileDto } from './dto/profile.dto';
+import { OverviewService } from './overview.service';
 
 /**
  * Owner profile endpoints. Every path is "me" — the profile is resolved from
@@ -17,7 +18,10 @@ import { CreateProfileDto, ReplaceChannelsDto, UpdateProfileDto } from './dto/pr
  */
 @Controller('creators')
 export class CreatorsController {
-  constructor(private readonly creators: CreatorsService) {}
+  constructor(
+    private readonly creators: CreatorsService,
+    private readonly overviewService: OverviewService,
+  ) {}
 
   /** Onboarding — promotes the account to CREATOR in the same transaction. */
   @Post('me')
@@ -30,6 +34,17 @@ export class CreatorsController {
   @UseGuards(CreatorProfileGuard)
   me(@CurrentCreator() creator: CreatorRef) {
     return this.creators.getProfileById(creator.id);
+  }
+
+  /**
+   * The dashboard aggregate (Phase 9): stats, money summaries, earnings
+   * series, rating summary and recent lists — all derived from the DB at read
+   * time (docs/implementation-plan.md Phase 9: "via DB aggregation").
+   */
+  @Get('me/overview')
+  @UseGuards(CreatorProfileGuard)
+  overview(@CurrentCreator() creator: CreatorRef) {
+    return this.overviewService.getForCreator(creator.id);
   }
 
   @Patch('me')

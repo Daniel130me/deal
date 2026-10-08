@@ -495,6 +495,9 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
 
   // ── Escrow release + post-approval money ────────────────────────────────────
 
+  // Longest chain in the suite (init → verify → deliver → approve → init →
+  // verify) — 8+ Neon round-trips; the default 30s budget is not enough on a
+  // cold pooler.
   timed('approve releases escrow; a post-approval payment lands straight to the creator', async () => {
     const deal = await sendDeal(a.accessToken, 4_000_000);
     const depositInit = await initialize(deal.shareToken);
@@ -519,7 +522,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     expect((res.body.data as { payment: { escrowStatus: string } }).payment.escrowStatus).toBe('RELEASED');
     const row = await db.dealPayment.findFirst({ where: { reference: balanceData.reference } });
     expect(row?.releasedAt).not.toBeNull();
-  });
+  }, 90_000);
 
   // ── Rate limit (deterministic via a dedicated IP) ───────────────────────────
 

@@ -187,15 +187,24 @@ export class DealActionDto {
  * POST /shared/:token/actions — anonymous client actions through the
  * capability link. One free-form note field mirrors the prototype; the
  * dispute action additionally REQUIRES it (service-side check) so the
- * resolution team always has a reason on record.
+ * resolution team always has a reason on record. The review action requires
+ * `rating` (service-side check) and optionally carries the comment in `note`.
  */
 export class SharedDealActionDto {
-  @IsIn(['request-changes', 'decline', 'approve', 'complete', 'dispute'])
-  action!: 'request-changes' | 'decline' | 'approve' | 'complete' | 'dispute';
+  @IsIn(['request-changes', 'decline', 'approve', 'complete', 'dispute', 'review'])
+  action!: 'request-changes' | 'decline' | 'approve' | 'complete' | 'dispute' | 'review';
 
   @IsOptional()
   @IsString()
   @MaxLength(DEAL_TEXT_MAX)
   @Transform(trim)
   note?: string;
+
+  /** Star rating for the review action — 1..5 enforced at the validation edge. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1, { message: 'Rating must be between 1 and 5 stars' })
+  @Max(5, { message: 'Rating must be between 1 and 5 stars' })
+  rating?: number;
 }

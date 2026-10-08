@@ -22,7 +22,11 @@ export type PrismaTx = Prisma.TransactionClient;
  *   plain route — acceptance without verified money does not exist.
  * - BALANCE_PAID is legacy (historical seed rows only); the machine never
  *   writes it and never leaves it.
- * - DISPUTED has no outgoing moves until Phase 9 implements resolution.
+ * - DISPUTED's outgoing moves belong to Phase 9's dispute resolution (the
+ *   DisputesService pipeline, ADMIN-only): resolve lands the deal on APPROVED
+ *   (work stands, escrow releases); reject restores the status the deal held
+ *   when the dispute was raised (the dispute row's priorStatus). No route may
+ *   move a DISPUTED deal through any other path.
  */
 const DEAL_TRANSITIONS: Record<DealStatus, DealStatus[]> = {
   [DealStatus.DRAFT]: [DealStatus.SENT],
@@ -35,7 +39,9 @@ const DEAL_TRANSITIONS: Record<DealStatus, DealStatus[]> = {
   [DealStatus.FILES_RELEASED]: [DealStatus.COMPLETED],
   [DealStatus.COMPLETED]: [],
   [DealStatus.DECLINED]: [],
-  [DealStatus.DISPUTED]: [],
+  // Dispute resolution only (DisputesService, ADMIN): resolve -> APPROVED,
+  // reject -> the row's captured priorStatus (DELIVERED or APPROVED).
+  [DealStatus.DISPUTED]: [DealStatus.DELIVERED, DealStatus.APPROVED],
   [DealStatus.BALANCE_PAID]: [],
 };
 

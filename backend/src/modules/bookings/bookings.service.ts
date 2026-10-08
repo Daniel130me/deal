@@ -2,6 +2,8 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { BookingStatus, type Booking, type Service } from '@prisma/client';
 import { nextSequentialRef, retryOnUniqueViolation } from '../../common/ids/ref.util';
 import { PrismaService } from '../../database/prisma.service';
+import { NOTIFICATION_TYPES } from '../notifications/notifications.constants';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ServicesService } from '../services/services.service';
 import type { BookingActionDto, PublicBookingDto } from './dto/booking.dto';
 
@@ -40,6 +42,7 @@ export class BookingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly services: ServicesService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ── Owner (authenticated creator) use cases ─────────────────────────────────
@@ -91,7 +94,30 @@ export class BookingsService {
     }
 
     const created = await this.createWithRef(creatorId, dto);
+    // Nudge the creator AFTER the row exists (advisory, best-effort).
+    await this.notifyNewBooking(created, service?.title ?? null);
     return { ...created, service };
+  }
+
+  /** Best-effort creator nudge for a public booking — never fails the intake. */
+  private async notifyNewBooking(booking: Booking, serviceTitle: string | null): Promise<void> {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { id: booking.creatorId },
+      select: { userId: true },
+    });
+    if (!profile) return; // structurally impossible (bookings RESTRICT profile deletion)
+    await this.notifications.notify({
+      userId: profile.userId,
+      type: NOTIFICATION_TYPES.BOOKING_NEW,
+      payload: {
+        bookingId: booking.id,
+        bookingRef: booking.ref,
+        label: `New booking request from ${booking.clientName}${serviceTitle ? ` — ${serviceTitle}` : ''}`,
+        clientName: booking.clientName,
+        date: booking.date.toISOString().slice(0, 10),
+        time: booking.time,
+      },
+    });
   }
 
   /** Ref generated inside the closure so a P2002 retry re-allocates. */

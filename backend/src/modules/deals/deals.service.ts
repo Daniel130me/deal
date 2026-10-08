@@ -26,6 +26,7 @@ export type DealDetail = Prisma.DealGetPayload<{
     events: { orderBy: { createdAt: 'asc' } };
     deliveries: { include: { files: true }; orderBy: { submittedAt: 'desc' } };
     request: { select: { ref: true } };
+    disputes: { orderBy: { createdAt: 'desc' } };
   };
 }>;
 
@@ -72,7 +73,9 @@ export class DealsService {
 
   /**
    * Full owner detail: deliverables, payments, deliveries, the linked request
-   * ref and the immutable event timeline (the audit trail the dashboard renders).
+   * ref, the immutable event timeline (the audit trail the dashboard renders)
+   * and the deal's disputes (Phase 9: the creator must see when a client has
+   * raised one — the pipeline itself is platform-only).
    */
   async getOwned(creatorId: string, dealId: string): Promise<DealDetail & DealWithAmounts> {
     const deal = await this.prisma.deal.findFirst({
@@ -83,6 +86,7 @@ export class DealsService {
         events: { orderBy: { createdAt: 'asc' } },
         deliveries: { include: { files: true }, orderBy: { submittedAt: 'desc' } },
         request: { select: { ref: true } },
+        disputes: { orderBy: { createdAt: 'desc' } },
       },
     });
     if (!deal) {
@@ -200,6 +204,7 @@ export class DealsService {
           events: { orderBy: { createdAt: 'asc' } },
           deliveries: { include: { files: true }, orderBy: { submittedAt: 'desc' } },
           request: { select: { ref: true } },
+          disputes: { orderBy: { createdAt: 'desc' } },
         },
       });
     });

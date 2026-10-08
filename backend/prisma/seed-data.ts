@@ -12,10 +12,10 @@
  *   - deliverables/payments/events/deliveries/finalFiles: embedded arrays -> relational rows
  *
  * NOT ported (decision recorded in the Phase 3 walkthrough):
- *   - settings.earningsSeries — the dashboard chart will be aggregated from released
- *     DealPayment rows in Phase 9; a static series would drift from the source of truth.
- *   - the 5-star review mentioned in DEAL-005's completion event (prototype has no review
- *     record; reviews become a Phase 9 feature).
+ *   - settings.earningsSeries — the dashboard chart is aggregated from released
+ *     DealPayment rows (Phase 9); a static series would drift from the source of truth.
+ *   - (superseded in Phase 9) the 5-star review mentioned in DEAL-005's completion
+ *     event is now stored for real — see DEMO_REVIEWS.
  */
 import type { Prisma } from '@prisma/client';
 
@@ -649,5 +649,22 @@ export const DEMO_DEALS: DemoDeal[] = [
     balancePaidAt: '2026-09-24T02:18:33.249Z',
     filesReleasedAt: '2026-09-25T02:18:33.249Z',
     completedAt: '2026-09-26T02:18:33.249Z',
+  },
+];
+
+/**
+ * Phase 9: reviews become a stored domain record. The prototype only TOLD the
+ * story (DEAL-005's completion event: "Client downloaded final files and left
+ * a 5-star review"); the demo database now carries the matching row so the
+ * dashboard's rating summary and the creator's reviews list have source data.
+ */
+export const DEMO_REVIEWS: Prisma.ReviewUncheckedCreateInput[] = [
+  {
+    id: 'rv_lekki',
+    dealId: 'd_deal005',
+    creatorId: 'u_tobi',
+    rating: 5,
+    comment: 'Chidi loved the walkthrough — the drone opening sold the listing within days.',
+    createdAt: new Date('2026-09-26T02:30:00.000Z'),
   },
 ];

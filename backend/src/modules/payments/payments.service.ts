@@ -20,6 +20,8 @@ import type { PaymentGateway, VerifiedPayment } from '../../integrations/payment
 import { dealAmounts, formatNairaMinor, isApprovedStatus, nextDueSlot, type DealAmounts } from '../deals/deal-money';
 import { DealStateService } from '../deals/deal-state.service';
 import { DealsService } from '../deals/deals.service'; // value import: injected class (Nest DI)
+import { NOTIFICATION_TYPES } from '../notifications/notifications.constants';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { InitializePaymentDto, VerifyPaymentDto } from './dto/payment.dto';
 import {
   PAYABLE_DEAL_STATUSES,
@@ -85,6 +87,7 @@ export class PaymentsService {
     // Constructed only when PAYSTACK_SECRET_KEY is set (integration module) —
     // a missing rail is an explicit 503, never a silent fallback.
     private readonly paystack: PaystackGateway | null,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ── Shared (capability-link) checkout ───────────────────────────────────────
@@ -271,14 +274,20 @@ export class PaymentsService {
     tx: PaymentTransaction,
     verified: VerifiedPayment,
   ): Promise<PaymentVerification['payment']> {
-    return this.prisma.$transaction(async (db) => {
+    // The transaction returns what the post-commit nudge needs — the money
+    // write itself stays untouched (lock-first, idempotent, atomic).
+    const landed = await this.prisma.$transaction(async (db) => {
       // Serialize against every other Deal-status/escrow writer (see doc above).
       // Parameter binding via Prisma's tagged template — no string SQL built here.
       await db.$queryRaw`SELECT "id" FROM "Deal" WHERE "id" = ${tx.dealId} FOR UPDATE`;
 
       const deal = await db.deal.findUnique({
         where: { id: tx.dealId },
-        include: { payments: { orderBy: { paidAt: 'asc' } } },
+        include: {
+          payments: { orderBy: { paidAt: 'asc' } },
+          // For the creator nudge after commit (advisory, best-effort).
+          creator: { select: { userId: true } },
+        },
       });
       if (!deal) {
         // A deal referenced by a transaction cannot vanish (dealId RESTRICTs);
@@ -325,7 +334,7 @@ export class PaymentsService {
           const existing = await db.dealPayment.findUnique({ where: { reference: tx.providerRef } });
           if (existing) {
             await this.markVerified(db, tx, existing.id, verified);
-            return this.paymentProjection(existing);
+            return { payment: existing, deal, slotLabel: attributed.label };
           }
         }
         throw error;
@@ -380,8 +389,24 @@ export class PaymentsService {
         });
       }
 
-      return this.paymentProjection(payment);
+      return { payment, deal, slotLabel: attributed.label };
     });
+
+    // AFTER commit: money is fact, the nudge is advisory — a failed
+    // notification never rolls back (or fails) a verified landing.
+    await this.notifications.notify({
+      userId: landed.deal.creator.userId,
+      type: NOTIFICATION_TYPES.PAYMENT_RECEIVED,
+      payload: {
+        dealId: landed.deal.id,
+        dealRef: landed.deal.ref,
+        label: `${formatNairaMinor(landed.payment.amountMinor)} paid — ${landed.slotLabel}`,
+        amountMinor: landed.payment.amountMinor,
+        reference: tx.providerRef,
+      },
+    });
+
+    return this.paymentProjection(landed.payment);
   }
 
   /** Conditional verify stamp — where-filtered so a racing landing wins cleanly. */
