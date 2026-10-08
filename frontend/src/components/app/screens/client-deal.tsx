@@ -93,6 +93,10 @@ export default function ClientDealScreen({ token }: { token: string }) {
 
   useEffect(() => {
     let alive = true;
+    // New token = fresh view: without this reset a previous lookup's error
+    // (or its deal data) would stay on screen while the new one loads.
+    setData(null);
+    setError(null);
     api
       .sharedDeal(token)
       .then((d) => alive && setData(d))

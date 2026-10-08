@@ -54,6 +54,10 @@ export default function PublicPageScreen({ handle }: { handle: string }) {
 
   useEffect(() => {
     let alive = true;
+    // New handle = fresh view: without this reset a previous lookup's error
+    // (or its creator data) would stay on screen while the new one loads.
+    setData(null);
+    setError(null);
     api
       .publicCreator(handle)
       .then((d) => alive && setData(d))
