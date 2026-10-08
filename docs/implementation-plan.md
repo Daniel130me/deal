@@ -114,10 +114,12 @@
 
 ## Phase 12 — Hardening + Complete E2E
 
-- [ ] Full gates: frontend lint/ts/build; backend lint/ts/unit/integration/e2e/build
-- [ ] Golden path E2E (signup→…→review) + failure matrix (§54): cross-creator access, invalid/foreign tokens, forged/duplicate webhooks, wrong amount/currency, duplicate approval, early final-file access, MIME/size limits
-- [ ] Security review: ownership, auth, refresh, R2, file gating, payment verification, webhook idempotency, rate limits, CORS, secrets, logs, transactions, indexes
-- [ ] docs/{deployment,environment,api-overview,payment-webhooks,r2-storage,testing}.md
+- [x] Full gates: frontend lint/ts/build; backend lint/ts/unit/integration/e2e/build
+- [x] Golden path E2E (signup→…→review) + failure matrix (§54): cross-creator access, invalid/foreign tokens, forged/duplicate webhooks, wrong amount/currency, duplicate approval, early final-file access, MIME/size limits
+- [x] Security review: ownership, auth, refresh, R2, file gating, payment verification, webhook idempotency, rate limits, CORS, secrets, logs, transactions, indexes
+- [x] docs/{deployment,environment,api-overview,payment-webhooks,r2-storage,testing}.md
+- Acceptance: all gates green — backend 165/165 tests across 11 suites (incl. the NEW continuous golden-path spec: signup → onboard → service → client request → deal-from-request → send → deposit checkout → ACTIVE → installments → deliver → approve with escrow released → review → notifications → audit trail, with negative gates woven in) + backend build (dist) + frontend build (standalone; dev server unaffected); §54 matrix audited — every item already covered by the phase suites (deals/files/payments/auth/creators), documented in testing.md; independent read-only security review found 0 HIGH/0 MEDIUM — 3 LOW items fixed at root (capability-token redaction in access logs with unit tests, authoritative review-status re-read inside the write transaction, FRONTEND_URL required+https in production with config tests) plus a factually-wrong entropy comment corrected and reference randomness widened 4→8 bytes; 5 INFO findings dispositioned deliberately in docs/security-review.md; ops docs written (deployment, environment, api-overview, payment-webhooks, r2-storage, testing, security-review). Test-fixture leak from an earlier force-killed suite run swept from Neon (profile-id FKs, not user ids).
+- Deviations flagged: (1) next.config keeps the scaffold's typescript.ignoreBuildErrors — TS enforcement stays in the separate tsc gate (documented in testing.md); (2) the review P2002→retry and request/booking where-filtered uniformity suggestions were deliberately NOT built (over-engineering — see security-review dispositions); (3) webhook intake remains unthrottled by documented design (signature + idempotency are the controls).
 - Commit: `test(platform): complete end-to-end hardening and verification`
 
 ---
