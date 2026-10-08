@@ -41,5 +41,15 @@ export const RATE_LIMITS = {
      * the only writable anonymous surface on a deal.
      */
     action: { default: { limit: 20, ttl: 60_000 } },
+    /**
+     * Capability-link payment initialize/verify: the only anonymous surface
+     * that can move money. Checkout retries and verify-polling after the
+     * hosted redirect are legitimate repeats, so it sits just under the
+     * action budget — a token-sweeping bot gets neither init nor verify spam.
+     * (Webhook intake is deliberately NOT throttled: deliveries are
+     * signature-verified and provider-sourced; a 429 there would only cause
+     * healthy rails to retry.)
+     */
+    payment: { default: { limit: 15, ttl: 60_000 } },
   },
 } as const;

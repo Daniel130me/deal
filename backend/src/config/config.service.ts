@@ -39,4 +39,26 @@ export class ConfigService {
       endpoint: this.values.R2_S3_ENDPOINT,
     };
   }
+
+  /** Flutterwave v3 connection values for the gateway adapter (integrations/payments). */
+  get flutterwave(): { secretKey: string; webhookSecretHash?: string } {
+    return {
+      secretKey: this.values.FLW_SECRET_KEY,
+      webhookSecretHash: this.values.FLW_WEBHOOK_SECRET_HASH,
+    };
+  }
+
+  /** Paystack stays dormant until keys are supplied — the adapter reports this. */
+  get paystack(): { secretKey: string } | null {
+    return this.values.PAYSTACK_SECRET_KEY ? { secretKey: this.values.PAYSTACK_SECRET_KEY } : null;
+  }
+
+  /**
+   * Where hosted-checkout flows redirect back to after payment. Derived from
+   * FRONTEND_URL (never client-supplied): an attacker must not choose where a
+   * paying user's browser lands. Phase 10's share page lives at /shared/:token.
+   */
+  get paymentRedirectBase(): string {
+    return this.values.FRONTEND_URL;
+  }
 }

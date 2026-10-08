@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { ConfigService } from './config/config.service';
@@ -11,7 +12,10 @@ import { ConfigService } from './config/config.service';
  * Exported so the e2e tests boot the exact same app production runs.
  */
 export async function createApp() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: true — webhook signature verification needs the EXACT bytes the
+  // provider signed (Paystack HMACs the raw body); the parsed body alone is
+  // not sufficient evidence.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   const config = app.get(ConfigService);
 
   // Rate limiting keys on the client IP. Trust exactly ONE reverse-proxy hop:

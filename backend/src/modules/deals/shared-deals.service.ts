@@ -194,6 +194,12 @@ export class SharedDealsService {
    * move; the PAYMENT_RELEASED audit event carries the released total. (New
    * payments made AFTER approval bypass escrow — enforced by Phase 8's payment
    * flow, which reads the deal status at verification time.)
+   *
+   * The released total is computed INSIDE the transaction, after the status
+   * move: Phase 8's payment landing serializes on the Deal row lock, so a
+   * deposit racing this approve is either already committed (counted in the
+   * re-read, released by the updateMany below) or lands after with the
+   * post-approval straight-to-creator rule — never stranded as HELD.
    */
   private async approveWithEscrowRelease(
     deal: DealListItem & DealWithAmounts,
@@ -206,15 +212,20 @@ export class SharedDealsService {
         tx,
       );
 
-      const released = await tx.dealPayment.updateMany({
+      // Re-read under the write: the pre-transaction snapshot may miss a
+      // payment that landed concurrently (deal-row lock ordering guarantees
+      // it is committed by now if it exists).
+      const held = await tx.dealPayment.findMany({
         where: { dealId: deal.id, escrowStatus: EscrowStatus.HELD },
-        data: { escrowStatus: EscrowStatus.RELEASED, releasedAt: new Date() },
+        select: { amountMinor: true },
       });
 
-      if (released.count > 0) {
-        const total = deal.payments
-          .filter((p) => p.escrowStatus === EscrowStatus.HELD)
-          .reduce((s, p) => s + p.amountMinor, 0);
+      if (held.length > 0) {
+        const total = held.reduce((s, p) => s + p.amountMinor, 0);
+        await tx.dealPayment.updateMany({
+          where: { dealId: deal.id, escrowStatus: EscrowStatus.HELD },
+          data: { escrowStatus: EscrowStatus.RELEASED, releasedAt: new Date() },
+        });
         await tx.deal.update({
           where: { id: deal.id },
           data: { paymentReleasedAt: new Date() },
@@ -225,7 +236,7 @@ export class SharedDealsService {
             type: DealEventType.PAYMENT_RELEASED,
             actor: ActorType.SYSTEM,
             label: `${formatNairaMinor(total)} released from escrow to the creator's payout account`,
-            metadata: { releasedCount: released.count, totalMinor: total },
+            metadata: { releasedCount: held.length, totalMinor: total },
           },
         });
       }

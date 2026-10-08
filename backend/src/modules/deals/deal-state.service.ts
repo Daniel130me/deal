@@ -16,9 +16,10 @@ export type PrismaTx = Prisma.TransactionClient;
  *   side exit from delivered/approved.
  *
  * Notes:
- * - SENT → ACTIVE is the deposit-paid move. It is legal in the table NOW, but
- *   nothing triggers it until Phase 8 wires payment verification — a state no
- *   route can reach is preferable to a fake "accept without money" action.
+ * - SENT -> ACTIVE is the deposit-paid move, triggered by Phase 8's payment
+ *   verification (PaymentsService lands the deposit through this service
+ *   inside the payment transaction). It is deliberately unreachable by any
+ *   plain route — acceptance without verified money does not exist.
  * - BALANCE_PAID is legacy (historical seed rows only); the machine never
  *   writes it and never leaves it.
  * - DISPUTED has no outgoing moves until Phase 9 implements resolution.

@@ -40,6 +40,22 @@ const EnvSchema = z.object({
   /** Optional public CDN host (pub-xxxx.r2.dev). Reserved for public assets;
    *  never used for deal files (their gating requires signed URLs). */
   R2_PUBLIC_BASE_URL: z.string().url().regex(/^https:\/\//, 'must be an https:// URL').optional(),
+
+  /** Flutterwave v3 secret key — the server-side credential (verify + initialize).
+   *  Required since Phase 8: Flutterwave is the schema's default payment rail, so
+   *  a boot without it is a boot without a working checkout — fail-fast beats a
+   *  half-configured app that 503s on the money path. The PUBLIC key is a browser
+   *  credential (Phase 10 frontend) and is deliberately not read here. */
+  FLW_SECRET_KEY: z.string().min(1),
+  /** Shared secret Flutterwave echoes in the `verif-hash` header of every webhook.
+   *  Optional UNTIL the user configures webhooks in their dashboard: when absent
+   *  the webhook endpoint refuses every delivery (503) instead of processing
+   *  unverified payloads. Set the SAME value in the FLW dashboard and here. */
+  FLW_WEBHOOK_SECRET_HASH: z.string().min(16).optional(),
+  /** Paystack secret key — the adapter is implemented (plan Phase 8) but the
+   *  rail stays dormant until keys are supplied: initializing via Paystack then
+   *  answers 503 PAYMENT_PROVIDER_UNAVAILABLE, nothing silently falls back. */
+  PAYSTACK_SECRET_KEY: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

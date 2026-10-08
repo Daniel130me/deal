@@ -8,6 +8,7 @@ const VALID_ENV = {
   R2_ACCESS_KEY_ID: 'r2-key',
   R2_SECRET_ACCESS_KEY: 'r2-secret',
   R2_S3_ENDPOINT: 'https://acc123.r2.cloudflarestorage.com',
+  FLW_SECRET_KEY: 'FLWSECK_TEST-unit',
 };
 
 describe('env config', () => {
@@ -58,6 +59,24 @@ describe('env config', () => {
     expect(
       parseEnv({ ...VALID_ENV, R2_PUBLIC_BASE_URL: 'https://pub-x.r2.dev' }).R2_PUBLIC_BASE_URL,
     ).toBe('https://pub-x.r2.dev');
+  });
+
+  it('requires the Flutterwave secret key but keeps the webhook hash optional', () => {
+    const { FLW_SECRET_KEY: _omit, ...withoutFlw } = VALID_ENV;
+    expect(() => parseEnv(withoutFlw)).toThrow(/FLW_SECRET_KEY/);
+    const parsed = parseEnv(VALID_ENV);
+    expect(parsed.FLW_WEBHOOK_SECRET_HASH).toBeUndefined();
+    // Webhook deliveries are refused while the hash is unset — the schema only
+    // demands a length once the value exists.
+    expect(() => parseEnv({ ...VALID_ENV, FLW_WEBHOOK_SECRET_HASH: 'short' })).toThrow(/FLW_WEBHOOK_SECRET_HASH/);
+    expect(
+      parseEnv({ ...VALID_ENV, FLW_WEBHOOK_SECRET_HASH: 'a-hash-of-at-least-16-chars' }).FLW_WEBHOOK_SECRET_HASH,
+    ).toBe('a-hash-of-at-least-16-chars');
+  });
+
+  it('keeps Paystack dormant unless a secret key is supplied', () => {
+    expect(parseEnv(VALID_ENV).PAYSTACK_SECRET_KEY).toBeUndefined();
+    expect(parseEnv({ ...VALID_ENV, PAYSTACK_SECRET_KEY: 'sk_test_x' }).PAYSTACK_SECRET_KEY).toBe('sk_test_x');
   });
 });
 
