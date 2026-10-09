@@ -9,21 +9,22 @@
 
 ## Phase 0 — Complete System Audit (no product changes)
 
-- [ ] Inspect: src/lib/{types,api,store,db}.ts, src/app/api/**, src/components/app/**, payment-checkout.tsx, db/{db,seed}.json, prisma/schema.prisma, UPGRADE_SPEC.md, worklog.md, package.json
-- [ ] Document current endpoints, Deal + Booking state machines, payment flow, file-delivery flow, auth weaknesses, persistence
-- [ ] Baseline: lint + TypeScript check (build skipped in sandbox — recorded as environment restriction)
-- [ ] Write docs/current-system-audit.md
-- [ ] Write docs/target-architecture.md
-- [ ] Write docs/migration-plan.md
+- [x] Inspect: src/lib/{types,api,store,db}.ts, src/app/api/**, src/components/app/**, payment-checkout.tsx, db/{db,seed}.json, prisma/schema.prisma, UPGRADE_SPEC.md, worklog.md, package.json
+- [x] Document current endpoints, Deal + Booking state machines, payment flow, file-delivery flow, auth weaknesses, persistence
+- [x] Baseline: lint + TypeScript check (build skipped in sandbox — recorded as environment restriction)
+- [x] Write docs/current-system-audit.md
+- [x] Write docs/target-architecture.md
+- [x] Write docs/migration-plan.md
+- Acceptance: audit + baseline done, all three docs written ✅ (current-system-audit.md / target-architecture.md / migration-plan.md; baseline lint clean + 0 TS errors in src/; commit 43356f7; executed under worklog Task 9 — checkboxes synced retroactively)
 - Commit: `docs(architecture): document frontend backend separation`
 
 ## Phase 1 — Repository Restructure
 
-- [ ] Move Next.js app (src/, public/, next.config.ts, tailwind, components.json, tsconfig, eslint config) → frontend/
-- [ ] Prototype db/ moves with frontend (JSON is frontend-owned until Phase 11 removal)
-- [ ] Root: workspace package.json + scripts dev:frontend / dev / lint / typecheck; each app independently runnable
-- [ ] No frontend↔backend source imports; sandbox dev flow (`bun run dev` → :3000) preserved and browser-verified
-- Acceptance: frontend boots + builds assets work, screens accessible, structure clean
+- [x] Move Next.js app (src/, public/, next.config.ts, tailwind, components.json, tsconfig, eslint config) → frontend/
+- [x] Prototype db/ moves with frontend (JSON is frontend-owned until Phase 11 removal)
+- [x] Root: workspace package.json + scripts dev:frontend / dev / lint / typecheck; each app independently runnable
+- [x] No frontend↔backend source imports; sandbox dev flow (`bun run dev` → :3000) preserved and browser-verified
+- Acceptance: frontend boots + builds assets work, screens accessible, structure clean ✅ (git mv → frontend/ with history preserved; root bun workspace + forwarding scripts; GET / 200 + APIs 200 + login/dashboard browser-verified; lint+tsc clean; commit d8582d1; executed under worklog Task 9 — checkboxes synced retroactively)
 - Commit: `refactor(repo): separate frontend and backend applications`
 
 ## Phase 2 — NestJS Backend Foundation (backend/)
