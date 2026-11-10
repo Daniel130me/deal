@@ -1,6 +1,14 @@
-# Production deployment — Render
+# Render deployment — free web services
 
-The root `render.yaml` Blueprint creates two paid Node web services in Frankfurt: `deal-web` (Next.js) and `deal-api` (NestJS). The frontend proxies `/api/v1/*` to the API over Render private networking, so browser credentials remain same-origin. Production migrations run as the API pre-deploy command. Production deployment never runs the seed.
+The root `render.yaml` Blueprint creates two free Node web services in Frankfurt: `deal-web` (Next.js) and `deal-api` (NestJS). The browser still calls same-origin `/api/v1/*`; the Next server proxies those requests to the API's public Render TLS origin because free services cannot receive private-network traffic. Production deployment never runs the seed.
+
+## Free-tier operational constraints
+
+- Render may spin each service down after 15 minutes without inbound traffic. A request that needs both services can therefore wait for the frontend and then the API to wake.
+- A workspace receives a shared monthly free-instance-hour allowance. Two continuously busy services can exhaust it before month end.
+- Free services do not support pre-deploy commands. The API start command therefore runs the idempotent `prisma migrate deploy` before starting NestJS. This is a deliberate, non-standard free-tier compromise: migrations add to cold-start time, but a failed migration prevents the API from serving against an incompatible schema.
+- Free services cannot receive private-network traffic. `DEAL_API_ORIGIN` is linked to the API's public `RENDER_EXTERNAL_URL`; browser credentials remain same-origin because the browser still talks only to `deal-web`.
+- Render does not recommend free instances for production availability. Upgrade both services and restore a separate `preDeployCommand` plus private `hostport` wiring before sustained paid traffic.
 
 ## Before the first Blueprint sync
 
@@ -25,8 +33,7 @@ The root `render.yaml` Blueprint creates two paid Node web services in Frankfurt
 ## Deployment behavior
 
 - API build: `npm ci && npm --workspace @deal/backend run build`
-- API pre-deploy: `npm --workspace @deal/backend run db:deploy`
-- API start: `npm --workspace @deal/backend run start`
+- API start: `npm --workspace @deal/backend run db:deploy && npm --workspace @deal/backend run start`
 - Web build: `npm ci && npm --workspace @deal/frontend run build`
 - Web start: `npm --workspace @deal/frontend run start`
 - Node is pinned by `.node-version` and bounded by the root package engines.

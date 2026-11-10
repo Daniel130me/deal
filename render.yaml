@@ -2,12 +2,15 @@ services:
   - type: web
     name: deal-api
     runtime: node
-    plan: 0.5c-512mb
+    plan: free
     region: frankfurt
     autoDeployTrigger: checksPass
     buildCommand: npm ci && npm --workspace @deal/backend run build
-    preDeployCommand: npm --workspace @deal/backend run db:deploy
-    startCommand: npm --workspace @deal/backend run start
+    # Render's free plan has no pre-deploy command. Prisma migrate deploy is
+    # idempotent and takes a database advisory lock, so running it before every
+    # process start is the safest free-tier substitute. A migration failure
+    # prevents the API from accepting traffic.
+    startCommand: npm --workspace @deal/backend run db:deploy && npm --workspace @deal/backend run start
     healthCheckPath: /health/ready
     maxShutdownDelaySeconds: 30
     buildFilter:
@@ -52,7 +55,7 @@ services:
   - type: web
     name: deal-web
     runtime: node
-    plan: 0.5c-512mb
+    plan: free
     region: frankfurt
     autoDeployTrigger: checksPass
     buildCommand: npm ci && npm --workspace @deal/frontend run build
@@ -68,8 +71,11 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DEAL_API_HOSTPORT
+      # Free web services cannot receive Render private-network traffic. Keep
+      # browser requests same-origin, but let the Next server proxy them to the
+      # API's public TLS origin instead.
+      - key: DEAL_API_ORIGIN
         fromService:
           type: web
           name: deal-api
-          property: hostport
+          envVarKey: RENDER_EXTERNAL_URL
