@@ -5,7 +5,9 @@ services:
     plan: free
     region: frankfurt
     autoDeployTrigger: checksPass
-    buildCommand: npm ci && npm --workspace @deal/backend run build
+    # NODE_ENV is production during Render builds. TypeScript compiler types are
+    # development dependencies, so include them explicitly for compilation.
+    buildCommand: npm ci --include=dev && npm --workspace @deal/backend run build
     # Render's free plan has no pre-deploy command. Prisma migrate deploy is
     # idempotent and takes a database advisory lock, so running it before every
     # process start is the safest free-tier substitute. A migration failure
@@ -57,7 +59,9 @@ services:
     plan: free
     region: frankfurt
     autoDeployTrigger: checksPass
-    buildCommand: npm ci && npm --workspace @deal/frontend run build
+    # Next.js requires the Tailwind/PostCSS toolchain at build time even though
+    # those packages are not runtime dependencies.
+    buildCommand: npm ci --include=dev && npm --workspace @deal/frontend run build
     startCommand: npm --workspace @deal/frontend run start
     healthCheckPath: /
     buildFilter:
