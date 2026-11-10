@@ -6,21 +6,38 @@ import { DealStatus } from '@prisma/client';
  * one-line, reviewable decision.
  */
 
-/** Key layout: creators/{creatorId}/deals/{dealId}/{previews|final}/{uuid}-{safeName} */
+/** Key layout: creators/{creatorId}/deals/{dealId}/{review-sources|final}/{uuid}-{safeName} */
 export const KEY_CREATOR_SEGMENT = 'creators';
 export const KEY_DEALS_SEGMENT = 'deals';
 /** Prisma FileRole -> key folder. FINAL is singular per the plan's key format. */
 export const ROLE_FOLDER: Record<'PREVIEW' | 'FINAL', string> = {
-  PREVIEW: 'previews',
+  PREVIEW: 'review-sources',
   FINAL: 'final',
 };
 
-/** Hard cap for one uploaded file — generous for 4K video masters, bounded for abuse. */
-export const MAX_FILE_BYTES = 200 * 1024 * 1024;
+/** Generated derivatives are isolated from creator originals by key prefix. */
+export const PROTECTED_PREVIEW_FOLDER = 'protected-previews';
+
+/**
+ * Hard cap for source/final uploads. Kept below PostgreSQL/Prisma's signed Int
+ * ceiling while allowing real video masters and archives. Review sources have
+ * the much smaller PREVIEW_MAX_INPUT_BYTES processing limit below.
+ */
+export const MAX_FILE_BYTES = 2_000_000_000;
 
 /** Presigned URL lifetimes. Uploads get longer (big files on slow links). */
 export const UPLOAD_URL_TTL_SECONDS = 600;
 export const DOWNLOAD_URL_TTL_SECONDS = 300;
+/** Client final-file capabilities are intentionally shorter than owner links. */
+export const FINAL_DOWNLOAD_URL_TTL_SECONDS = 120;
+
+/** Review-preview policy. These are security/quality controls, not UI hints. */
+export const REVIEW_PREVIEW_MIME = 'image/webp' as const;
+export const PREVIEW_MAX_DIMENSION = 1400;
+export const PREVIEW_IMAGE_QUALITY = 42;
+export const PREVIEW_MAX_INPUT_BYTES = 25 * 1024 * 1024;
+export const PREVIEW_MAX_INPUT_PIXELS = 40_000_000;
+export const REVIEW_SOURCE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'] as const;
 
 /** Longest filename we keep in a storage key (the original is stored in FileAsset.filename). */
 export const SAFE_NAME_MAX = 80;
@@ -52,9 +69,9 @@ export const ALLOWED_MIME_TYPES = [
 export const KEY_NAME_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[A-Za-z0-9._-]+$/;
 
 /**
- * When the client may see/download PREVIEW files through the capability link:
- * from the first delivery onward. DISPUTED is included on purpose — a client
- * disputing a delivery must keep access to the work they are disputing.
+ * When the client may see a generated PREVIEW derivative through the
+ * capability link: from the first delivery onward. DISPUTED is included on
+ * purpose — a client disputing a delivery must keep access to the review copy.
  */
 export const PREVIEW_VISIBLE_STATUSES: readonly DealStatus[] = [
   DealStatus.DELIVERED,

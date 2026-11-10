@@ -1,8 +1,9 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { ActorType, DealEventType, DealStatus, FileRole, Prisma, type Deal, type DealPayment } from '@prisma/client';
+import { ActorType, DealEventType, DealStatus, FileRole, Prisma, type DealPayment } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
-import { nextSequentialRef, retryOnUniqueViolation } from '../../common/ids/ref.util';
+import { formatRef, retryOnUniqueViolation } from '../../common/ids/ref.util';
 import { PrismaService } from '../../database/prisma.service';
+import { calendarDateToUtc } from '../../common/validation/calendar-date.validator';
 import { RequestsService } from '../requests/requests.service';
 import { dealAmounts, formatNairaMinor, isFullyPaid, type DealAmounts } from './deal-money';
 import { DealStateService } from './deal-state.service';
@@ -175,7 +176,13 @@ export class DealsService {
 
     const { deliverables, ...fields } = dto;
     const dateField = (value: string | null | undefined): Date | null | undefined =>
-      value === undefined ? undefined : value === null ? null : new Date(`${value}T00:00:00Z`);
+      value === undefined ? undefined : value === null ? null : calendarDateToUtc(value);
+
+    const proposedStart = fields.startDate === undefined ? deal.startDate : dateField(fields.startDate);
+    const proposedDue = fields.dueDate === undefined ? deal.dueDate : dateField(fields.dueDate);
+    if (proposedStart && proposedDue && proposedDue < proposedStart) {
+      throw this.fail('INVALID_DEAL_DATES', 'Due date cannot be before the start date', HttpStatus.BAD_REQUEST);
+    }
 
     const updated = await this.prisma.$transaction(async (tx) => {
       await tx.deal.update({
@@ -335,15 +342,46 @@ export class DealsService {
   }
 
   /**
+   * Narrow capability lookup for file gates. Preview/list/download endpoints
+   * need only identity and lifecycle status; loading payments, events and
+   * deliveries here would multiply database work for every binary request.
+   */
+  async findSharedFileContext(token: string): Promise<{ id: string; status: DealStatus } | null> {
+    return this.prisma.deal.findUnique({
+      where: { shareToken: token },
+      select: { id: true, status: true },
+    });
+  }
+
+  /**
    * Minimal ownership proof for sibling modules (files): the deal exists AND
    * belongs to this creator, or it is the same 404 as every other owner path.
    * Deliberately a single indexed query with a narrow select — file routes
    * must not pay for the full detail projection they never read.
    */
-  async getOwnedDealContext(creatorId: string, dealId: string): Promise<Pick<Deal, 'id' | 'status' | 'creatorId'>> {
+  async getOwnedDealContext(
+    creatorId: string,
+    dealId: string,
+  ): Promise<{
+    id: string;
+    status: DealStatus;
+    creatorId: string;
+    ref: string;
+    title: string;
+    creator: { name: string; handle: string };
+  }> {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, creatorId },
-      select: { id: true, status: true, creatorId: true },
+      // File preview generation needs these watermark fields. Keeping them in
+      // this existing ownership query avoids an additional round trip.
+      select: {
+        id: true,
+        status: true,
+        creatorId: true,
+        ref: true,
+        title: true,
+        creator: { select: { name: true, handle: true } },
+      },
     });
     if (!deal) {
       throw this.fail('DEAL_NOT_FOUND', 'Deal not found', HttpStatus.NOT_FOUND);
@@ -352,11 +390,10 @@ export class DealsService {
   }
 
   private async nextDealRef(): Promise<string> {
-    const rows = await this.prisma.deal.findMany({
-      where: { ref: { startsWith: `${DEAL_REF_PREFIX}-` } },
-      select: { ref: true },
-    });
-    return nextSequentialRef(DEAL_REF_PREFIX, rows.map((row) => row.ref));
+    const [row] = await this.prisma.$queryRaw<{ value: bigint }[]>`
+      SELECT nextval('deal_ref_seq') AS value
+    `;
+    return formatRef(DEAL_REF_PREFIX, row!.value);
   }
 
   private fail(code: string, message: string, status: HttpStatus): never {

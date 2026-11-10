@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Loader2,
   MapPin,
-  MessageCircle,
   MoreHorizontal,
   Phone,
   Mail,
@@ -320,18 +319,7 @@ function RequestDetail({ id }: { id: string }) {
         </SectionCard>
 
         {/* actions */}
-        <div className="grid grid-cols-[1fr_1fr_1.3fr] gap-2.5 pt-1">
-          <Button
-            variant="outline"
-            className="h-12 rounded-xl text-[13px] font-bold"
-            onClick={() =>
-              toast.info("Messaging is coming soon", {
-                description: "For now, send a proposal to start the conversation.",
-              })
-            }
-          >
-            <MessageCircle className="mr-1 h-4 w-4" /> Reply
-          </Button>
+        <div className="grid grid-cols-[1fr_1.3fr] gap-2.5 pt-1">
           <Button
             variant="outline"
             className="h-12 rounded-xl text-[13px] font-bold text-red-600 hover:bg-red-50"

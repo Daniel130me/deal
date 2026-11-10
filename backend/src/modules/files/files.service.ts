@@ -1,22 +1,27 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { DealStatus, FileRole, type FileAsset } from '@prisma/client';
+import { DealStatus, FileRole, type FileAsset, type Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { STORAGE_PROVIDER, type StorageProvider } from '../../integrations/storage/storage-provider';
 import { PrismaService } from '../../database/prisma.service';
 import { DealsService } from '../deals/deals.service';
 import {
   DOWNLOAD_URL_TTL_SECONDS,
+  FINAL_DOWNLOAD_URL_TTL_SECONDS,
   FINAL_RELEASED_STATUSES,
   KEY_DEALS_SEGMENT,
   KEY_CREATOR_SEGMENT,
   KEY_NAME_PATTERN,
   MAX_FILE_BYTES,
+  PREVIEW_MAX_INPUT_BYTES,
   PREVIEW_VISIBLE_STATUSES,
+  PROTECTED_PREVIEW_FOLDER,
+  REVIEW_SOURCE_MIME_TYPES,
   ROLE_FOLDER,
   SAFE_NAME_MAX,
   UPLOAD_URL_TTL_SECONDS,
 } from './files.constants';
 import type { CreateUploadUrlDto, FinalizeUploadDto } from './dto/file.dto';
+import { PreviewGenerator } from './preview-generator';
 
 /** What the API returns for a file. The whitelist projection carries no
  * storageKey/uploadedBy: those stay internal. (A presigned URL necessarily
@@ -40,6 +45,12 @@ export interface PresignedDownload {
   file: SafeFile;
 }
 
+export interface SharedPreview {
+  bytes: Uint8Array;
+  mime: string;
+  filename: string;
+}
+
 /**
  * Files domain boundary — owning phase: 7.
  *
@@ -54,9 +65,9 @@ export interface PresignedDownload {
  *   it, and verifies the stored object (exists, size cap, content type)
  *   before a FileAsset row exists. Nothing is trusted from the client except
  *   the display filename.
- * - Downloads are signed-URL-only, for the owner (their own files, any role)
- *   or the capability-link client (previews once review starts, finals only
- *   after release — see files.constants.ts for the status sets).
+ * - Owners receive short-lived signed URLs for their own source files.
+ *   Capability-link clients receive only server-generated preview bytes once
+ *   review starts; signed final-file URLs exist only after release.
  * - releasedAt is stamped on a final the first time it reaches the client
  *   through the share link. It records delivery-to-client, complementing
  *   Deal.filesReleasedAt (the release decision). Kept inside this service so
@@ -69,6 +80,7 @@ export class FilesService {
     private readonly prisma: PrismaService,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
     private readonly deals: DealsService,
+    private readonly previewGenerator: PreviewGenerator,
   ) {}
 
   // ── Owner (authenticated creator) use cases ─────────────────────────────────
@@ -78,6 +90,21 @@ export class FilesService {
     // 404 for a missing or foreign deal — the only authorization upload needs;
     // gating happens at download time, not at upload time.
     await this.deals.getOwnedDealContext(creatorId, dto.dealId);
+
+    if (dto.role === FileRole.PREVIEW && !(REVIEW_SOURCE_MIME_TYPES as readonly string[]).includes(dto.mime)) {
+      throw this.fail(
+        'PREVIEW_FORMAT_UNSUPPORTED',
+        'Protected review previews currently support JPEG, PNG, WebP and AVIF images. Upload other formats as final files; originals are never exposed as a fallback.',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+    if (dto.role === FileRole.PREVIEW && dto.sizeBytes && dto.sizeBytes > PREVIEW_MAX_INPUT_BYTES) {
+      throw this.fail(
+        'PREVIEW_SOURCE_TOO_LARGE',
+        'Review source is too large to process safely. Export a smaller review source and try again.',
+        HttpStatus.PAYLOAD_TOO_LARGE,
+      );
+    }
 
     const storageKey = this.buildKey(creatorId, dto.dealId, dto.role, dto.filename);
     const uploadUrl = await this.storage.createUploadUrl(storageKey, dto.mime, UPLOAD_URL_TTL_SECONDS);
@@ -122,6 +149,45 @@ export class FilesService {
       throw this.fail('FILE_MIME_MISMATCH', 'Uploaded file type does not match the requested type', HttpStatus.BAD_REQUEST);
     }
 
+    if (dto.role === FileRole.PREVIEW && sizeBytes > PREVIEW_MAX_INPUT_BYTES) {
+      throw this.fail(
+        'PREVIEW_SOURCE_TOO_LARGE',
+        'Review source is too large to process safely. Export a smaller review source and try again.',
+        HttpStatus.PAYLOAD_TOO_LARGE,
+      );
+    }
+
+    let generatedPreview:
+      | { storageKey: string; sizeBytes: number; mime: string; watermark: string; generatedAt: Date }
+      | undefined;
+
+    if (dto.role === FileRole.PREVIEW) {
+      try {
+        const source = await this.storage.getObjectBytes(dto.storageKey);
+        const generated = await this.previewGenerator.generate(source, {
+          creatorName: deal.creator.name,
+          creatorHandle: deal.creator.handle,
+          dealRef: deal.ref,
+          projectTitle: deal.title,
+        });
+        const previewStorageKey = this.buildPreviewKey(creatorId, deal.id);
+        await this.storage.putObject(previewStorageKey, generated.bytes, generated.mime);
+        generatedPreview = {
+          storageKey: previewStorageKey,
+          sizeBytes: generated.bytes.byteLength,
+          mime: generated.mime,
+          watermark: generated.watermark,
+          generatedAt: new Date(),
+        };
+      } catch {
+        throw this.fail(
+          'PREVIEW_GENERATION_FAILED',
+          'The server could not create a protected preview from this file. Check that the image is valid and try again.',
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+    }
+
     const file = await this.prisma.fileAsset
       .create({
         data: {
@@ -132,9 +198,23 @@ export class FilesService {
           sizeBytes,
           mime: dto.mime,
           uploadedBy: creatorId,
+          ...(generatedPreview
+            ? {
+                previewStorageKey: generatedPreview.storageKey,
+                previewSizeBytes: generatedPreview.sizeBytes,
+                previewMime: generatedPreview.mime,
+                previewGeneratedAt: generatedPreview.generatedAt,
+                previewWatermark: generatedPreview.watermark,
+              }
+            : {}),
         },
       })
-      .catch((error: { code?: string }) => {
+      .catch(async (error: { code?: string }) => {
+        if (generatedPreview) {
+          // The object write and database are different systems. Compensating
+          // cleanup prevents an unreferenced derivative when registration fails.
+          await this.storage.deleteObject(generatedPreview.storageKey).catch(() => undefined);
+        }
         if (error.code === 'P2002') {
           // Unique(storageKey): the same object registered twice (double-click
           // on finalize). 409, not 500 — the client already holds the asset.
@@ -148,21 +228,13 @@ export class FilesService {
 
   /** Owner download: any role, always allowed — it is the creator's own work. */
   async getOwnerDownloadUrl(creatorId: string, fileId: string): Promise<PresignedDownload> {
-    const file = await this.prisma.fileAsset.findUnique({ where: { id: fileId } });
+    // Ownership is part of the lookup so missing and foreign IDs take one
+    // query and remain indistinguishable. This avoids a second deal lookup.
+    const file = await this.prisma.fileAsset.findFirst({
+      where: { id: fileId, deal: { creatorId } },
+    });
     if (!file) {
       throw this.fail('FILE_NOT_FOUND', 'File not found', HttpStatus.NOT_FOUND);
-    }
-    // A missing and a foreign file must be indistinguishable. The deal context
-    // check answers "does this deal belong to the caller?" — its 404 is
-    // therefore translated to a file 404 so the error CODE cannot leak the
-    // difference (statuses alone are compared by callers, codes are printed).
-    try {
-      await this.deals.getOwnedDealContext(creatorId, file.dealId);
-    } catch (error) {
-      if (error instanceof HttpException && error.getStatus() === HttpStatus.NOT_FOUND) {
-        throw this.fail('FILE_NOT_FOUND', 'File not found', HttpStatus.NOT_FOUND);
-      }
-      throw error;
     }
 
     const downloadUrl = await this.storage.createDownloadUrl(
@@ -181,21 +253,61 @@ export class FilesService {
     return this.listSharedFiles(deal.id, deal.status);
   }
 
-  /** Token-resolving wrapper: share token -> deal -> gated presigned download. */
+  /** Token-resolving wrapper: share token -> deal -> gated final-file URL. */
   async getSharedDownloadUrlByToken(token: string, fileId: string): Promise<PresignedDownload> {
     const deal = await this.findDealByToken(token);
     return this.getSharedDownloadUrl(deal, fileId);
   }
 
+  /** Stream-only review derivative. The creator's source key is never used. */
+  async getSharedPreviewByToken(token: string, fileId: string): Promise<SharedPreview> {
+    const deal = await this.findDealByToken(token);
+    const file = await this.prisma.fileAsset.findFirst({
+      where: { id: fileId, dealId: deal.id },
+      select: { role: true, previewStorageKey: true, previewMime: true, filename: true },
+    });
+    if (
+      !file ||
+      file.role !== FileRole.PREVIEW ||
+      !this.visibleToClient(file, deal.status) ||
+      !file.previewStorageKey ||
+      !file.previewMime
+    ) {
+      throw this.fail(
+        'FILE_NOT_FOUND',
+        'File not found — it may not be available at this stage of the deal',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return {
+      bytes: await this.storage.getObjectBytes(file.previewStorageKey),
+      mime: file.previewMime,
+      filename: reviewFilename(file.filename),
+    };
+  }
+
   /** Whitelisted listing for the share page, filtered by the deal's status gates. */
   async listSharedFiles(dealId: string, status: DealStatus): Promise<SafeFile[]> {
+    const previewsVisible = PREVIEW_VISIBLE_STATUSES.includes(status);
+    const finalsVisible = FINAL_RELEASED_STATUSES.includes(status);
+    if (!previewsVisible && !finalsVisible) return [];
+
+    let visibility: Prisma.FileAssetWhereInput;
+    if (previewsVisible && finalsVisible) {
+      visibility = {
+        OR: [{ role: FileRole.PREVIEW, previewStorageKey: { not: null } }, { role: FileRole.FINAL }],
+      };
+    } else if (previewsVisible) {
+      visibility = { role: FileRole.PREVIEW, previewStorageKey: { not: null } };
+    } else {
+      visibility = { role: FileRole.FINAL };
+    }
+
     const files = await this.prisma.fileAsset.findMany({
-      where: { dealId },
+      where: { dealId, ...visibility },
       orderBy: { createdAt: 'asc' },
     });
-    return files
-      .filter((file) => this.visibleToClient(file, status))
-      .map((file) => this.toSafeFile(file));
+    return files.map((file) => this.toSharedSafeFile(file));
   }
 
   /**
@@ -206,7 +318,7 @@ export class FilesService {
    */
   async getSharedDownloadUrl(deal: { id: string; status: DealStatus }, fileId: string): Promise<PresignedDownload> {
     const file = await this.prisma.fileAsset.findFirst({ where: { id: fileId, dealId: deal.id } });
-    if (!file || !this.visibleToClient(file, deal.status)) {
+    if (!file || file.role !== FileRole.FINAL || !this.visibleToClient(file, deal.status)) {
       throw this.fail(
         'FILE_NOT_FOUND',
         'File not found — it may not be available at this stage of the deal',
@@ -214,31 +326,29 @@ export class FilesService {
       );
     }
 
-    if (file.role === FileRole.FINAL) {
-      // Stamp delivery-to-client once. Its own single-row update — no
-      // cross-module transaction needed (see class doc for the dependency
-      // direction rationale).
-      await this.prisma.fileAsset.updateMany({
-        where: { id: file.id, releasedAt: null },
-        data: { releasedAt: new Date() },
-      });
-      file.releasedAt = file.releasedAt ?? new Date();
-    }
+    // Stamp delivery-to-client once. Its own single-row update — no
+    // cross-module transaction needed (see class doc for the dependency
+    // direction rationale).
+    const releasedAt = new Date();
+    await this.prisma.fileAsset.updateMany({
+      where: { id: file.id, releasedAt: null },
+      data: { releasedAt },
+    });
+    file.releasedAt = file.releasedAt ?? releasedAt;
 
     const downloadUrl = await this.storage.createDownloadUrl(
       file.storageKey,
-      DOWNLOAD_URL_TTL_SECONDS,
-      // Previews render on the share page; finals are downloads.
-      contentDisposition(file.role === FileRole.PREVIEW ? 'inline' : 'attachment', file.filename),
+      FINAL_DOWNLOAD_URL_TTL_SECONDS,
+      contentDisposition('attachment', file.filename),
     );
-    return { downloadUrl, expiresIn: DOWNLOAD_URL_TTL_SECONDS, file: this.toSafeFile(file) };
+    return { downloadUrl, expiresIn: FINAL_DOWNLOAD_URL_TTL_SECONDS, file: this.toSafeFile(file) };
   }
 
   // ── Internals ───────────────────────────────────────────────────────────────
 
   /** Resolve a share token through the deals domain; unknown token = unknown deal. */
   private async findDealByToken(token: string): Promise<{ id: string; status: DealStatus }> {
-    const deal = await this.deals.findByShareToken(token);
+    const deal = await this.deals.findSharedFileContext(token);
     if (!deal) {
       throw this.fail('DEAL_NOT_FOUND', 'Deal not found. Check your link.', HttpStatus.NOT_FOUND);
     }
@@ -246,9 +356,12 @@ export class FilesService {
   }
 
   /** The role gate for the capability surface (see constants for the policy). */
-  private visibleToClient(file: Pick<FileAsset, 'role' | 'releasedAt'>, status: DealStatus): boolean {
+  private visibleToClient(
+    file: Pick<FileAsset, 'role' | 'previewStorageKey'>,
+    status: DealStatus,
+  ): boolean {
     return file.role === FileRole.PREVIEW
-      ? PREVIEW_VISIBLE_STATUSES.includes(status)
+      ? file.previewStorageKey !== null && PREVIEW_VISIBLE_STATUSES.includes(status)
       : FINAL_RELEASED_STATUSES.includes(status);
   }
 
@@ -265,6 +378,10 @@ export class FilesService {
     return `${this.keyPrefix(creatorId, dealId, role)}${randomUUID()}-${sanitizeName(filename)}`;
   }
 
+  private buildPreviewKey(creatorId: string, dealId: string): string {
+    return `${KEY_CREATOR_SEGMENT}/${creatorId}/${KEY_DEALS_SEGMENT}/${dealId}/${PROTECTED_PREVIEW_FOLDER}/${randomUUID()}.webp`;
+  }
+
   /** Whitelist projection — storageKey and uploadedBy stay internal. */
   private toSafeFile(file: FileAsset): SafeFile {
     return {
@@ -279,9 +396,25 @@ export class FilesService {
     };
   }
 
+  /** Shared metadata describes the derivative actually sent to the client. */
+  private toSharedSafeFile(file: FileAsset): SafeFile {
+    const safe = this.toSafeFile(file);
+    if (file.role !== FileRole.PREVIEW) return safe;
+    return {
+      ...safe,
+      sizeBytes: file.previewSizeBytes ?? safe.sizeBytes,
+      mime: file.previewMime ?? safe.mime,
+    };
+  }
+
   private fail(code: string, message: string, status: HttpStatus): never {
     throw new HttpException({ code, message }, status);
   }
+}
+
+function reviewFilename(filename: string): string {
+  const base = filename.replace(/\.[^.]+$/, '').trim() || 'review';
+  return `${sanitizeName(base)}-review.webp`;
 }
 
 /**

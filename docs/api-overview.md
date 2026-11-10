@@ -12,7 +12,7 @@ One NestJS service, global prefix `/api/v1`, JSON envelope on every response:
 ## Identity model
 
 - **Bearer access token** (JWT HS256, 15 min, iss/aud pinned) on every protected call: `Authorization: Bearer <token>`.
-- **Refresh token**: opaque 256-bit CSPRNG value, SHA-256-hashed at rest, rotated on every use (single-use; presenting a rotated/revoked token revokes the whole token family — strict reuse detection for an escrow-money platform).
+- **Refresh token**: opaque 256-bit CSPRNG value, SHA-256-hashed at rest, rotated on every use (single-use; presenting a rotated/revoked token revokes the whole token family — strict reuse detection for an escrow-money platform). Browsers receive it only in an `HttpOnly`, `SameSite=Strict` cookie scoped to `/api/v1/auth`; it is not returned in the JSON session payload. Refresh/logout still accept the legacy body field temporarily so existing sessions can migrate safely.
 - **Capability token** (share link): 256-bit token in the URL path, the *client party's* credential. Scope: the whitelisted deal projection + the legal lifecycle moves + gated files + checkout/review. Rate-limited per IP.
 - Deny-by-default: global `JwtAuthGuard` + `RolesGuard`; `@Public()` exists only on health, auth, the public marketing surface, the shared capability surface, and webhook intake.
 

@@ -48,41 +48,10 @@ const signupSchema = z.object({
 
 type SignupValues = z.infer<typeof signupSchema>;
 
-function GoogleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" aria-hidden="true">
-      <path
-        fill="#4285F4"
-        d="M23.5 12.27c0-.85-.08-1.66-.22-2.45H12v4.64h6.45a5.52 5.52 0 0 1-2.4 3.62v3h3.87c2.27-2.09 3.58-5.17 3.58-8.81z"
-      />
-      <path
-        fill="#34A853"
-        d="M12 24c3.24 0 5.96-1.07 7.94-2.91l-3.87-3c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.96H1.29v3.1A12 12 0 0 0 12 24z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M5.27 14.28a7.2 7.2 0 0 1 0-4.56v-3.1H1.29a12 12 0 0 0 0 10.76l3.98-3.1z"
-      />
-      <path
-        fill="#EA4335"
-        d="M12 4.76c1.76 0 3.34.6 4.59 1.8l3.44-3.44A11.98 11.98 0 0 0 12 0 12 12 0 0 0 1.29 6.62l3.98 3.1C6.22 6.87 8.87 4.76 12 4.76z"
-      />
-    </svg>
-  );
-}
-
-function AppleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-foreground" aria-hidden="true">
-      <path d="M17.05 12.54c-.03-2.89 2.36-4.27 2.47-4.34-1.35-1.97-3.44-2.24-4.18-2.27-1.78-.18-3.47 1.05-4.37 1.05-.9 0-2.29-1.02-3.77-1-1.94.03-3.72 1.13-4.72 2.86-2.01 3.49-.51 8.66 1.45 11.49.96 1.39 2.1 2.94 3.6 2.88 1.45-.06 1.99-.93 3.74-.93s2.24.93 3.77.9c1.56-.03 2.54-1.41 3.49-2.8 1.1-1.61 1.56-3.17 1.58-3.25-.03-.02-3.03-1.16-3.06-4.59zM14.17 4.06c.8-.97 1.34-2.32 1.19-3.66-1.15.05-2.55.77-3.38 1.73-.74.86-1.39 2.23-1.22 3.55 1.29.1 2.6-.65 3.41-1.62z" />
-    </svg>
-  );
-}
-
 const SIGNUP_PERKS = [
-  "Protected payments — every naira held in DEAL escrow until approval",
+  "Verified payments — every successful charge is recorded against the agreement",
   "Clear agreements — scope, deliverables and timelines",
-  "Installment-friendly — deposits, installments and balances, all collected for you",
+  "Installment-friendly — collect deposits, installments and balances",
 ];
 
 export function Signup() {
@@ -142,7 +111,7 @@ export function Signup() {
             align="left"
             eyebrow="Get started"
             title="Create your free DEAL account"
-            subtitle="No monthly fees. Pay only when you get paid. Set up your first deal in minutes and stop chasing payments for good."
+            subtitle="No monthly subscription. Set up your first agreement and keep scope, payment records and delivery in one place."
           />
 
           <motion.ul
@@ -164,33 +133,6 @@ export function Signup() {
             ))}
           </motion.ul>
 
-          <motion.blockquote
-            initial={{ opacity: 0, y: 18 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-60px" }}
-            transition={{ duration: 0.5, delay: 0.18, ease: "easeOut" }}
-            className="mt-8 rounded-2xl border border-border bg-card p-5 shadow-sm"
-          >
-            <p className="text-[15px] font-semibold leading-relaxed text-foreground">
-              “My client paid the deposit the same day I sent the deal. No more
-              ‘I'll pay you later’ — everything is agreed before I lift a
-              finger.”
-            </p>
-            <footer className="mt-3 flex items-center gap-3">
-              <span
-                aria-hidden="true"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-extrabold text-primary"
-              >
-                T
-              </span>
-              <div className="text-sm">
-                <p className="font-extrabold text-foreground">Tola A.</p>
-                <p className="text-muted-foreground">
-                  Photographer · Lagos, Nigeria
-                </p>
-              </div>
-            </footer>
-          </motion.blockquote>
         </div>
 
         {/* Form card */}
@@ -302,52 +244,15 @@ export function Signup() {
               )}
             </Button>
 
-            <div className="flex items-center gap-3 pt-1">
-              <span className="h-px flex-1 bg-border" />
-              <span className="text-[13px] font-semibold text-muted-foreground">
-                or continue with
-              </span>
-              <span className="h-px flex-1 bg-border" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  toast.info("Google sign-in is coming soon", {
-                    description: "Use your email or phone for now.",
-                  })
-                }
-                className="h-12 rounded-xl border-input bg-white font-bold text-foreground hover:bg-muted"
-              >
-                <GoogleIcon />
-                Google
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  toast.info("Apple sign-in is coming soon", {
-                    description: "Use your email or phone for now.",
-                  })
-                }
-                className="h-12 rounded-xl border-input bg-white font-bold text-foreground hover:bg-muted"
-              >
-                <AppleIcon />
-                Apple
-              </Button>
-            </div>
-
             <p className="flex items-start justify-center gap-1.5 pt-1 text-center text-[13px] leading-relaxed text-muted-foreground">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <span>
                 By creating an account, you agree to DEAL's{" "}
-                <a href="#" className="font-bold text-primary hover:underline">
+                <a href="#/terms" className="font-bold text-primary hover:underline">
                   Terms of Service
                 </a>{" "}
                 and{" "}
-                <a href="#" className="font-bold text-primary hover:underline">
+                <a href="#/privacy" className="font-bold text-primary hover:underline">
                   Privacy Policy
                 </a>
                 .

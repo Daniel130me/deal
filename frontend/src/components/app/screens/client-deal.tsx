@@ -28,10 +28,11 @@ import {
 import {
   AgreementSummary,
   ChannelButtons,
-  EscrowBanner,
+  VerifiedPaymentBanner,
   FileRow,
   GatewayMarks,
   PaymentSummary,
+  ProtectedPreviewDialog,
   RecordTimeline,
   SectionCard,
   Stepper,
@@ -65,20 +66,25 @@ function pendingPaymentKey(token: string) {
 
 export default function ClientDealScreen({ token }: { token: string }) {
   const { user } = useApp();
-  const [data, setData] = useState<SharedData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{
+    token: string;
+    data: SharedData | null;
+    error: string | null;
+  }>({ token: "", data: null, error: null });
+  // A result belongs only to the capability token that requested it. This
+  // prevents stale data/errors without a synchronous reset effect.
+  const data = result.token === token ? result.data : null;
+  const error = result.token === token ? result.error : null;
   const [busy, setBusy] = useState(false);
   const [payCtx, setPayCtx] = useState<PayContext | null>(null);
   const [changesOpen, setChangesOpen] = useState(false);
   const [changesNote, setChangesNote] = useState("");
   const [approveOpen, setApproveOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<DealFile | null>(null);
   const [rating, setRating] = useState(5);
 
-  /**
-   * Open a deal file through a signed, time-limited URL — previews render
-   * inline in a new tab; released finals download as attachments (R2 serves
-   * the disposition the backend picks per role).
-   */
+  /** Released finals use short-lived attachment URLs; previews use the
+   * separate server-generated derivative dialog below. */
   async function openFile(file: DealFile) {
     try {
       const url = await api.sharedFileDownloadUrl(token, file.id);
@@ -89,25 +95,35 @@ export default function ClientDealScreen({ token }: { token: string }) {
     }
   }
 
-  const openPreview = openFile;
+  function openPreview(file: DealFile) {
+    setPreviewFile(file);
+  }
 
   useEffect(() => {
     let alive = true;
-    // New token = fresh view: without this reset a previous lookup's error
-    // (or its deal data) would stay on screen while the new one loads.
-    setData(null);
-    setError(null);
     api
       .sharedDeal(token)
-      .then((d) => alive && setData(d))
-      .catch((err) => alive && setError(err instanceof Error ? err.message : "Deal not found."));
+      .then((loaded) => alive && setResult({ token, data: loaded, error: null }))
+      .catch(
+        (err) =>
+          alive &&
+          setResult({
+            token,
+            data: null,
+            error: err instanceof Error ? err.message : "Deal not found.",
+          })
+      );
     return () => {
       alive = false;
     };
   }, [token]);
 
   function applyDeal(updated: Deal) {
-    setData((prev) => (prev ? { ...prev, deal: updated } : prev));
+    setResult((prev) =>
+      prev.token === token && prev.data
+        ? { ...prev, data: { ...prev.data, deal: updated } }
+        : prev
+    );
   }
 
   /** Performs a shared action; returns the updated deal or null (toast on failure). */
@@ -176,7 +192,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
         if (!alive) return;
         const fresh = await api.sharedDeal(token);
         if (!alive) return;
-        setData(fresh);
+        setResult({ token, data: fresh, error: null });
         if (result.status === "successful") toast.success("Payment confirmed — thank you!");
         else if (result.status === "pending") toast.info("Payment is still processing — check back shortly.");
         else toast.error("The payment didn't go through — no money was taken.");
@@ -340,9 +356,8 @@ export default function ClientDealScreen({ token }: { token: string }) {
             </div>
           </div>
           <p className="mt-3 rounded-xl bg-secondary p-3 text-xs font-medium leading-relaxed text-muted-foreground">
-            Every payment sits in <span className="font-bold text-foreground">DEAL escrow</span> —{" "}
-            {creator.name} only gets paid when you approve the completed work. You pay through
-            Flutterwave or Paystack — your choice at checkout.
+            Every verified payment is recorded against this agreement. You complete checkout
+            through Flutterwave or Paystack — your choice at checkout.
           </p>
         </SectionCard>
 
@@ -351,12 +366,12 @@ export default function ClientDealScreen({ token }: { token: string }) {
             {[
               [
                 "Accept & pay the deposit",
-                `Your ${formatNaira(deposit)} deposit is held safely in DEAL escrow — not sent to ${firstName} yet.`,
+                `Complete the ${formatNaira(deposit)} deposit on the selected provider's secure checkout.`,
               ],
               [`${firstName} gets to work`, "Track progress right here until the work is delivered."],
               [
-                "Approve to release payment",
-                `Only when you approve the completed work does ${firstName} receive the money.`,
+                "Approve the completed work",
+                "Your approval is recorded and unlocks the agreed final-file workflow.",
               ],
             ].map(([title, desc], i) => (
               <li key={title} className="flex gap-3">
@@ -397,7 +412,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
   if (deal.status === "active") {
     body = (
       <>
-        {held > 0 ? <EscrowBanner amount={held} paidOn={deal.depositPaidAt} /> : null}
+        {held > 0 ? <VerifiedPaymentBanner amount={held} paidOn={deal.depositPaidAt} /> : null}
 
         <SectionCard title="Deal progress">
           <Stepper
@@ -422,7 +437,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
 
         <PaymentSummary deal={deal} schedule={schedule} remaining={due} />
         <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[11px] font-bold text-muted-foreground">
-          <GatewayMarks /> Charges processed by your chosen rail — escrow by DEAL
+          <GatewayMarks /> Charges processed by your chosen rail and verified by DEAL
         </p>
 
         <SectionCard title="Payments on this deal">
@@ -453,7 +468,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
                 </Button>
               ) : null}
               <p className="text-center text-[12px] font-medium leading-relaxed text-muted-foreground">
-                You can pay in parts — every part sits in DEAL escrow until you approve the work.
+                You can pay in parts — every verified charge is recorded against this agreement.
               </p>
             </div>
           )}
@@ -479,7 +494,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
             Your review unlocks {formatNaira(held)}
           </h2>
           <p className="mx-auto mt-1 max-w-sm text-[13px] font-medium text-violet-700">
-            {firstName} has submitted the delivery. Approving releases the money from escrow — request
+            {firstName} has submitted the delivery. Approving records the ledger release — request
             changes if something&rsquo;s off. Submitted {formatDate(deal.deliveredAt)}.
           </p>
         </div>
@@ -504,7 +519,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
           </div>
           <p className="mt-3 flex items-start gap-2 rounded-xl bg-muted/60 p-3 text-[11px] font-medium leading-relaxed text-muted-foreground">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-            Previews are protected — full-quality downloads unlock after you approve and the deal is
+            Review copies are protected — full-quality downloads unlock after you approve and the deal is
             fully paid.
           </p>
         </SectionCard>
@@ -516,7 +531,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
             </span>
             <p className="mt-3 text-[15px] font-extrabold text-foreground">Approve delivery</p>
             <p className="mt-1 flex-1 text-[13px] font-medium leading-relaxed text-muted-foreground">
-              Approving releases {formatNaira(held)} from escrow to {creator.name} and confirms the work
+              Approving releases {formatNaira(held)} in the DEAL ledger and confirms the work
               is complete.
             </p>
             <Button
@@ -533,8 +548,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
             </span>
             <p className="mt-3 text-[15px] font-extrabold text-foreground">Request changes</p>
             <p className="mt-1 flex-1 text-[13px] font-medium leading-relaxed text-amber-700">
-              Tell {firstName} what to adjust — the money stays in escrow and they&rsquo;ll send an
-              updated delivery.
+              Tell {firstName} what to adjust and they&rsquo;ll send an updated delivery.
             </p>
             <Button
               variant="outline"
@@ -568,7 +582,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
     const lastChange = [...deal.events].reverse().find((e) => e.type === "changes_requested");
     body = (
       <>
-        {held > 0 ? <EscrowBanner amount={held} /> : null}
+        {held > 0 ? <VerifiedPaymentBanner amount={held} /> : null}
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
           <p className="text-[15px] font-extrabold text-amber-800">Changes requested</p>
           <p className="mt-1 text-[13px] font-medium leading-relaxed text-amber-700">
@@ -594,7 +608,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
             </div>
             <p className="mt-3 flex items-start gap-2 rounded-xl bg-muted/60 p-3 text-[11px] font-medium leading-relaxed text-muted-foreground">
               <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-              Previews are protected — full-quality downloads unlock after you approve and the deal is
+              Review copies are protected — full-quality downloads unlock after you approve and the deal is
               fully paid.
             </p>
           </SectionCard>
@@ -612,10 +626,10 @@ export default function ClientDealScreen({ token }: { token: string }) {
             <ShieldCheck className="h-8 w-8 text-primary" />
           </span>
           <h2 className="mt-3 text-xl font-extrabold tracking-tight text-foreground">
-            Work approved — {formatNaira(releasedTotal)} released to {creator.name}
+            Work approved — {formatNaira(releasedTotal)} released in the DEAL ledger
           </h2>
           <p className="mx-auto mt-1 max-w-sm text-[13px] font-medium text-muted-foreground">
-            Your approval released the escrow. {creator.name} has been notified.
+            Your approval was recorded. {creator.name} has been notified.
           </p>
           <p className="mt-3 flex items-center justify-center">
             <GatewayMarks />
@@ -872,7 +886,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
         <p className="mt-1 text-[13px] font-medium leading-relaxed text-red-600">
           {deal.status === "declined"
             ? "This deal was declined. Reach out to the creator to discuss alternatives."
-            : "Our team is reviewing this case and will contact both sides shortly. Your money is safe in escrow."}
+            : "Our team is reviewing this case and will contact both sides shortly. Payment records and project access remain unchanged during review."}
         </p>
         <ChannelButtons channels={creator.channels} size="sm" className="mt-3" />
       </div>
@@ -931,7 +945,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
         ) : null}
 
         <p className="mt-6 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-center text-xs font-semibold text-muted-foreground">
-          <GatewayMarks /> Every charge processed via Flutterwave or Paystack — held in DEAL escrow
+          <GatewayMarks /> Every charge is processed by Flutterwave or Paystack and verified by DEAL
         </p>
       </div>
 
@@ -947,14 +961,23 @@ export default function ClientDealScreen({ token }: { token: string }) {
         dealRef={deal.ref}
         creatorName={creator.name}
         preferredProvider={creator.preferredProvider}
-        escrowNote={
+        paymentNote={
           approved
-            ? `The work is already approved — this payment is released to ${creator.name} instantly (not held in escrow).`
+            ? "The work is already approved — this payment will be recorded against the completed agreement."
             : undefined
         }
         onPay={(method, provider) =>
           payCtx ? pay(payCtx.kind, method, provider) : Promise.reject(new Error("Nothing to pay."))
         }
+      />
+
+      <ProtectedPreviewDialog
+        open={previewFile !== null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewFile(null);
+        }}
+        file={previewFile}
+        previewUrl={previewFile ? api.sharedFilePreviewUrl(token, previewFile.id) : null}
       />
 
       {/* request changes dialog */}
@@ -965,7 +988,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
           </DialogHeader>
           <p className="text-sm font-medium text-muted-foreground">
             Tell {firstName} what you&rsquo;d like adjusted — they&rsquo;ll update the deal or send a new
-            delivery. Your money stays protected in escrow.
+            delivery. The existing payment record remains attached to this agreement.
           </p>
           <Textarea
             value={changesNote}
@@ -998,7 +1021,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
           <div className="flex items-start gap-2.5 rounded-xl bg-accent p-3.5">
             <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
             <p className="text-[13px] font-semibold leading-relaxed text-accent-foreground">
-              Approving releases {formatNaira(held)} from DEAL escrow to {creator.name} and confirms
+              Approving releases {formatNaira(held)} in the DEAL ledger and confirms
               the work is complete.
             </p>
           </div>
@@ -1016,7 +1039,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
               onClick={async () => {
                 const updated = await act({ action: "approve" });
                 setApproveOpen(false);
-                if (updated) toast.success(`Approved — ${formatNaira(held)} released to ${creator.name}`);
+                if (updated) toast.success(`Approved — ${formatNaira(held)} released in the DEAL ledger`);
               }}
             >
               {busy ? <Loader2 className="mr-2 h-4.5 w-4.5 animate-spin" /> : <Check className="mr-1.5 h-4.5 w-4.5" />}

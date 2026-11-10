@@ -143,15 +143,17 @@ export class SharedDealsService {
           files: delivery.files
             .filter((file) =>
               file.role === 'PREVIEW'
-                ? PREVIEW_VISIBLE_STATUSES.includes(deal.status)
+                ? file.previewStorageKey !== null && PREVIEW_VISIBLE_STATUSES.includes(deal.status)
                 : FINAL_RELEASED_STATUSES.includes(deal.status),
             )
             .map((file) => ({
               id: file.id,
               role: file.role,
               filename: file.filename,
-              sizeBytes: file.sizeBytes,
-              mime: file.mime,
+              // Clients see facts about the reduced derivative, not the
+              // creator's private source object.
+              sizeBytes: file.role === 'PREVIEW' ? (file.previewSizeBytes ?? file.sizeBytes) : file.sizeBytes,
+              mime: file.role === 'PREVIEW' ? (file.previewMime ?? file.mime) : file.mime,
               createdAt: file.createdAt,
               releasedAt: file.releasedAt,
             })),
@@ -227,7 +229,7 @@ export class SharedDealsService {
           dealRef: deal.ref,
           label:
             released.totalMinor > 0
-              ? `Client approved ${deal.ref} — ${formatNairaMinor(released.totalMinor)} released from escrow to you`
+              ? `Client approved ${deal.ref} — ${formatNairaMinor(released.totalMinor)} released in the DEAL ledger`
               : `Client approved ${deal.ref}`,
         });
         break;
@@ -287,7 +289,8 @@ export class SharedDealsService {
    * landing serializes on the Deal row lock, so a deposit racing this approve
    * is either already committed (counted in the re-read, released by the
    * updateMany inside the primitive) or lands after with the post-approval
-   * straight-to-creator rule — never stranded as HELD.
+   * post-approval ledger rule — never stranded as HELD. Provider payout is a
+   * separate settlement integration.
    */
   private async approveWithEscrowRelease(
     deal: DealSharedSource & DealWithAmounts,

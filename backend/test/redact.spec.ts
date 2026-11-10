@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from './test-api';
 import { redactUrl } from '../src/common/logger/redact';
 
 /**

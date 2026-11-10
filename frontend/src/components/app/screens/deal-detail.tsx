@@ -24,7 +24,7 @@ import {
   AgreementSummary,
   AppPage,
   ChannelButtons,
-  EscrowBanner,
+  VerifiedPaymentBanner,
   FileRow,
   MetaRow,
   PaymentSummary,
@@ -155,7 +155,7 @@ function lifecycleSteps(deal: Deal): Step[] {
         : "todo";
   return [
     { label: "Accepted", state: "done" },
-    { label: "Payment", sub: "In DEAL escrow", state: "done" },
+    { label: "Payment", sub: "Provider verified", state: "done" },
     { label: "Delivery", sub: deal.status === "revision" ? "Revision" : undefined, state: delivery },
     { label: "Approval", state: approval },
     {
@@ -503,7 +503,7 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
             className="w-full rounded-lg bg-accent font-extrabold text-accent-foreground shadow-none hover:bg-primary hover:text-white"
           >
             <HashLink href={`#/c/${deal.shareToken}`}>
-              <Eye className="mr-1.5 h-3.5 w-3.5" /> Preview as client — open their view
+              <Eye className="mr-1.5 h-3.5 w-3.5" /> Open client view
             </HashLink>
           </Button>
           <div>
@@ -513,8 +513,8 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
           </div>
           <p className="flex items-start gap-1.5 text-xs font-medium leading-relaxed text-muted-foreground">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-            Clients can also pay installments before delivery — everything sits in DEAL escrow
-            until they approve the completed work.
+            Clients can also pay installments before delivery. Every verified charge is recorded
+            against this agreement.
           </p>
         </div>
       );
@@ -522,10 +522,10 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
 
     case "active":
       banner = (
-        <EscrowBanner
+        <VerifiedPaymentBanner
           amount={escrowed}
           paidOn={deal.depositPaidAt}
-          note={`Held in DEAL escrow — released to you the moment ${deal.client.name} approves the completed work. They can pay installments anytime.`}
+          note="The payment provider confirmed this charge. Client approval is recorded separately."
         />
       );
       actions = (
@@ -545,7 +545,7 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
             <p className="text-[15px] font-extrabold text-violet-900">Awaiting client review</p>
             <p className="mt-0.5 text-[13px] font-medium leading-relaxed text-violet-700">
               {escrowed > 0
-                ? `${formatNaira(escrowed)} is in escrow and releases the moment they approve.`
+                ? `${formatNaira(escrowed)} is provider-verified and awaiting their approval.`
                 : "The client is reviewing your delivery now."}
             </p>
           </div>
@@ -584,10 +584,10 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
             </span>
             <div className="min-w-0">
               <p className="text-[15px] font-extrabold text-foreground">
-                Work approved! {formatNaira(paid)} released from escrow
+                Work approved · {formatNaira(paid)} verified
               </p>
               <p className="mt-0.5 text-[13px] font-medium text-muted-foreground">
-                The money has landed in your payout account.
+                DEAL recorded the client&rsquo;s approval and notified the creator.
               </p>
               <ProviderMark provider={dealProvider} className="mt-2" />
             </div>
@@ -643,7 +643,7 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
           </span>
           <p className="mt-3 text-lg font-extrabold text-foreground">Deal completed!</p>
           <p className="mt-0.5 text-[15px] font-extrabold text-primary">
-            {formatNaira(paid)} released to your payout account
+            {formatNaira(paid)} released in the DEAL ledger
           </p>
           <div className="mt-2 flex justify-center">
             <ProviderMark provider={dealProvider} withText />
@@ -744,7 +744,7 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
                 className="-ml-2 justify-start self-start text-xs font-bold text-muted-foreground hover:text-foreground"
               >
                 <HashLink href={`#/c/${deal.shareToken}`}>
-                  <Eye className="mr-1.5 h-3.5 w-3.5" /> Preview what {deal.client.name} sees
+                  <Eye className="mr-1.5 h-3.5 w-3.5" /> Open {deal.client.name}&rsquo;s view
                 </HashLink>
               </Button>
             ) : null}
@@ -784,7 +784,7 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
               <p className="mb-5 flex items-start gap-2 rounded-xl bg-muted/60 p-3 text-xs font-medium leading-relaxed text-muted-foreground">
                 <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                 <span>
-                  The client sees watermarked protected previews — full-quality downloads unlock
+                  The client sees watermarked protected review copies — full-quality downloads unlock
                   once the work is approved and fully paid.
                 </span>
               </p>
@@ -848,7 +848,7 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
         open={deliverOpen}
         onOpenChange={setDeliverOpen}
         title={deal.status === "revision" ? "Submit revised delivery" : "Deliver work for review"}
-        hint={`Attach your preview files and add a note for ${deal.client.name}. Final high-resolution files are uploaded after approval.`}
+        hint={`Attach review files and add a note for ${deal.client.name}. Final high-resolution files are uploaded after approval.`}
         files={deliveryPicks}
         onFilesChange={setDeliveryPicks}
         submitLabel="Submit delivery"

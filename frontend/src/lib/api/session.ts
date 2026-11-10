@@ -3,9 +3,9 @@
 /**
  * Session persistence for the browser SPA.
  *
- * - Access/refresh tokens: localStorage (rotating opaque refresh token —
- *   see the Phase 4 token model; the cookie upgrade is a Phase 12 hardening
- *   candidate, documented in the walkthrough).
+ * - Access token: localStorage (short-lived, needed for Authorization headers).
+ * - Refresh token: an HttpOnly SameSite cookie managed by the API. JavaScript
+ *   cannot read it, so an XSS bug cannot exfiltrate the long-lived credential.
  * - The session user: a prototype-compatible `SafeUser` — the backend's
  *   auth user (id/email/phone/role) MERGED with the creator profile
  *   (name/handle/craft/channels/...). Screens keep reading one flat object,
@@ -17,7 +17,8 @@ import { bindTokenStore } from "./client";
 import type { OwnedProfile, SafeUserDto } from "./backend.types";
 
 const ACCESS_KEY = "deal_access_token";
-const REFRESH_KEY = "deal_refresh_token";
+/** Pre-cookie releases used this key; read it only to migrate live sessions. */
+const LEGACY_REFRESH_KEY = "deal_refresh_token";
 export const USER_KEY = "deal_user";
 /** Transient hand-off: the name entered at signup, consumed by onboarding. */
 const SIGNUP_NAME_KEY = "deal_signup_name";
@@ -42,13 +43,15 @@ export function getAccessToken(): string | null {
   return localStorage.getItem(ACCESS_KEY);
 }
 
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
+export function getLegacyRefreshToken(): string | null {
+  return localStorage.getItem(LEGACY_REFRESH_KEY);
 }
 
-export function saveTokens(access: string, refresh: string): void {
+export function saveAccessToken(access: string): void {
   localStorage.setItem(ACCESS_KEY, access);
-  localStorage.setItem(REFRESH_KEY, refresh);
+  // A successful cookie-backed login/refresh makes any old JS-readable token
+  // obsolete. Remove it at the first opportunity.
+  localStorage.removeItem(LEGACY_REFRESH_KEY);
 }
 
 export function getSessionUser(): SessionUser | null {
@@ -63,15 +66,15 @@ export function setSessionUser(user: SessionUser | null): void {
 /** Whole session gone (logout, refresh failure, reuse detection). */
 export function clearSession(): void {
   localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+  localStorage.removeItem(LEGACY_REFRESH_KEY);
   localStorage.removeItem(USER_KEY);
 }
 
 /** Wire the transport's token hooks to this storage (import-time side effect). */
 bindTokenStore({
   getAccessToken,
-  getRefreshToken,
-  saveTokens,
+  getLegacyRefreshToken,
+  saveAccessToken,
   clearSession,
 });
 

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from './test-api';
 import type { INestApplication } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { FlutterwaveGateway } from '../src/integrations/payments/flutterwave.gateway';
@@ -22,7 +22,8 @@ import { createApp } from '../src/app';
  * happy path also proves the gates it passes THROUGH are enforced.
  */
 
-const dbConfigured = typeof process.env.NEON_DATABASE_URL === 'string';
+const dbConfigured =
+  process.env.RUN_DATABASE_TESTS === 'true' && typeof process.env.NEON_DATABASE_URL === 'string';
 const secretConfigured =
   typeof process.env.JWT_ACCESS_SECRET === 'string' && process.env.JWT_ACCESS_SECRET.length >= 32;
 
@@ -46,7 +47,6 @@ interface Envelope<T> {
 
 interface Session {
   accessToken: string;
-  refreshToken: string;
   user: { id: string; role: string };
 }
 
@@ -100,7 +100,8 @@ describe.skipIf(!dbConfigured || !secretConfigured)('golden path (integration, e
   }, 60_000);
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
+    if (!db) return;
     // FK-safe cleanup: ledger/children first, then owners (cascades take
     // profile, refresh tokens, notifications).
     await db.paymentTransaction.deleteMany({ where: { deal: { creator: { handle: HANDLE } } } });

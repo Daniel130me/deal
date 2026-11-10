@@ -1,0 +1,75 @@
+services:
+  - type: web
+    name: deal-api
+    runtime: node
+    plan: 0.5c-512mb
+    region: frankfurt
+    autoDeployTrigger: checksPass
+    buildCommand: npm ci && npm --workspace @deal/backend run build
+    preDeployCommand: npm --workspace @deal/backend run db:deploy
+    startCommand: npm --workspace @deal/backend run start
+    healthCheckPath: /health/ready
+    maxShutdownDelaySeconds: 30
+    buildFilter:
+      paths:
+        - backend/**
+        - package.json
+        - package-lock.json
+        - .node-version
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY_HOPS
+        value: 1
+      - key: MAX_JSON_BODY_KB
+        value: 100
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: deal-web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: NEON_DATABASE_URL
+        sync: false
+      - key: NEON_DIRECT_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_S3_ENDPOINT
+        sync: false
+      - key: FLW_SECRET_KEY
+        sync: false
+      - key: FLW_WEBHOOK_SECRET_HASH
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+
+  - type: web
+    name: deal-web
+    runtime: node
+    plan: 0.5c-512mb
+    region: frankfurt
+    autoDeployTrigger: checksPass
+    buildCommand: npm ci && npm --workspace @deal/frontend run build
+    startCommand: npm --workspace @deal/frontend run start
+    healthCheckPath: /
+    maxShutdownDelaySeconds: 30
+    buildFilter:
+      paths:
+        - frontend/**
+        - package.json
+        - package-lock.json
+        - .node-version
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DEAL_API_HOSTPORT
+        fromService:
+          type: web
+          name: deal-api
+          property: hostport

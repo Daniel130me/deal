@@ -1,4 +1,5 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { RATE_LIMITS } from '../../common/rate-limit/rate-limit.constants';
 import { Public } from '../auth/decorators/public.decorator';
@@ -31,6 +32,32 @@ export class SharedFilesController {
   @Get()
   async list(@Param('token') token: string) {
     return { files: await this.files.listSharedFilesByToken(token) };
+  }
+
+  /**
+   * Sends only the server-generated derivative through the API. No storage URL
+   * or source key reaches the browser. Headers prevent intermediary/browser
+   * persistence; UI download controls remain deterrence rather than DRM.
+   */
+  @Public()
+  @Throttle(RATE_LIMITS.shared.fileRead)
+  @Get(':fileId/preview')
+  async preview(
+    @Param('token') token: string,
+    @Param('fileId') fileId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const preview = await this.files.getSharedPreviewByToken(token, fileId);
+    response.set({
+      'Content-Type': preview.mime,
+      'Content-Disposition': `inline; filename="${preview.filename}"`,
+      'Cache-Control': 'private, no-store, max-age=0',
+      Pragma: 'no-cache',
+      'X-Content-Type-Options': 'nosniff',
+      'Cross-Origin-Resource-Policy': 'same-site',
+      'X-Robots-Tag': 'noindex, nofollow, noarchive',
+    });
+    return new StreamableFile(Buffer.from(preview.bytes));
   }
 
   @Public()

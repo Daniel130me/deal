@@ -57,7 +57,7 @@ export function BookingChip({ status, className }: { status: Booking["status"]; 
   );
 }
 
-/* ---------- payment rail branding (Flutterwave / Paystack — escrow is DEAL's) ---------- */
+/* ---------- payment rail branding (Flutterwave / Paystack) ---------- */
 
 export function ProviderMark({
   provider,
@@ -239,7 +239,7 @@ export function Stepper({ steps }: { steps: Step[] }) {
   );
 }
 
-/* ---------- payment summary (schedule-based, escrow-aware) ---------- */
+/* ---------- payment summary (schedule-based) ---------- */
 
 function PayChip({ tone, children }: { tone: "green" | "amber" | "gray" | "violet"; children: React.ReactNode }) {
   return (
@@ -286,8 +286,8 @@ export function PaymentSummary({
               <p className="text-xs font-medium text-muted-foreground">
                 {slot.status === "paid"
                   ? approved
-                    ? "Paid & released to creator"
-                    : "Paid · held in DEAL escrow"
+                    ? "Paid · project approved"
+                    : "Paid · awaiting project approval"
                   : deal.status === "sent"
                     ? "Due after acceptance"
                     : "Due — pay anytime"}
@@ -299,9 +299,9 @@ export function PaymentSummary({
               </span>
               {slot.status === "paid" ? (
                 approved ? (
-                  <PayChip tone="green">Released</PayChip>
+                  <PayChip tone="green">Approved</PayChip>
                 ) : (
-                  <PayChip tone="violet">In escrow</PayChip>
+                  <PayChip tone="violet">Verified</PayChip>
                 )
               ) : (
                 <PayChip tone="amber">Due</PayChip>
@@ -317,20 +317,19 @@ export function PaymentSummary({
         )}
       </div>
       <p className="mt-3 rounded-xl bg-secondary p-3 text-xs font-medium leading-relaxed text-muted-foreground">
-        <span className="font-bold text-foreground">DEAL escrow</span> holds every payment and only
-        releases it to the creator when the client approves the completed work. Charges are processed
-        by Flutterwave or Paystack — the client picks their preferred rail at checkout.
+        <span className="font-bold text-foreground">DEAL</span> records provider-verified charges and
+        the client&rsquo;s project approval as separate auditable events.
       </p>
     </SectionCard>
   );
 }
 
-/* ---------- escrow banner ---------- */
+/* ---------- verified payment banner ---------- */
 
-export function EscrowBanner({
+export function VerifiedPaymentBanner({
   amount,
   paidOn,
-  note = "Held in DEAL escrow — the creator only receives it when you approve the completed work.",
+  note = "The payment provider confirmed this charge and DEAL recorded it against the project.",
 }: {
   amount: number;
   paidOn?: string;
@@ -347,7 +346,7 @@ export function EscrowBanner({
       </span>
       <div className="min-w-0">
         <p className="text-[13px] font-extrabold text-accent-foreground">
-          Payment protected · <span className="text-foreground">{formatNaira(amount)}</span> held in escrow
+          Payment verified · <span className="text-foreground">{formatNaira(amount)}</span>
         </p>
         <p className="mt-0.5 text-[13px] font-medium leading-relaxed text-muted-foreground">{note}</p>
         {paidOn ? (
@@ -438,7 +437,7 @@ export function FileRow({
             onClick={onPreview}
             className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-bold text-foreground transition-colors hover:bg-muted"
           >
-            Preview
+            Open review copy
           </button>
           <span
             title="Protected until the deal is fully paid"
@@ -454,7 +453,7 @@ export function FileRow({
             onClick={onPreview}
             className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-bold text-foreground transition-colors hover:bg-muted"
           >
-            Preview
+            Open file
           </button>
           <button
             type="button"
@@ -473,53 +472,52 @@ export function FileRow({
   );
 }
 
-/**
- * Simulated watermarked preview — DEAL protects delivered work with a visible
- * watermark + reduced quality until the client approves AND fully pays.
- */
+/** Displays the server-generated derivative. The watermark is already baked
+ * into these bytes; this component deliberately adds no security overlay. */
 export function ProtectedPreviewDialog({
   open,
   onOpenChange,
   file,
-  creatorName,
+  previewUrl,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   file: { name: string; size: string; kind: string } | null;
-  creatorName: string;
+  previewUrl: string | null;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent aria-describedby={undefined} className="max-w-lg p-0 overflow-hidden sm:rounded-2xl">
         <DialogHeader className="border-b border-border px-5 pb-3 pt-4">
           <DialogTitle className="truncate pr-6 text-[15px] font-extrabold text-foreground">
-            {file?.name ?? "Preview"}
+            {file?.name ?? "Review copy"}
           </DialogTitle>
           <p className="text-xs font-semibold text-muted-foreground">
-            {file ? `${file.kind} · ${file.size}` : ""} · Protected preview
+            {file ? `${file.kind} · ${file.size}` : ""} · Protected review copy
           </p>
         </DialogHeader>
-        <div className="relative mx-5 mb-4 flex h-56 items-center justify-center overflow-hidden rounded-xl border border-border bg-gradient-to-br from-muted via-secondary to-accent/70 sm:h-72">
-          <span className="text-4xl font-black tracking-tight text-primary/25">{file?.kind}</span>
-          {/* diagonal watermark */}
-          <div className="pointer-events-none absolute inset-0 flex rotate-[-18deg] flex-col justify-center gap-6 overflow-hidden opacity-[0.16]">
-            {[0, 1, 2].map((row) => (
-              <p
-                key={row}
-                className="whitespace-nowrap text-center text-sm font-black uppercase tracking-[0.3em] text-foreground"
-              >
-                DEAL · Protected preview · {creatorName} · DEAL · Protected preview
-              </p>
-            ))}
-          </div>
+        <div
+          className="relative mx-5 mb-4 flex min-h-56 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted sm:min-h-72"
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {previewUrl ? (
+            <img
+              src={previewUrl}
+              alt={file ? `Protected review of ${file.name}` : "Protected review"}
+              draggable={false}
+              className="max-h-[70vh] w-full select-none object-contain"
+            />
+          ) : (
+            <span className="text-sm font-bold text-muted-foreground">Review copy unavailable</span>
+          )}
           <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white/90 px-2 py-1 text-[10px] font-extrabold text-amber-700 shadow-sm">
-            <ShieldCheck className="h-3 w-3" /> Watermarked
+            <ShieldCheck className="h-3 w-3" /> Server-watermarked
           </span>
         </div>
         <p className="mb-5 flex items-start gap-2 px-5 text-xs font-medium leading-relaxed text-muted-foreground">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-          This is a reduced-resolution, watermarked preview. The clean full-quality file unlocks for
-          download only once the work is approved and the deal is fully paid.
+          This is a reduced-resolution review copy with creator and project ownership baked into the image.
+          The clean full-quality file unlocks only after approval and full payment.
         </p>
       </DialogContent>
     </Dialog>

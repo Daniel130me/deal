@@ -6,7 +6,6 @@ import { Inbox, Loader2, Lock, ShieldCheck, TrendingUp, Wallet } from "lucide-re
 import { toast } from "sonner";
 import { AppCanvas } from "@/components/app/chrome";
 import { AppPage, ProviderMark, SectionCard } from "@/components/app/kit";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -61,8 +60,8 @@ interface PaymentRow {
 
 const FILTERS = [
   { key: "all", label: "All" },
-  { key: "held", label: "In escrow" },
-  { key: "released", label: "Released" },
+  { key: "held", label: "Awaiting approval" },
+  { key: "released", label: "Approved" },
 ] as const;
 
 type FilterKey = (typeof FILTERS)[number]["key"];
@@ -85,7 +84,7 @@ function PaymentStatusChip({ status }: { status: PaymentRow["status"] }) {
         status === "held" ? "bg-violet-50 text-violet-700" : "bg-accent text-accent-foreground"
       )}
     >
-      {status === "held" ? "In escrow" : "Released"}
+      {status === "held" ? "Awaiting approval" : "Approved"}
     </span>
   );
 }
@@ -151,9 +150,9 @@ export default function MoneyScreen() {
     try {
       await api.updateProfile({ preferredProvider: next });
       setUser({ ...user, preferredProvider: next });
-      toast.success(`Payout rail set to ${PROVIDER_META[next].label}`);
+      toast.success(`Preferred checkout rail set to ${PROVIDER_META[next].label}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't update your payout rail.");
+      toast.error(err instanceof Error ? err.message : "Couldn't update your checkout rail.");
     } finally {
       setSwitching(false);
     }
@@ -167,7 +166,7 @@ export default function MoneyScreen() {
     <AppCanvas activeTab="money">
       <AppPage
         title="Money"
-        subtitle="Every payment sits in DEAL escrow until your client approves the completed work."
+        subtitle="Provider-verified payments and their project approval state."
       >
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -189,14 +188,14 @@ export default function MoneyScreen() {
                       <Lock className="h-4 w-4" />
                     </span>
                     <p className="text-[11px] font-extrabold uppercase tracking-wide text-violet-700">
-                      In escrow
+                      Awaiting approval
                     </p>
                   </div>
                   <p className="mt-3 text-2xl font-extrabold text-foreground lg:text-3xl">
                     {formatNaira(overview.money.inEscrow)}
                   </p>
                   <p className="mt-1 text-xs font-semibold text-violet-700/80">
-                    Held until clients approve
+                    Verified charges on active work
                   </p>
                 </div>
 
@@ -206,7 +205,7 @@ export default function MoneyScreen() {
                       <Wallet className="h-4 w-4" />
                     </span>
                     <p className="text-[11px] font-extrabold uppercase tracking-wide text-accent-foreground">
-                      Released all-time
+                      Approved all-time
                     </p>
                   </div>
                   <p className="mt-3 text-2xl font-extrabold text-foreground lg:text-3xl">
@@ -235,31 +234,25 @@ export default function MoneyScreen() {
                 </div>
               </div>
 
-              {/* payout account */}
-              <SectionCard
-                title="Payout account"
-                right={
-                  <Badge className="border-0 bg-accent text-accent-foreground">Active</Badge>
-                }
-              >
+              <SectionCard title="Checkout rail preference">
                 <div className="flex items-center gap-3">
                   <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-border bg-white">
                     <ProviderMark provider={provider} />
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-extrabold text-foreground">
-                      {firstName} Visuals •••4532
+                      {firstName}&rsquo;s preferred checkout rail
                     </p>
                     <p className="text-xs font-semibold text-muted-foreground">
-                      Payout account · {PROVIDER_META[provider].label} · automatic payouts
+                      {PROVIDER_META[provider].label} · collection preference only
                     </p>
                   </div>
                 </div>
 
-                {/* default payout rail switcher */}
+                {/* Default hosted-checkout rail switcher. */}
                 <div className="mt-4 border-t border-border pt-4">
                   <p className="text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">
-                    Default payout rail
+                    Preferred checkout rail
                   </p>
                   <div className="mt-2 grid grid-cols-2 gap-2.5">
                     {PROVIDERS.map((p) => {
@@ -298,13 +291,13 @@ export default function MoneyScreen() {
                     })}
                   </div>
                   <p className="mt-2 text-[11px] font-medium text-muted-foreground">
-                    Your clients can pay via either rail — this just sets where released money lands.
+                    Your clients can pay via either supported rail. The selected rail opens first.
                   </p>
                 </div>
 
                 <p className="mt-4 rounded-xl bg-muted/60 p-3.5 text-xs font-medium leading-relaxed text-muted-foreground">
-                  Money from every deal is held in <span className="font-bold text-foreground">DEAL escrow</span>{" "}
-                  and paid out automatically when your client approves the completed work.
+                  Settlement and refunds are controlled from the merchant account at the selected
+                  payment provider. DEAL stores the verified charge reference and agreement state.
                 </p>
               </SectionCard>
 
@@ -442,9 +435,9 @@ export default function MoneyScreen() {
               <p className="flex items-start gap-2 rounded-2xl border border-border bg-secondary p-4 text-xs font-semibold leading-relaxed text-muted-foreground lg:p-5">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <span>
-                  <span className="font-bold text-foreground">DEAL escrow</span> holds every payment
-                  until approval — Flutterwave and Paystack only process the charges. Once your client
-                  approves, released money lands in your payout account automatically.
+                  <span className="font-bold text-foreground">Payment records:</span> Approved means
+                  the client approved the project. Confirm financial settlement in the payment
+                  provider&rsquo;s merchant dashboard.
                 </span>
               </p>
             </>

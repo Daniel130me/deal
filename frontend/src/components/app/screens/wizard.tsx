@@ -748,10 +748,8 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
                   (they can also pay it all at once)
                 </>
               ) : null}
-              . Every payment is held in{" "}
-              <span className="font-extrabold text-foreground">DEAL escrow</span> until your client
-              approves the work — they can pay via Flutterwave or Paystack, and final files unlock
-              after full payment.
+              . Every verified payment is recorded against the agreement — clients can pay via
+              Flutterwave or Paystack, and final files unlock after full payment and approval.
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -874,9 +872,8 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
                 ))}
               </div>
               <p className="mt-2 text-[11px] font-semibold leading-relaxed text-muted-foreground">
-                Every payment is held in <span className="font-bold text-foreground">DEAL escrow</span> and
-                released to you only when the client approves the completed work — they can pay via
-                Flutterwave or Paystack.
+                Every verified payment is recorded against the agreement with its provider reference.
+                Clients can pay via Flutterwave or Paystack.
               </p>
             </div>
 

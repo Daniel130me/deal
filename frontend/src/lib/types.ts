@@ -257,7 +257,7 @@ export const STATUS_LABELS: Record<DealStatus, string> = {
   active: "Active",
   delivered: "Awaiting review",
   revision: "Revision requested",
-  approved: "Approved · Funds released",
+  approved: "Approved · Payment recorded",
   balance_paid: "Payment secured",
   files_released: "Files released",
   completed: "Completed",

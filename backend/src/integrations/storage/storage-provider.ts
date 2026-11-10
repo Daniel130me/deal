@@ -41,6 +41,12 @@ export interface StorageProvider {
   /** Metadata for one object; exists=false when the key holds nothing. */
   objectHead(key: string): Promise<StoredObjectHead>;
 
+  /** Read private source bytes for trusted server-side processing only. */
+  getObjectBytes(key: string): Promise<Uint8Array>;
+
+  /** Write a server-generated object; callers never receive a PUT capability. */
+  putObject(key: string, body: Uint8Array, contentType: string): Promise<void>;
+
   /** Best-effort permanent delete (cleanup paths); idempotent at the store. */
   deleteObject(key: string): Promise<void>;
 }

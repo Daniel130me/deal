@@ -48,7 +48,8 @@ export function isFullyPaid(terms: DealMoneyTerms, payments: Pick<DealPayment, '
 
 /**
  * Work has been approved by the client — from this point new payments go
- * straight to the creator instead of escrow (prototype parity).
+ * marked released in DEAL's ledger instead of held. Provider payout execution
+ * is a separate settlement step and must not be inferred from this predicate.
  */
 export function isApprovedStatus(status: DealStatus): boolean {
   return status === DealStatus.APPROVED || status === DealStatus.FILES_RELEASED || status === DealStatus.COMPLETED;

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from './test-api';
 import type { INestApplication } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { createApp } from '../src/app';
@@ -21,12 +21,13 @@ import { createApp } from '../src/app';
  *
  * Fixture deals are driven through the real API + direct DB fixture writes
  * (the established pattern: how a deal gets money is Phase 8's concern).
- * Declaration order IS execution order (bun:test is serial): disputes first
+ * Declaration order is execution order (Node test concurrency is disabled): disputes first
  * (they move dealA1 to APPROVED via resolve), then reviews, then the inbox,
  * then the overview — every aggregate assertion runs against final state.
  */
 
-const dbConfigured = typeof process.env.NEON_DATABASE_URL === 'string';
+const dbConfigured =
+  process.env.RUN_DATABASE_TESTS === 'true' && typeof process.env.NEON_DATABASE_URL === 'string';
 const secretConfigured =
   typeof process.env.JWT_ACCESS_SECRET === 'string' && process.env.JWT_ACCESS_SECRET.length >= 32;
 
@@ -48,12 +49,11 @@ interface Envelope<T> {
 
 interface Session {
   accessToken: string;
-  refreshToken: string;
   user: { id: string; role: string };
 }
 
 describe.skipIf(!dbConfigured || !secretConfigured)('platform: disputes / reviews / notifications / overview (integration, e2e)', () => {
-  /** Neon round-trips cost 0.2-2s — the 5s bun default is not enough headroom. */
+  /** Neon round-trips cost 0.2-2s — use explicit integration-test headroom. */
   const timed = (name: string, fn: () => Promise<void>, ms = 30_000) => it(name, fn, ms);
   let app: INestApplication;
   let baseUrl: string;
@@ -184,7 +184,8 @@ describe.skipIf(!dbConfigured || !secretConfigured)('platform: disputes / review
   }, 90_000);
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
+    if (!db) return;
     // FK-safe cleanup: deal children first, then deals, requests, services,
     // then the users (which cascade away profiles/channels/refresh tokens).
     const handles = [HANDLE_A, HANDLE_B];

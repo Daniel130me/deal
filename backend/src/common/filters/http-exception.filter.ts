@@ -14,6 +14,14 @@ interface DescribedError {
   body: ErrorBody;
 }
 
+const BODY_PARSER_ERROR_TYPES = new Set([
+  'encoding.unsupported',
+  'entity.parse.failed',
+  'entity.too.large',
+  'request.aborted',
+  'request.size.invalid',
+]);
+
 /**
  * Extracts a safe {code, message} pair from any thrown value.
  * - Domain errors thrown as `new HttpException({ code, message }, status)` keep their code.
@@ -43,6 +51,9 @@ function describeError(exception: unknown): DescribedError {
     };
   }
 
+  const parserError = describeBodyParserError(exception);
+  if (parserError) return parserError;
+
   logJson('error', 'http', 'Unhandled exception', {
     cause: exception instanceof Error ? exception.message : String(exception),
     stack: exception instanceof Error ? exception.stack : undefined,
@@ -50,6 +61,28 @@ function describeError(exception: unknown): DescribedError {
   return {
     status: HttpStatus.INTERNAL_SERVER_ERROR,
     body: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+  };
+}
+
+/**
+ * Express body-parser errors are created before Nest can wrap them in an
+ * HttpException. Recognise only its documented error types and return a safe
+ * status/message; arbitrary thrown objects must still become a 500.
+ */
+function describeBodyParserError(exception: unknown): DescribedError | null {
+  if (!exception || typeof exception !== 'object') return null;
+  const candidate = exception as { type?: unknown; status?: unknown; statusCode?: unknown };
+  if (typeof candidate.type !== 'string' || !BODY_PARSER_ERROR_TYPES.has(candidate.type)) return null;
+
+  const statusValue = candidate.status ?? candidate.statusCode;
+  if (typeof statusValue !== 'number' || statusValue < 400 || statusValue > 599) return null;
+
+  return {
+    status: statusValue,
+    body: {
+      code: codeForStatus(statusValue),
+      message: statusValue === HttpStatus.PAYLOAD_TOO_LARGE ? 'Request body is too large' : 'Invalid request body',
+    },
   };
 }
 

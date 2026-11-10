@@ -51,5 +51,5 @@ A verified charge whose amount or currency disagrees with the slot **never lands
 ## Escrow semantics
 
 - Deposits and installments land as `DealPayment` rows in **HELD** (DEAL's own escrow ledger).
-- **Approve** is the only release trigger: under the deal row lock, all HELD money moves to **RELEASED** (straight to the creator — payouts are DEAL's authority), with a `PAYMENT_RELEASED` audit event.
+- **Approve** is the only ledger-release trigger: under the deal row lock, all HELD rows move to **RELEASED**, with a `PAYMENT_RELEASED` audit event. This is an internal ledger transition, not a confirmed provider transfer; payout execution and reconciliation remain a production-launch requirement.
 - A dispute freezes the lifecycle; resolution either restores the prior status or releases escrow — both under one transaction.

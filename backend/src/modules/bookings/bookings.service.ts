@@ -1,7 +1,8 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { BookingStatus, type Booking, type Service } from '@prisma/client';
-import { nextSequentialRef, retryOnUniqueViolation } from '../../common/ids/ref.util';
+import { formatRef, retryOnUniqueViolation } from '../../common/ids/ref.util';
 import { PrismaService } from '../../database/prisma.service';
+import { calendarDateToUtc } from '../../common/validation/calendar-date.validator';
 import { NOTIFICATION_TYPES } from '../notifications/notifications.constants';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ServicesService } from '../services/services.service';
@@ -57,6 +58,17 @@ export class BookingsService {
   }
 
   async act(creatorId: string, bookingId: string, dto: BookingActionDto): Promise<BookingWithService> {
+    const target = ACTION_TO_STATUS[dto.action];
+    const allowedSources = Object.entries(BOOKING_TRANSITIONS)
+      .filter(([, targets]) => targets?.includes(target))
+      .map(([status]) => status as BookingStatus);
+
+    // Conditional write closes the read/validate/write race without adding a
+    // transaction or another happy-path query.
+    const updated = await this.prisma.booking.updateMany({
+      where: { id: bookingId, creatorId, status: { in: allowedSources } },
+      data: { status: target },
+    });
     const booking = await this.prisma.booking.findFirst({
       where: { id: bookingId, creatorId },
       include: { service: true },
@@ -65,8 +77,7 @@ export class BookingsService {
       throw new HttpException({ code: 'BOOKING_NOT_FOUND', message: 'Booking not found' }, HttpStatus.NOT_FOUND);
     }
 
-    const allowed = BOOKING_TRANSITIONS[booking.status] ?? [];
-    if (!allowed.includes(ACTION_TO_STATUS[dto.action])) {
+    if (updated.count === 0) {
       throw new HttpException(
         {
           code: 'INVALID_BOOKING_TRANSITION',
@@ -75,11 +86,7 @@ export class BookingsService {
         HttpStatus.CONFLICT,
       );
     }
-    return this.prisma.booking.update({
-      where: { id: booking.id },
-      data: { status: ACTION_TO_STATUS[dto.action] },
-      include: { service: true },
-    });
+    return booking;
   }
 
   // ── Public submission (rate-limited, anonymous) ─────────────────────────────
@@ -132,7 +139,7 @@ export class BookingsService {
           sessionType: dto.sessionType,
           clientName: dto.clientName,
           clientContact: dto.clientContact,
-          date: new Date(`${dto.date}T00:00:00Z`),
+          date: calendarDateToUtc(dto.date),
           time: dto.time,
           note: dto.note ?? null,
           status: BookingStatus.REQUESTED,
@@ -142,10 +149,9 @@ export class BookingsService {
   }
 
   private async nextRef(prefix: string): Promise<string> {
-    const rows = await this.prisma.booking.findMany({
-      where: { ref: { startsWith: `${prefix}-` } },
-      select: { ref: true },
-    });
-    return nextSequentialRef(prefix, rows.map((row) => row.ref));
+    const [row] = await this.prisma.$queryRaw<{ value: bigint }[]>`
+      SELECT nextval('booking_ref_seq') AS value
+    `;
+    return formatRef(prefix, row!.value);
   }
 }

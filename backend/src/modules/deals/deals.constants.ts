@@ -6,7 +6,7 @@ import { DealStatus } from '@prisma/client';
  * client behaviour consistent after the cutover.
  */
 
-/** Deal ref prefix — nextSequentialRef continues the seeded DEAL-001..005 series. */
+/** Deal ref prefix — the DB sequence continues the seeded DEAL-001..005 series. */
 export const DEAL_REF_PREFIX = 'DEAL';
 
 /**

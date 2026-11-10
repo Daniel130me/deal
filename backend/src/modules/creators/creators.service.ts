@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { UserStatus, UserRole, type CreatorChannel, type CreatorProfile } from '@prisma/client';
+import { UserStatus, type CreatorChannel, type CreatorProfile } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { UsersService } from '../users/users.service';
 import type { ChannelDto, CreateProfileDto, UpdateProfileDto } from './dto/profile.dto';
@@ -58,7 +58,14 @@ export class CreatorsService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        await this.users.setRole(userId, UserRole.CREATOR, tx);
+        const eligible = await this.users.promoteActiveClientToCreator(userId, tx);
+        if (!eligible) {
+          throw this.fail(
+            'ACCOUNT_NOT_ELIGIBLE',
+            'Only an active client account can create a creator profile',
+            HttpStatus.FORBIDDEN,
+          );
+        }
         const profile = await tx.creatorProfile.create({
           data: {
             userId,
@@ -75,7 +82,12 @@ export class CreatorsService {
         return profile;
       });
     } catch (error) {
-      if ((error as { code?: string }).code === 'P2002') {
+      if ((error as { code?: string; meta?: { target?: unknown } }).code === 'P2002') {
+        const target = (error as { meta?: { target?: unknown } }).meta?.target;
+        const fields = Array.isArray(target) ? target.map(String) : [String(target ?? '')];
+        if (fields.some((field) => field.includes('userId'))) {
+          throw this.fail('PROFILE_EXISTS', 'This account already has a creator profile', HttpStatus.CONFLICT);
+        }
         // Race backstop: handle taken between the pre-check and the insert.
         throw this.fail('HANDLE_TAKEN', 'This handle is already taken', HttpStatus.CONFLICT);
       }

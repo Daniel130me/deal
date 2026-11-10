@@ -3,6 +3,7 @@ import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { ConfigService } from './config/config.service';
 
@@ -18,11 +19,30 @@ export async function createApp() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   const config = app.get(ConfigService);
 
-  // Rate limiting keys on the client IP. Trust exactly ONE reverse-proxy hop:
-  // req.ip becomes the address our own gateway appended to X-Forwarded-For,
-  // which a client cannot spoof past the proxy. Direct (dev/test) access has
-  // no XFF and keeps its socket address.
-  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  // Make the parser ceiling explicit. This is especially important for public
+  // webhook routes: signatures establish authenticity, not payload size.
+  const bodyLimit = `${config.maxJsonBodyKb}kb`;
+  app.useBodyParser('json', { limit: bodyLimit });
+  app.useBodyParser('urlencoded', { limit: bodyLimit, extended: true });
+
+  // API responses carry identity, deal and payment data. Keep them out of
+  // browser/intermediary caches and apply a small, dependency-free baseline of
+  // response hardening headers. TLS/HSTS is owned by the public frontend/proxy.
+  app.use((_request: Request, response: Response, next: NextFunction) => {
+    response.set({
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    });
+    next();
+  });
+
+  // Rate limiting keys on the client IP. Proxy trust is deployment-specific:
+  // trusting X-Forwarded-For on a directly exposed server lets an attacker
+  // rotate a forged header and bypass throttling, so the default is zero.
+  app.getHttpAdapter().getInstance().set('trust proxy', config.trustProxyHops);
 
   // Health probes live on fixed root paths; everything else is versioned under /api/v1.
   app.setGlobalPrefix('api/v1', {

@@ -6,23 +6,22 @@ import {
   Camera,
   Check,
   Clock3,
+  LogIn,
   Lock,
-  Play,
   ShieldCheck,
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { quickDemoLogin, useApp } from "@/components/app/context";
-import { toast } from "sonner";
+import { useApp } from "@/components/app/context";
 
 const fadeUp = {
   initial: { opacity: 0, y: 22 },
   animate: { opacity: 1, y: 0 },
 };
 
-function DealMockupCard() {
+function DealProductCard() {
   return (
     <div
       aria-hidden="true"
@@ -35,14 +34,14 @@ function DealMockupCard() {
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] font-bold text-foreground">
-            Brand photoshoot · 12 photos
+            Client project · 12 deliverables
           </p>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Adaeze O. · found on Instagram
+            Agreement and payment schedule
           </p>
         </div>
         <Badge className="shrink-0 bg-accent text-accent-foreground hover:bg-accent">
-          Deposit in escrow
+          Deposit verified
         </Badge>
       </div>
 
@@ -129,7 +128,7 @@ function DealMockupCard() {
       <div className="mt-5 flex items-center gap-2.5 rounded-xl bg-secondary px-4 py-3">
         <ShieldCheck className="h-4.5 w-4.5 shrink-0 text-primary" />
         <p className="text-[13px] font-semibold text-secondary-foreground">
-          Protected by DEAL escrow — money releases only on approval
+          DEAL records payments and approval-controlled release
         </p>
       </div>
     </div>
@@ -137,15 +136,7 @@ function DealMockupCard() {
 }
 
 export function Hero() {
-  const { navigate, setUser } = useApp();
-
-  async function tryDemo() {
-    try {
-      await quickDemoLogin(navigate, setUser);
-    } catch {
-      toast.error("Demo is warming up — try again in a moment.");
-    }
-  }
+  const { navigate } = useApp();
 
   return (
     <section className="relative overflow-hidden">
@@ -192,7 +183,7 @@ export function Hero() {
             className="mt-6 text-lg leading-relaxed text-muted-foreground"
           >
             Send clear agreements, get paid in deposits or installments —
-            every naira waits in DEAL escrow until your client approves the work.
+            every verified charge is tracked against the agreement and approval.
           </motion.p>
 
           <motion.div
@@ -212,10 +203,10 @@ export function Hero() {
               size="lg"
               variant="outline"
               className="h-12 border-input px-6 text-[15px] font-bold text-foreground hover:bg-muted"
-              onClick={tryDemo}
+              onClick={() => navigate("/login")}
             >
-              <Play className="mr-1.5 h-4 w-4 fill-primary text-primary" />
-              Try the live demo
+              <LogIn className="mr-1.5 h-4 w-4 text-primary" />
+              Log in
             </Button>
           </motion.div>
 
@@ -226,7 +217,7 @@ export function Hero() {
           >
             {[
               "No monthly fees",
-              "Money released the moment work is approved",
+              "Approval-controlled payment ledger",
               "Payments via Flutterwave & Paystack",
             ].map((item) => (
               <li
@@ -240,7 +231,7 @@ export function Hero() {
           </motion.ul>
         </div>
 
-        {/* Product mockup (desktop enhancement) */}
+        {/* Compact product summary for larger screens. */}
         <motion.div
           initial={{ opacity: 0, y: 30, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -248,7 +239,7 @@ export function Hero() {
           className="relative hidden lg:block"
         >
           <div className="mx-auto w-fit">
-            <DealMockupCard />
+            <DealProductCard />
 
             {/* floating chips */}
             <div className="animate-float-soft absolute -right-12 -top-10 flex items-center gap-2 rounded-full border border-border bg-white px-4 py-2.5 shadow-lg shadow-foreground/5">
@@ -257,7 +248,7 @@ export function Hero() {
               </span>
               <div className="leading-tight">
                 <p className="text-[11px] font-semibold text-muted-foreground">
-                  Held in DEAL escrow
+                  Payment verified
                 </p>
                 <p className="text-[13px] font-extrabold text-foreground">
                   ₦225,000
@@ -273,7 +264,7 @@ export function Hero() {
                 <ShieldCheck className="h-3.5 w-3.5 text-violet-600" />
               </span>
               <p className="text-[13px] font-extrabold text-foreground">
-                Client approved · escrow released
+                Client approved · decision recorded
               </p>
             </div>
           </div>

@@ -10,6 +10,9 @@ import { ConfigService } from './config/config.service';
 async function bootstrap(): Promise<void> {
   const app = await createApp();
   const config = app.get(ConfigService);
+  // SIGTERM/SIGINT close the HTTP server and invoke PrismaService's
+  // OnModuleDestroy hook, allowing orchestrators to drain the process safely.
+  app.enableShutdownHooks();
   await app.listen(config.port);
   logJson('log', 'bootstrap', `DEAL API listening on port ${config.port}`, {
     port: config.port,

@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
 import type { RequestUser } from '../auth/auth.types';
 import { CreatorsService } from './creators.service';
 import { CurrentCreator } from './decorators/current-creator.decorator';
@@ -25,6 +27,7 @@ export class CreatorsController {
 
   /** Onboarding — promotes the account to CREATOR in the same transaction. */
   @Post('me')
+  @Roles(UserRole.CLIENT)
   create(@CurrentUser() user: RequestUser, @Body() dto: CreateProfileDto) {
     return this.creators.createProfile(user.id, dto);
   }

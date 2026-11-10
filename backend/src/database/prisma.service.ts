@@ -18,7 +18,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.$disconnect();
+    // Shutdown must remain best-effort even when startup never established a
+    // connection; otherwise teardown can hide the original connectivity error.
+    await this.$disconnect().catch(() => undefined);
   }
 
   /** Cheap connectivity probe for the /health/ready endpoint. */

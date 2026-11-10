@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from './test-api';
 import type { INestApplication } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { STORAGE_PROVIDER, type StorageProvider } from '../src/integrations/storage/storage-provider';
@@ -6,7 +6,8 @@ import { createApp } from '../src/app';
 
 /**
  * Phase 7 acceptance: R2 file storage exercised against the real app + live
- * Neon + the REAL R2 bucket (skips when DB/secret/R2 envs are missing).
+ * Neon + the REAL R2 bucket. Because this suite writes remote objects, it is
+ * opt-in via RUN_LIVE_STORAGE_TESTS=true in addition to the required envs.
  *
  * Matrix covered: presigned upload-url authorization + validation, canonical
  * key shape inside the caller's namespace, namespace-escape rejection at
@@ -20,10 +21,12 @@ import { createApp } from '../src/app';
  * Every object created in the bucket is tracked and deleted in afterAll.
  */
 
-const dbConfigured = typeof process.env.NEON_DATABASE_URL === 'string';
+const dbConfigured =
+  process.env.RUN_DATABASE_TESTS === 'true' && typeof process.env.NEON_DATABASE_URL === 'string';
 const secretConfigured =
   typeof process.env.JWT_ACCESS_SECRET === 'string' && process.env.JWT_ACCESS_SECRET.length >= 32;
 const r2Configured =
+  process.env.RUN_LIVE_STORAGE_TESTS === 'true' &&
   typeof process.env.R2_BUCKET === 'string' &&
   typeof process.env.R2_S3_ENDPOINT === 'string' &&
   typeof process.env.R2_ACCESS_KEY_ID === 'string';
@@ -36,8 +39,10 @@ const PASSWORD = 'CorrectHorse1!';
 const HANDLE_A = `filer-${RUN36}`;
 const HANDLE_B = `peer-${RUN36}`;
 
-/** Tiny byte payloads — R2 stores bytes verbatim, mime comes from headers. */
-const PNG_BYTES = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 1, 2, 3]);
+/** Valid 1x1 PNG; preview finalization now decodes and transforms the source. */
+const PNG_BYTES = Uint8Array.from(
+  Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64'),
+);
 const MP4_BYTES = new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50, 1, 2, 3, 4, 5, 6, 7, 8]);
 
 interface Envelope<T> {
@@ -48,7 +53,6 @@ interface Envelope<T> {
 
 interface Session {
   accessToken: string;
-  refreshToken: string;
   user: { id: string; role: string };
 }
 
@@ -154,11 +158,22 @@ describe.skipIf(!dbConfigured || !secretConfigured || !r2Configured)('file stora
   }, 60_000);
 
   afterAll(async () => {
-    // Bucket hygiene first (independent of DB state).
-    for (const key of trackedKeys) {
-      await storage.deleteObject(key).catch(() => undefined);
+    if (db) {
+      const generated = await db.fileAsset.findMany({
+        where: {
+          deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } },
+          previewStorageKey: { not: null },
+        },
+        select: { previewStorageKey: true },
+      });
+      generated.forEach((file) => file.previewStorageKey && trackedKeys.add(file.previewStorageKey));
     }
-    await app.close();
+    // Bucket hygiene first (independent of DB state).
+    // R2 requests are independent; parallel cleanup keeps the live suite fast
+    // while the extended hook timeout absorbs normal remote-service latency.
+    await Promise.all([...trackedKeys].map((key) => storage.deleteObject(key).catch(() => undefined)));
+    await app?.close();
+    if (!db) return;
     await db.dealPayment.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
     await db.dealEvent.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
     await db.dealDeliverable.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
@@ -168,7 +183,7 @@ describe.skipIf(!dbConfigured || !secretConfigured || !r2Configured)('file stora
     await db.deal.deleteMany({ where: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } });
     await db.user.deleteMany({ where: { email: { in: [EMAIL_A, EMAIL_B] } } });
     await db.$disconnect();
-  });
+  }, 60_000);
 
   // ── upload-url ───────────────────────────────────────────────────────────────
 
@@ -188,12 +203,20 @@ describe.skipIf(!dbConfigured || !secretConfigured || !r2Configured)('file stora
       { dealId: dealA.id, role: 'PREVIEW', filename: 'x.exe', mime: 'application/x-msdownload' },
       { dealId: dealA.id, role: 'ATTACHMENT', filename: 'x.png', mime: 'image/png' },
       { dealId: dealA.id, role: 'PREVIEW', filename: 'x.png', mime: 'image/png', evil: true },
-      { dealId: dealA.id, role: 'PREVIEW', filename: 'x.png', mime: 'image/png', sizeBytes: 999_999_999 },
     ]) {
       const { status, body } = await call('POST', '/api/v1/files/upload-url', payload, a.accessToken);
       expect(status).toBe(400);
       expect(body.error!.code).toBe('VALIDATION_ERROR');
     }
+
+    const oversized = await call(
+      'POST',
+      '/api/v1/files/upload-url',
+      { dealId: dealA.id, role: 'PREVIEW', filename: 'x.png', mime: 'image/png', sizeBytes: 999_999_999 },
+      a.accessToken,
+    );
+    expect(oversized.status).toBe(413);
+    expect(oversized.body.error!.code).toBe('PREVIEW_SOURCE_TOO_LARGE');
   });
 
   timed('upload-url on a foreign deal is the same 404 as a missing one', async () => {
@@ -218,9 +241,9 @@ describe.skipIf(!dbConfigured || !secretConfigured || !r2Configured)('file stora
     expect(status).toBe(201);
     const upload = body.data!.upload as { uploadUrl: string; storageKey: string; mime: string; expiresIn: number };
     track(upload.storageKey);
-    // Pattern per plan: creators/{creatorId}/deals/{dealId}/{previews|final}/{uuid}-{safeName}
+    // Source objects are isolated from generated client previews.
     expect(upload.storageKey).toMatch(
-      new RegExp(`^creators/${profile.id}/deals/${dealA.id}/previews/[0-9a-f-]{36}-[A-Za-z0-9._-]+$`),
+      new RegExp(`^creators/${profile.id}/deals/${dealA.id}/review-sources/[0-9a-f-]{36}-[A-Za-z0-9._-]+$`),
     );
     // Unsafe characters were reduced, never carried through.
     expect(upload.storageKey).toContain('behind-the-scenes-.png');
@@ -232,9 +255,9 @@ describe.skipIf(!dbConfigured || !secretConfigured || !r2Configured)('file stora
 
   timed('finalize rejects keys outside the caller namespace or shape', async () => {
     for (const storageKey of [
-      `creators/someone-else/deals/${dealA.id}/previews/evil.png`, // foreign namespace
+      `creators/someone-else/deals/${dealA.id}/review-sources/evil.png`, // foreign namespace
       `creators/x/deals/${dealA.id}/final/handmade.png`, // no uuid segment
-      `creators/x/deals/${dealA.id}/previews/../../evil.png`, // traversal attempt
+      `creators/x/deals/${dealA.id}/review-sources/../../evil.png`, // traversal attempt
     ]) {
       const { status, body } = await call(
         'POST',
@@ -296,6 +319,7 @@ describe.skipIf(!dbConfigured || !secretConfigured || !r2Configured)('file stora
     // key or uploader. (The presigned URL itself contains the key path inside
     // its signature — that is the signed capability, by design.)
     expect(download.file.sizeBytes).toBe(PNG_BYTES.byteLength);
+    expect(download.file.mime).toBe('image/png');
     expect(download.file).not.toHaveProperty('storageKey');
     expect(download.file).not.toHaveProperty('uploadedBy');
     expect(JSON.stringify(download.file)).not.toContain('storageKey');
@@ -348,10 +372,10 @@ describe.skipIf(!dbConfigured || !secretConfigured || !r2Configured)('file stora
     expect(body.data!.files).toEqual([]);
   });
 
-  timed('preview download before delivery is a non-committal 404', async () => {
-    const { status, body } = await call('GET', `/api/v1/shared/${dealA.shareToken}/files/${previewFile.fileId}/download-url`);
-    expect(status).toBe(404);
-    expect(body.error!.code).toBe('FILE_NOT_FOUND');
+  timed('preview stream before delivery is a non-committal 404', async () => {
+    const response = await fetch(`${baseUrl}/api/v1/shared/${dealA.shareToken}/files/${previewFile.fileId}/preview`);
+    expect(response.status).toBe(404);
+    expect((await response.json() as Envelope<unknown>).error!.code).toBe('FILE_NOT_FOUND');
   });
 
   timed('drive the deal: send -> deposit fixture -> deliver', async () => {
@@ -376,7 +400,7 @@ describe.skipIf(!dbConfigured || !secretConfigured || !r2Configured)('file stora
     expect(deliver.status).toBe(200);
   });
 
-  timed('previews become visible to the client from DELIVERED (inline disposition)', async () => {
+  timed('previews become visible only as reduced server-generated streams', async () => {
     const list = await call('GET', `/api/v1/shared/${dealA.shareToken}/files`);
     expect(list.status).toBe(200);
     const files = list.body.data!.files as { id: string; role: string; filename: string }[];
@@ -385,11 +409,15 @@ describe.skipIf(!dbConfigured || !secretConfigured || !r2Configured)('file stora
     expect(files[0]!.filename).toBe('rink proof.png');
     expect(JSON.stringify(list.body)).not.toContain('storageKey');
 
-    const dl = await call('GET', `/api/v1/shared/${dealA.shareToken}/files/${previewFile.fileId}/download-url`);
-    expect(dl.status).toBe(200);
-    const download = dl.body.data!.download as { downloadUrl: string };
-    // Previews render on the share page — the signed URL carries inline disposition.
-    expect(decodeURIComponent(download.downloadUrl)).toContain('response-content-disposition=inline');
+    const sourceUrl = await call('GET', `/api/v1/shared/${dealA.shareToken}/files/${previewFile.fileId}/download-url`);
+    expect(sourceUrl.status).toBe(404);
+
+    const preview = await fetch(`${baseUrl}/api/v1/shared/${dealA.shareToken}/files/${previewFile.fileId}/preview`);
+    expect(preview.status).toBe(200);
+    expect(preview.headers.get('content-type')).toContain('image/webp');
+    expect(preview.headers.get('cache-control')).toContain('no-store');
+    expect(preview.headers.get('content-disposition')).toContain('inline');
+    expect((await preview.arrayBuffer()).byteLength).toBeGreaterThan(0);
   });
 
   timed('final download before release is a non-committal 404', async () => {
@@ -460,6 +488,7 @@ describe.skipIf(!dbConfigured || !secretConfigured || !r2Configured)('file stora
     const download = dl.body.data!.download as { downloadUrl: string; file: { releasedAt: string | null } };
     // Finals are downloads, not inline renders.
     expect(decodeURIComponent(download.downloadUrl)).toContain('response-content-disposition=attachment');
+    expect((dl.body.data!.download as { expiresIn: number }).expiresIn).toBe(120);
 
     const after = await db.fileAsset.findUniqueOrThrow({ where: { id: finalFile.fileId }, select: { releasedAt: true } });
     expect(after.releasedAt).not.toBeNull();

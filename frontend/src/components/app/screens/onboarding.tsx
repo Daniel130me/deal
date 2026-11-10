@@ -6,7 +6,6 @@ import {
   Camera,
   Check,
   ChevronDown,
-  ImagePlus,
   Link2,
   Loader2,
   Plus,
@@ -47,7 +46,7 @@ import {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const ONBOARD_STEPS = ["Profile", "Services", "Preview", "Publish"];
+const ONBOARD_STEPS = ["Profile", "Services", "Review", "Publish"];
 
 const HANDLE_PATTERN = /^[a-z0-9-]{3,30}$/;
 
@@ -327,33 +326,6 @@ export default function OnboardingScreen() {
               This is how clients will see you on your public DEAL page.
             </p>
 
-            <div className="mt-6 rounded-2xl border border-primary/20 bg-accent/60 p-4">
-              <div className="flex items-center gap-4">
-                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white">
-                  <ImagePlus className="h-6 w-6 text-primary" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-extrabold text-foreground">Upload a clear photo of you</p>
-                  <p className="text-xs font-medium text-muted-foreground">
-                    JPG, PNG or WEBP. Max 5MB.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="border-primary/40 font-bold text-primary"
-                  onClick={() =>
-                    toast.info("Photo upload is coming soon", {
-                      description: "Your profile works great without it for this demo.",
-                    })
-                  }
-                >
-                  Upload
-                </Button>
-              </div>
-            </div>
-
             <div className="mt-5 space-y-4">
               <div>
                 <label className="text-[13px] font-extrabold text-foreground">Display name</label>
@@ -586,8 +558,8 @@ export default function OnboardingScreen() {
                 <p className="mt-2 flex items-start gap-1.5 rounded-xl bg-secondary p-3 text-[11px] font-medium leading-relaxed text-muted-foreground">
                   <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                   <span>
-                    Escrow is still managed by <span className="font-bold text-foreground">DEAL</span>{" "}
-                    — the rail you pick only processes the charges. Clients can pay via either one.
+                    The rail you pick opens first for clients. The provider processes the charge,
+                    and DEAL records the verified result against the agreement.
                   </span>
                 </p>
               </div>
@@ -667,7 +639,7 @@ export default function OnboardingScreen() {
               disabled={busy}
               className="mt-6 h-13 w-full rounded-xl text-[15px] font-bold"
             >
-              {busy ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <>Continue to preview <ArrowRight className="ml-1 h-4.5 w-4.5" /></>}
+              {busy ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <>Continue to review <ArrowRight className="ml-1 h-4.5 w-4.5" /></>}
             </Button>
           </div>
         )}
@@ -676,7 +648,7 @@ export default function OnboardingScreen() {
         {step === 2 && (
           <div className="mt-7 flex-1">
             <h1 className="text-[26px] font-extrabold leading-tight tracking-tight text-foreground">
-              Preview your
+              Review your
               <br />
               <span className="text-primary">DEAL page</span>
             </h1>

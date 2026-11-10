@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from './test-api';
 import type { INestApplication } from '@nestjs/common';
 import { createApp } from '../src/app';
 
@@ -13,7 +13,8 @@ import { createApp } from '../src/app';
  * and the public submission rate limit (tested LAST — it burns the bucket).
  */
 
-const dbConfigured = typeof process.env.NEON_DATABASE_URL === 'string';
+const dbConfigured =
+  process.env.RUN_DATABASE_TESTS === 'true' && typeof process.env.NEON_DATABASE_URL === 'string';
 const secretConfigured =
   typeof process.env.JWT_ACCESS_SECRET === 'string' && process.env.JWT_ACCESS_SECRET.length >= 32;
 
@@ -34,16 +35,16 @@ interface Envelope<T> {
 
 interface Session {
   accessToken: string;
-  refreshToken: string;
   user: { id: string; role: string };
 }
 
 describe.skipIf(!dbConfigured || !secretConfigured)('creator domain (integration, e2e)', () => {
   /** Neon round-trips cost 0.2-2s and tests make several sequential calls —
-   *  the 5s bun default is not enough headroom. */
+   *  the default timeout is not enough headroom. */
   const timed = (name: string, fn: () => Promise<void>) => it(name, fn, 30_000);
   let app: INestApplication;
   let baseUrl: string;
+  let setupComplete = false;
   let a: Session;
   let b: Session;
   let serviceId: string;
@@ -71,6 +72,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('creator domain (integration
     app = await createApp();
     await app.listen(0); // ephemeral port
     baseUrl = await app.getUrl();
+    setupComplete = true;
 
     const signupA = await call('POST', '/api/v1/auth/signup', { email: EMAIL_A, password: PASSWORD });
     const signupB = await call('POST', '/api/v1/auth/signup', { email: EMAIL_B, password: PASSWORD });
@@ -79,7 +81,8 @@ describe.skipIf(!dbConfigured || !secretConfigured)('creator domain (integration
   });
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
+    if (!setupComplete) return;
     // FK-safe cleanup: domain rows first (RESTRICT), then the users cascade
     // away profiles, channels and refresh tokens.
     const { PrismaClient } = await import('@prisma/client');

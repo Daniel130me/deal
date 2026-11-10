@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from './test-api';
 import type { INestApplication } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { createApp } from '../src/app';
@@ -21,7 +21,8 @@ import { createApp } from '../src/app';
  * under test starts FROM ACTIVE; how a deal becomes ACTIVE is out of scope.
  */
 
-const dbConfigured = typeof process.env.NEON_DATABASE_URL === 'string';
+const dbConfigured =
+  process.env.RUN_DATABASE_TESTS === 'true' && typeof process.env.NEON_DATABASE_URL === 'string';
 const secretConfigured =
   typeof process.env.JWT_ACCESS_SECRET === 'string' && process.env.JWT_ACCESS_SECRET.length >= 32;
 
@@ -41,12 +42,11 @@ interface Envelope<T> {
 
 interface Session {
   accessToken: string;
-  refreshToken: string;
   user: { id: string; role: string };
 }
 
 describe.skipIf(!dbConfigured || !secretConfigured)('deal engine (integration, e2e)', () => {
-  /** Neon round-trips cost 0.2-2s — the 5s bun default is not enough headroom. */
+  /** Neon round-trips cost 0.2-2s — use explicit integration-test headroom. */
   const timed = (name: string, fn: () => Promise<void>, ms = 30_000) => it(name, fn, ms);
   let app: INestApplication;
   let baseUrl: string;
@@ -128,7 +128,8 @@ describe.skipIf(!dbConfigured || !secretConfigured)('deal engine (integration, e
   }, 60_000);
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
+    if (!db) return;
     // FK-safe cleanup: deal children first, then deals, requests, services,
     // then the users (which cascade away profiles/channels/refresh tokens).
     await db.dealPayment.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });

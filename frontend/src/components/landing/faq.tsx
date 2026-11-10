@@ -13,17 +13,17 @@ const FAQS = [
   {
     question: "When do I actually receive my money?",
     answer:
-      "The moment your client approves the completed work. Everything they've paid — deposit and installments — is sitting in DEAL escrow, and on approval it releases automatically to you. No “confirm payout” step, no waiting around.",
+      "The selected payment provider processes and settles the charge under the merchant account configured for DEAL. DEAL records the provider-confirmed payment and the client's approval decision.",
   },
   {
     question: "Can my client pay in installments?",
     answer:
-      "Yes. You set the structure: a deposit plus up to 3 installments, or any balance afterwards. Your client can pay the next installment whenever they're ready — and every single payment is secured in DEAL escrow until the work is approved.",
+      "Yes. You set the structure: a deposit plus up to 3 installments, or any balance afterwards. Your client can pay the next installment whenever they are ready, and every verified charge is recorded against the agreement.",
   },
   {
     question: "How do payments work?",
     answer:
-      "Payments are processed by Flutterwave or Paystack — card, bank transfer or USSD. But the money is held by DEAL, not the gateway: DEAL escrow keeps every payment locked until the client approves the work, then releases it to the creator. The gateway processes the charge; DEAL protects both sides.",
+      "Flutterwave and Paystack provide hosted checkout. DEAL verifies provider responses and records charges against each agreement. Refunds and settlement follow the selected provider account's operating process.",
   },
   {
     question: "Can clients book a session with me?",
@@ -33,12 +33,12 @@ const FAQS = [
   {
     question: "How are my files protected?",
     answer:
-      "Clients review watermarked, reduced-quality previews — never the originals. Full-quality files unlock only when the work is approved AND the deal is fully paid, so nobody walks away with your work before you've been paid.",
+      "Clients review watermarked, reduced-quality copies — never the originals. Full-quality files unlock only when the work is approved AND the deal is fully paid, so nobody walks away with your work before you've been paid.",
   },
   {
     question: "Who is DEAL for?",
     answer:
-      "DEAL is built for 7 creative crafts: photographers, videographers, motion designers, graphic designers, video editors, illustrators and voice artists. Niching down means the agreements, escrow and file protection are tuned to how creative work actually happens — not a generic freelancer app.",
+      "DEAL is built for 7 creative crafts: photographers, videographers, motion designers, graphic designers, video editors, illustrators and voice artists. Niching down means the agreements, payment records and file protection are tuned to how creative work actually happens — not a generic freelancer app.",
   },
 ];
 

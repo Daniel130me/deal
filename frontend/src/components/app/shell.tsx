@@ -16,6 +16,7 @@ const ClientDealScreen = lazy(() => import("@/components/app/screens/client-deal
 const PublicPageScreen = lazy(() => import("@/components/app/screens/public-page"));
 const BookingsScreen = lazy(() => import("@/components/app/screens/bookings"));
 const MoneyScreen = lazy(() => import("@/components/app/screens/money"));
+const LegalScreen = lazy(() => import("@/components/app/screens/legal"));
 
 function ScreenLoading() {
   return (
@@ -77,6 +78,14 @@ function Router() {
     return (
       <Suspense fallback={<ScreenLoading />}>
         <PublicPageScreen handle={parts[1]} />
+      </Suspense>
+    );
+  }
+
+  if (parts[0] === "terms" || parts[0] === "privacy") {
+    return (
+      <Suspense fallback={<ScreenLoading />}>
+        <LegalScreen document={parts[0]} />
       </Suspense>
     );
   }

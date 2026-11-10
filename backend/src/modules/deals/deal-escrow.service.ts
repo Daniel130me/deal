@@ -53,8 +53,11 @@ export class DealEscrowService {
         dealId: deal.id,
         type: DealEventType.PAYMENT_RELEASED,
         actor: ActorType.SYSTEM,
-        label: `${formatNairaMinor(total)} released from escrow to the creator's payout account`,
-        metadata: { releasedCount: held.length, totalMinor: total },
+        label: `${formatNairaMinor(total)} released in the DEAL escrow ledger`,
+        // Settlement is deliberately explicit: no provider transfer exists yet.
+        // This metadata prevents downstream consumers from mistaking a ledger
+        // transition for confirmed payout execution.
+        metadata: { releasedCount: held.length, totalMinor: total, settlement: 'LEDGER_ONLY' },
       },
     });
     return { count: held.length, totalMinor: total };

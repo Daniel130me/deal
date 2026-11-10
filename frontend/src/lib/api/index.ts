@@ -14,12 +14,13 @@ import type {
   Deal,
   Service,
 } from "@/lib/types";
-import { transport, API_BASE_URL, ApiError } from "./client";
+import { transport, API_BASE_URL, ApiError, rawApiUrl } from "./client";
 import {
   buildSessionUser,
   clearSession,
   getAccessToken,
-  saveTokens,
+  getLegacyRefreshToken,
+  saveAccessToken,
   setSessionUser,
   stashSignupName,
   takeStashedSignupName,
@@ -70,7 +71,7 @@ export type PayMethod = "card" | "transfer" | "ussd";
  * with the creator profile (404 = profile-less user — fresh signup or admin).
  */
 async function establishSession(payload: AuthPayload): Promise<SessionUser> {
-  saveTokens(payload.accessToken, payload.refreshToken);
+  saveAccessToken(payload.accessToken);
   const profile = await fetchProfileOrNull(payload.user);
   const session = buildSessionUser(payload.user, profile);
   setSessionUser(session);
@@ -129,10 +130,8 @@ export const auth = {
   async logout(): Promise<void> {
     // Best-effort server revocation; the local session dies regardless.
     try {
-      const refreshToken = localStorage.getItem("deal_refresh_token");
-      if (refreshToken) {
-        await transport.post("/auth/logout", { refreshToken });
-      }
+      const legacyRefreshToken = getLegacyRefreshToken();
+      await transport.post("/auth/logout", legacyRefreshToken ? { refreshToken: legacyRefreshToken } : {});
     } catch {
       // already invalid / network gone — nothing to do
     }
@@ -398,6 +397,11 @@ export const shared = {
     const data = await transport.get<FileDownloadDto>(`/shared/${token}/files/${fileId}/download-url`);
     return data.download.downloadUrl;
   },
+
+  /** Backend-streamed, server-generated derivative; never an original or R2 URL. */
+  filePreviewUrl(token: string, fileId: string): string {
+    return rawApiUrl(`/shared/${encodeURIComponent(token)}/files/${encodeURIComponent(fileId)}/preview`);
+  },
 };
 
 /* ---- files (creator uploads) ---- */
@@ -567,6 +571,7 @@ export const api = {
   initializeSharedPayment: shared.initializePayment,
   verifySharedPayment: shared.verifyPayment,
   sharedFileDownloadUrl: shared.fileDownloadUrl,
+  sharedFilePreviewUrl: shared.filePreviewUrl,
   // public creator pages
   publicCreator: publicApi.creator,
   sendRequest: publicApi.sendRequest,

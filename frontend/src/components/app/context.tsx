@@ -50,7 +50,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       api
         .me()
         .then((fresh) => setUserState(fresh))
-        .catch(() => undefined); // offline / expired — the stored session still renders
+        .catch(() => {
+          // The API client already attempts token refresh. If revalidation still
+          // fails, do not leave a stale identity rendered as authenticated.
+          setUserState(null);
+          setSessionUser(null);
+        });
     }
   }, []);
 
@@ -88,14 +93,4 @@ export function useApp(): AppContextValue {
   const ctx = useContext(AppContext);
   if (!ctx) throw new Error("useApp must be used within AppProvider");
   return ctx;
-}
-
-export async function quickDemoLogin(
-  navigate: (to: string) => void,
-  setUser: (u: SessionUser | null) => void
-) {
-  const { user } = await api.login({ contact: "tobi@deal.ng", password: "demo1234" });
-  setUser(user);
-  navigate("/dashboard");
-  return user;
 }

@@ -76,6 +76,27 @@ export class R2StorageProvider implements StorageProvider {
     }
   }
 
+  async getObjectBytes(key: string): Promise<Uint8Array> {
+    const object = await this.client.send(new GetObjectCommand({ Bucket: this.config.bucket, Key: key }));
+    if (!object.Body) {
+      throw new Error('Storage returned an empty object body');
+    }
+    return object.Body.transformToByteArray();
+  }
+
+  async putObject(key: string, body: Uint8Array, contentType: string): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.config.bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+        // Generated previews must never be cached by a shared intermediary.
+        CacheControl: 'private, no-store, max-age=0',
+      }),
+    );
+  }
+
   async deleteObject(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.config.bucket, Key: key }));
   }

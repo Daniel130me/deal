@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
   ActorType,
   DealEventType,
@@ -73,8 +73,9 @@ type TxInitMeta = Prisma.InputJsonObject & {
  *   atomic: DealPayment row + PaymentTransaction verification + DealEvent
  *   (+ SENT -> ACTIVE for the deposit) in ONE Prisma transaction.
  * - Escrow is DEAL's, never the gateway's: payments before approval are HELD
- *   until the client's approve releases them; payments after approval go
- *   straight to the creator (RELEASED at landing, prototype parity).
+ *   until the client's approve releases them in DEAL's ledger; payments after
+ *   approval are marked RELEASED at landing. Provider payout execution is a
+ *   separate, currently unimplemented settlement concern.
  */
 @Injectable()
 export class PaymentsService {
@@ -86,7 +87,7 @@ export class PaymentsService {
     private readonly flutterwave: FlutterwaveGateway,
     // Constructed only when PAYSTACK_SECRET_KEY is set (integration module) —
     // a missing rail is an explicit 503, never a silent fallback.
-    private readonly paystack: PaystackGateway | null,
+    @Inject(PaystackGateway) private readonly paystack: PaystackGateway | null,
     private readonly notifications: NotificationsService,
   ) {}
 
@@ -220,23 +221,33 @@ export class PaymentsService {
     const verified = await gateway.verifyPayment(tx.providerRef);
 
     if (verified.status !== 'successful') {
-      await this.prisma.paymentTransaction.update({
-        where: { id: tx.id },
+      const update = await this.prisma.paymentTransaction.updateMany({
+        // A slower poll must never downgrade a transaction that another
+        // request verified successfully while this gateway call was in flight.
+        where: { id: tx.id, verifiedAt: null },
         data: {
           gatewayStatus: verified.status,
           raw: this.withVerified(tx.raw, verified),
         },
       });
+      if (update.count === 0) {
+        const concurrent = await this.concurrentSuccessfulVerification(tx.id);
+        if (concurrent) return concurrent;
+      }
       return this.verificationFrom(tx, verified.status);
     }
 
     // Gateway says successful — the only moment money may land. Both mismatch
     // checks hold the charge for review instead of landing a wrong amount.
     if (verified.currency !== PAYMENT_CURRENCY) {
-      await this.prisma.paymentTransaction.update({
-        where: { id: tx.id },
+      const update = await this.prisma.paymentTransaction.updateMany({
+        where: { id: tx.id, verifiedAt: null },
         data: { gatewayStatus: 'currency_mismatch', raw: this.withVerified(tx.raw, verified) },
       });
+      if (update.count === 0) {
+        const concurrent = await this.concurrentSuccessfulVerification(tx.id);
+        if (concurrent) return concurrent;
+      }
       throw this.fail(
         'PAYMENT_AMOUNT_MISMATCH',
         `The charge came back in ${verified.currency || 'an unexpected currency'} — this deal is priced in ${PAYMENT_CURRENCY}`,
@@ -244,10 +255,14 @@ export class PaymentsService {
       );
     }
     if (verified.amountMinor !== tx.amountMinor) {
-      await this.prisma.paymentTransaction.update({
-        where: { id: tx.id },
+      const update = await this.prisma.paymentTransaction.updateMany({
+        where: { id: tx.id, verifiedAt: null },
         data: { gatewayStatus: 'amount_mismatch', raw: this.withVerified(tx.raw, verified) },
       });
+      if (update.count === 0) {
+        const concurrent = await this.concurrentSuccessfulVerification(tx.id);
+        if (concurrent) return concurrent;
+      }
       throw this.fail(
         'PAYMENT_AMOUNT_MISMATCH',
         'The verified amount does not match what was charged — payment held for review',
@@ -307,7 +322,8 @@ export class PaymentsService {
           : { type: 'BALANCE' as PaymentType, label: 'Balance payment', amountMinor: verified.amountMinor };
 
       // Escrow is decided from the deal status UNDER THE LOCK: before approval
-      // money waits in escrow; after approval it goes straight to the creator.
+      // money waits in escrow; after approval the DEAL ledger marks it released.
+      // This is not proof of an external transfer to the creator.
       const released = isApprovedStatus(deal.status);
       const now = new Date();
 
@@ -334,7 +350,7 @@ export class PaymentsService {
           const existing = await db.dealPayment.findUnique({ where: { reference: tx.providerRef } });
           if (existing) {
             await this.markVerified(db, tx, existing.id, verified);
-            return { payment: existing, deal, slotLabel: attributed.label };
+            return { payment: existing, deal, slotLabel: attributed.label, newlyCreated: false };
           }
         }
         throw error;
@@ -389,22 +405,26 @@ export class PaymentsService {
         });
       }
 
-      return { payment, deal, slotLabel: attributed.label };
+      return { payment, deal, slotLabel: attributed.label, newlyCreated: true };
     });
 
     // AFTER commit: money is fact, the nudge is advisory — a failed
     // notification never rolls back (or fails) a verified landing.
-    await this.notifications.notify({
-      userId: landed.deal.creator.userId,
-      type: NOTIFICATION_TYPES.PAYMENT_RECEIVED,
-      payload: {
-        dealId: landed.deal.id,
-        dealRef: landed.deal.ref,
-        label: `${formatNairaMinor(landed.payment.amountMinor)} paid — ${landed.slotLabel}`,
-        amountMinor: landed.payment.amountMinor,
-        reference: tx.providerRef,
-      },
-    });
+    // A concurrent verifier that reused the existing DealPayment must not send
+    // a second notification for the same provider reference.
+    if (landed.newlyCreated) {
+      await this.notifications.notify({
+        userId: landed.deal.creator.userId,
+        type: NOTIFICATION_TYPES.PAYMENT_RECEIVED,
+        payload: {
+          dealId: landed.deal.id,
+          dealRef: landed.deal.ref,
+          label: `${formatNairaMinor(landed.payment.amountMinor)} paid — ${landed.slotLabel}`,
+          amountMinor: landed.payment.amountMinor,
+          reference: tx.providerRef,
+        },
+      });
+    }
 
     return this.paymentProjection(landed.payment);
   }
@@ -445,6 +465,17 @@ export class PaymentsService {
       ? dealAmounts(deal.status, deal, deal.payments)
       : dealAmounts(DealStatus.DRAFT, { priceMinor: 0, depositPercent: 0, installmentsCount: 0 }, []);
     return { status, reference: tx.providerRef, ...(payment ? { payment } : {}), amounts };
+  }
+
+  /**
+   * A gateway check happens outside the database transaction and may return
+   * after another request has already landed the charge. Re-read only when a
+   * conditional outcome write loses that race; the verified row is then the
+   * authoritative response and must not be overwritten by stale gateway data.
+   */
+  private async concurrentSuccessfulVerification(transactionId: string): Promise<PaymentVerification | null> {
+    const current = await this.prisma.paymentTransaction.findUnique({ where: { id: transactionId } });
+    return current?.verifiedAt ? this.verificationFrom(current, 'successful') : null;
   }
 
   private paymentProjection(payment: DealPayment): PaymentVerification['payment'] {

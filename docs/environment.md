@@ -8,7 +8,9 @@ Every variable the backend reads is declared, validated, and documented in `back
 |---|---|---|---|
 | `NODE_ENV` | no (default `development`) | `development` \| `test` \| `production` | fail-fast rules, Swagger mount |
 | `PORT` | no (default `3001`) | int 1–65535 | HTTP listen |
-| `FRONTEND_URL` | **in production** (else defaults `http://localhost:3000`) | production: must start `https://` | CORS allowlist, hosted-checkout redirect base |
+| `MAX_JSON_BODY_KB` | no (default `100`) | int 1–1024 | global JSON/form parser ceiling, including webhooks |
+| `TRUST_PROXY_HOPS` | no (default `0`) | int 0–3 | trusted gateway hops used to derive client IPs for throttling |
+| `FRONTEND_URL` | **in production** (else defaults `http://localhost:3000`) | comma-separated origins; every production origin must use `https://` | CORS allowlist; first origin is the hosted-checkout redirect base |
 | `NEON_DATABASE_URL` | yes | `postgresql://` URL (pooled endpoint, `sslmode=require`) | Prisma runtime |
 | `NEON_DIRECT_URL` | yes (migrations) | `postgresql://` URL (direct endpoint) | `prisma migrate` (bypasses PgBouncer) |
 | `JWT_ACCESS_SECRET` | yes | min 32 chars (≥256 bits) | HS256 access-token signing |
@@ -27,6 +29,13 @@ Anything a boot cannot work without is **required with no dev default** (`JWT_AC
 ## Naming conventions & gotchas
 
 - **`NEON_*` naming is deliberate.** The sandbox exports a workspace-global `DATABASE_URL` into every process (the frontend prototype's SQLite file), and real environment variables beat `.env` files — so the backend owns distinct names and can never be shadowed.
+- `FRONTEND_URL` may contain multiple exact origins. Ordering is significant: the first origin is canonical for hosted-checkout redirects, while all entries are allowed by CORS.
+- Keep `TRUST_PROXY_HOPS=0` when the Node process is directly reachable. Set it to the exact controlled proxy count only when every request passes through that gateway; otherwise clients can forge `X-Forwarded-For` and evade IP throttles.
 - `backend/.env` is gitignored (chmod 600); `.env.example` documents every slot. Real secrets are never committed.
 - The Paystack public/secret key pair follows the same pattern as Flutterwave: the **public** key is a browser credential (frontend concern), the **secret** key is the only one the backend reads.
 - Test credentials (Flutterwave TEST keys, the dev R2 bucket) live in the same env slots — swap for live values at production cutover; no code changes.
+
+## Frontend server environment
+
+- `DEAL_API_ORIGIN` is the private Nest origin used by the Next `/api/v1` proxy; it defaults to `http://localhost:3001` in development and must be set explicitly in production.
+- `NEXT_PUBLIC_API_URL` is an optional browser-visible direct API override. Leave it unset for the preferred same-origin cookie model.

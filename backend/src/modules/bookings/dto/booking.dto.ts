@@ -7,7 +7,8 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
-import { DATE_PATTERN, TIME_PATTERN } from '../../requests/dto/request.dto';
+import { IsCalendarDate } from '../../../common/validation/calendar-date.validator';
+import { TIME_PATTERN } from '../../requests/dto/request.dto';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -25,7 +26,7 @@ export class PublicBookingDto {
   serviceId?: string;
 
   @IsString()
-  @Matches(DATE_PATTERN, { message: 'Date must be yyyy-mm-dd' })
+  @IsCalendarDate({ message: 'Date must be a real yyyy-mm-dd calendar date' })
   date!: string;
 
   @IsString()

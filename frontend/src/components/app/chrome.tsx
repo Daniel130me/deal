@@ -77,14 +77,6 @@ function AccountMenu({ align = "end" }: { align?: "start" | "end" }) {
           Edit profile, services & channels
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={async () => {
-            await fetch("/api/admin/reset", { method: "POST" });
-            window.location.reload();
-          }}
-        >
-          Reset demo data
-        </DropdownMenuItem>
         <DropdownMenuItem onClick={logout} className="text-red-600">
           Log out
         </DropdownMenuItem>
@@ -221,14 +213,6 @@ function AccountMenuContent() {
         Edit profile, services & channels
       </DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuItem
-        onClick={async () => {
-          await fetch("/api/admin/reset", { method: "POST" });
-          window.location.reload();
-        }}
-      >
-        Reset demo data
-      </DropdownMenuItem>
       <DropdownMenuItem onClick={logout} className="text-red-600">
         Log out
       </DropdownMenuItem>

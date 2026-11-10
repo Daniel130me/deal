@@ -200,7 +200,8 @@ model CreatorChannel {
   creatorId String
   type      ChannelType
   value     String
-  // ≤1 primary is enforced in the service layer (cannot be expressed as a plain unique index).
+  // ≤1 primary is also enforced by a partial unique index in the
+  // domain-constraints migration (Prisma cannot express it in this schema).
   isPrimary Boolean     @default(false)
   createdAt DateTime    @default(now())
 
@@ -251,8 +252,8 @@ model ClientRequest {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  creator CreatorProfile  @relation(fields: [creatorId], references: [id])
-  service Service?        @relation(fields: [serviceId], references: [id])
+  creator CreatorProfile @relation(fields: [creatorId], references: [id])
+  service Service?       @relation(fields: [serviceId], references: [id])
   deals   Deal[]
 
   @@index([creatorId])
@@ -399,28 +400,36 @@ model DealDelivery {
 }
 
 model FileAsset {
-  id         String    @id @default(cuid())
-  dealId     String
-  deliveryId String?
-  role       FileRole
-  storageKey String
-  filename   String
-  sizeBytes  Int
-  mime       String
-  uploadedBy String
+  id                 String    @id @default(cuid())
+  dealId             String
+  deliveryId         String?
+  role               FileRole
+  // The creator's source object. This key is never exposed to a shared client.
+  storageKey         String
+  filename           String
+  sizeBytes          Int
+  mime               String
+  uploadedBy         String
+  // PREVIEW assets are separate server-generated derivatives. Null means the
+  // asset must fail closed on the shared surface (for example, legacy rows).
+  previewStorageKey  String?   @unique
+  previewSizeBytes   Int?
+  previewMime        String?
+  previewGeneratedAt DateTime?
+  previewWatermark   String?
   // Stamped when a FINAL file first reaches the client through the share link —
   // reachable only after the release gate (approval + full payment). Previews stay null.
-  releasedAt DateTime?
-  createdAt  DateTime  @default(now())
+  releasedAt         DateTime?
+  createdAt          DateTime  @default(now())
 
   deal     Deal          @relation(fields: [dealId], references: [id])
   delivery DealDelivery? @relation(fields: [deliveryId], references: [id])
 
-  @@index([dealId])
-  @@index([deliveryId])
   // One registered asset per stored object: finalize is idempotent (P2002 ->
   // 409) and no two rows can ever point at the same bytes.
   @@unique([storageKey])
+  @@index([dealId])
+  @@index([deliveryId])
 }
 
 // Append-only audit trail — services must only INSERT here, never update or delete.
@@ -446,7 +455,8 @@ model Review {
   id        String   @id @default(cuid())
   dealId    String   @unique
   creatorId String
-  // 1..5 validated at the DTO/service layer (Prisma has no CHECK constraints).
+  // 1..5 is validated at the edge and by a DB CHECK in the domain-constraints
+  // migration (Prisma cannot express CHECK constraints in this schema).
   rating    Int
   comment   String?
   createdAt DateTime @default(now())
@@ -458,19 +468,19 @@ model Review {
 }
 
 model Dispute {
-  id         String        @id @default(cuid())
-  dealId     String
-  raisedBy   ActorType
-  raisedById String?
-  reason     String
-  status     DisputeStatus @default(OPEN)
+  id          String        @id @default(cuid())
+  dealId      String
+  raisedBy    ActorType
+  raisedById  String?
+  reason      String
+  status      DisputeStatus @default(OPEN)
   // The status the deal held when the dispute was raised — the restore point
   // if the platform rejects the dispute (resolution needs to know where the
   // lifecycle resumes; DealEvent metadata is not a reliable source of truth).
   priorStatus DealStatus?
-  resolvedAt DateTime?
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  resolvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   deal    Deal            @relation(fields: [dealId], references: [id])
   profile CreatorProfile? @relation(fields: [raisedById], references: [id])
@@ -489,8 +499,8 @@ model PayoutAccount {
 
   user User @relation(fields: [userId], references: [id])
 
-  @@index([userId])
   @@unique([userId, provider])
+  @@index([userId])
 }
 
 // ─── Auth sessions & integrations ─────────────────────────────────────────────

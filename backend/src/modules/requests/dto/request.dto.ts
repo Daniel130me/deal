@@ -5,15 +5,12 @@ import {
   IsOptional,
   IsString,
   Length,
-  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 import { LOCATION_MAX, MAX_MONEY_MINOR } from '../../creators/creators.constants';
-
-/** Plain calendar date (yyyy-mm-dd) — event dates are day-granular in the UI. */
-export const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+import { IsCalendarDate } from '../../../common/validation/calendar-date.validator';
 
 /** 24-hour clock time as the prototype stores it ("10:00"). */
 export const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -40,7 +37,7 @@ export class PublicRequestDto extends ClientContactBase {
   serviceId!: string;
 
   @IsOptional()
-  @Matches(DATE_PATTERN, { message: 'Event date must be yyyy-mm-dd' })
+  @IsCalendarDate({ message: 'Event date must be a real yyyy-mm-dd calendar date' })
   eventDate?: string;
 
   @IsOptional()

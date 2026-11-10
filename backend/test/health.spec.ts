@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from './test-api';
 import type { INestApplication } from '@nestjs/common';
 import { createApp } from '../src/app';
 
@@ -7,7 +7,7 @@ import { createApp } from '../src/app';
  * public contract — health probes outside /api/v1, request-id correlation,
  * response envelopes, and dev-only Swagger.
  */
-describe('DEAL API foundation (e2e)', () => {
+describe.skipIf(process.env.RUN_DATABASE_TESTS !== 'true')('DEAL API foundation (e2e)', () => {
   let app: INestApplication;
   let baseUrl: string;
 

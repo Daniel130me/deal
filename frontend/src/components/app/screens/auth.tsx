@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, Loader2, Lock, Mail, Sparkles, User } from "lucide-react";
+import { ArrowRight, Loader2, Lock, Mail, User } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/landing/logo";
 import { Button } from "@/components/ui/button";
@@ -22,9 +22,13 @@ export default function AuthScreen({
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const authenticatedDestination = redirectTo
+    ? `/${redirectTo.replace(/^\/+/, "")}`
+    : "/dashboard";
+
   async function enter(user: SessionUser) {
     setUser(user);
-    navigate(user.onboarded ? (redirectTo ? `/${redirectTo}` : "/dashboard") : "/onboarding");
+    navigate(user.onboarded ? authenticatedDestination : "/onboarding");
   }
 
   async function submit(e: React.FormEvent) {
@@ -46,28 +50,13 @@ export default function AuthScreen({
       } else {
         const { user } = await api.login({ contact, password });
         setUser(user);
-        navigate(user.onboarded ? (redirectTo ? `/${redirectTo}` : "/dashboard") : "/onboarding");
+        navigate(user.onboarded ? authenticatedDestination : "/onboarding");
         toast.success(`Welcome back, ${user.name.split(" ")[0]}!`);
       }
     } catch (err) {
       toast.error("Couldn't continue", {
         description: err instanceof Error ? err.message : "Please try again.",
       });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function demoLogin() {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const { user } = await api.login({ contact: "tobi@deal.ng", password: "demo1234" });
-      setUser(user);
-      navigate("/dashboard");
-      toast.success("Signed in as Tobi A. — explore the full demo!");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Demo login failed.");
     } finally {
       setBusy(false);
     }
@@ -104,7 +93,7 @@ export default function AuthScreen({
           <p className="mt-2 text-[15px] font-medium text-muted-foreground">
             {mode === "signup"
               ? "Send clear agreements, get paid in milestones and deliver with confidence."
-              : "Log in to manage your deals, requests and payouts."}
+              : "Log in to manage your deals, requests and payment records."}
           </p>
         </div>
 
@@ -180,26 +169,6 @@ export default function AuthScreen({
           )}
         </p>
 
-        <div className="my-6 flex items-center gap-3">
-          <span className="h-px flex-1 bg-border" />
-          <span className="text-[13px] font-semibold text-muted-foreground">or</span>
-          <span className="h-px flex-1 bg-border" />
-        </div>
-
-        <button
-          type="button"
-          onClick={demoLogin}
-          disabled={busy}
-          className="flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-accent px-4 py-3.5 text-[14px] font-extrabold text-accent-foreground transition-colors hover:bg-primary hover:text-white"
-        >
-          <Sparkles className="h-4.5 w-4.5" />
-          Explore the live demo as a creator
-        </button>
-        <p className="mt-3 text-center text-xs font-medium leading-relaxed text-muted-foreground">
-          Demo creator: <span className="font-bold text-foreground">tobi@deal.ng</span> · password{" "}
-          <span className="font-bold text-foreground">demo1234</span>. Clients don't need accounts —
-          they open deals through a share link.
-        </p>
       </div>
     </div>
   );

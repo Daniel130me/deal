@@ -1,10 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from './test-api';
 import type { INestApplication } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { ConfigService } from '../src/config/config.service';
 import { FlutterwaveGateway } from '../src/integrations/payments/flutterwave.gateway';
 import type { VerifiedPayment } from '../src/integrations/payments/payment-gateway';
 import { createApp } from '../src/app';
+import { NOTIFICATION_TYPES } from '../src/modules/notifications/notifications.constants';
 
 /**
  * Phase 8 acceptance: payment rails + webhook pipeline against the real app +
@@ -34,9 +35,12 @@ import { createApp } from '../src/app';
  * speaks the same port.
  */
 
-const dbConfigured = typeof process.env.NEON_DATABASE_URL === 'string';
+const dbConfigured =
+  process.env.RUN_DATABASE_TESTS === 'true' && typeof process.env.NEON_DATABASE_URL === 'string';
 const secretConfigured =
   typeof process.env.JWT_ACCESS_SECRET === 'string' && process.env.JWT_ACCESS_SECRET.length >= 32;
+const webhookConfigured =
+  typeof process.env.FLW_WEBHOOK_SECRET_HASH === 'string' && process.env.FLW_WEBHOOK_SECRET_HASH.length > 0;
 
 const RUN = `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
 const RUN36 = Date.now().toString(36) + Math.floor(Math.random() * 1_296).toString(36);
@@ -54,12 +58,15 @@ interface Envelope<T> {
 
 interface Session {
   accessToken: string;
-  refreshToken: string;
   user: { id: string; role: string };
 }
 
 describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pipeline (integration, e2e)', () => {
   const timed = (name: string, fn: () => Promise<void>, ms = 30_000) => it(name, fn, ms);
+  // A disabled webhook is a valid fail-closed deployment state. Keep the
+  // configuration-independent body-limit test active, but skip signed webhook
+  // behavior when no provider secret was supplied to this test process.
+  const webhookTest = webhookConfigured ? timed : (name: string, fn: () => Promise<void>) => it.skip(name, fn);
   let app: INestApplication;
   let baseUrl: string;
   let a: Session;
@@ -176,7 +183,8 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
   }, 60_000);
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
+    if (!db) return;
     // FK-safe cleanup: payment ledger first, then deal children, then owners.
     // WebhookEvent has no deal FK — scoped by the event ids this run created.
     for (const id of webhookEventIds) {
@@ -311,6 +319,105 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     expect(await db.dealPayment.count({ where: { dealId: deal.id } })).toBe(1); // exactly one landed row
   });
 
+  timed('concurrent successful verifies land and notify exactly once', async () => {
+    const deal = await sendDeal(a.accessToken, 4_000_000);
+    const init = await initialize(deal.shareToken);
+    const reference = (init.body.data as { reference: string }).reference;
+    const originalVerify = flw.verifyPayment;
+
+    let arrivals = 0;
+    let releaseBoth!: () => void;
+    const bothArrived = new Promise<void>((resolve) => {
+      releaseBoth = resolve;
+    });
+    flw.verifyPayment = async (gatewayReference: string) => {
+      arrivals += 1;
+      if (arrivals === 2) releaseBoth();
+      await bothArrived;
+      return originalVerify.call(flw, gatewayReference);
+    };
+
+    try {
+      const [first, second] = await Promise.all([
+        verify(deal.shareToken, reference),
+        verify(deal.shareToken, reference),
+      ]);
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+    } finally {
+      flw.verifyPayment = originalVerify;
+      releaseBoth();
+    }
+
+    expect(await db.dealPayment.count({ where: { dealId: deal.id } })).toBe(1);
+    expect(await db.dealEvent.count({ where: { dealId: deal.id, type: 'DEPOSIT_PAID' } })).toBe(1);
+
+    const creator = await db.deal.findUnique({
+      where: { id: deal.id },
+      select: { creator: { select: { userId: true } } },
+    });
+    const notices = await db.notification.findMany({
+      where: { userId: creator!.creator.userId, type: NOTIFICATION_TYPES.PAYMENT_RECEIVED },
+      select: { payload: true },
+    });
+    const noticesForDeal = notices.filter(
+      (notice) => (notice.payload as { dealId?: unknown } | null)?.dealId === deal.id,
+    );
+    expect(noticesForDeal).toHaveLength(1);
+  });
+
+  timed('a stale pending poll cannot downgrade a concurrently successful verification', async () => {
+    const deal = await sendDeal(a.accessToken, 4_000_000);
+    const init = await initialize(deal.shareToken);
+    const reference = (init.body.data as { reference: string }).reference;
+    const originalVerify = flw.verifyPayment;
+
+    let signalPendingEntered!: () => void;
+    const pendingEntered = new Promise<void>((resolve) => {
+      signalPendingEntered = resolve;
+    });
+    let releasePending!: () => void;
+    const pendingMayReturn = new Promise<void>((resolve) => {
+      releasePending = resolve;
+    });
+
+    flw.verifyPayment = async (gatewayReference: string) => {
+      signalPendingEntered();
+      await pendingMayReturn;
+      const row = await db.paymentTransaction.findUnique({ where: { providerRef: gatewayReference } });
+      return {
+        providerTransactionId: `FLW-PENDING-${gatewayReference}`,
+        reference: gatewayReference,
+        status: 'pending',
+        amountMinor: row?.amountMinor ?? 0,
+        currency: row?.currency ?? 'NGN',
+        raw: { fake: true, delayed: true },
+      };
+    };
+
+    const stalePoll = verify(deal.shareToken, reference);
+    let successful: Awaited<ReturnType<typeof verify>> | undefined;
+    let staleResult: Awaited<ReturnType<typeof verify>> | undefined;
+    try {
+      await pendingEntered;
+      flw.verifyPayment = originalVerify;
+      successful = await verify(deal.shareToken, reference);
+      releasePending();
+      staleResult = await stalePoll;
+    } finally {
+      flw.verifyPayment = originalVerify;
+      releasePending();
+    }
+
+    expect(successful!.status).toBe(200);
+    expect((successful!.body.data as { status: string }).status).toBe('successful');
+    expect(staleResult!.status).toBe(200);
+    expect((staleResult!.body.data as { status: string }).status).toBe('successful');
+    const stored = await db.paymentTransaction.findUnique({ where: { providerRef: reference } });
+    expect(stored?.gatewayStatus).toBe('successful');
+    expect(stored?.verifiedAt).not.toBeNull();
+  });
+
   timed('an installment lands on an ACTIVE deal as HELD with a BALANCE_PAID event', async () => {
     const deal = await sendDeal(a.accessToken, 4_000_000);
     const init = await initialize(deal.shareToken);
@@ -387,7 +494,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
 
   // ── Webhook pipeline ────────────────────────────────────────────────────────
 
-  timed('rejects deliveries with a missing or wrong signature', async () => {
+  webhookTest('rejects deliveries with a missing or wrong signature', async () => {
     const payload = { event: 'charge.completed', data: { id: webhookSeq(), tx_ref: 'x', status: 'successful' } };
     const noHash = await flwWebhook(payload, '');
     expect(noHash.status).toBe(401);
@@ -397,7 +504,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     expect(await db.webhookEvent.count({ where: { eventId: { in: [...webhookEventIds] } } })).toBe(0);
   });
 
-  timed('records and ignores non-successful charges without retry bait', async () => {
+  webhookTest('records and ignores non-successful charges without retry bait', async () => {
     const id = webhookSeq();
     const res = await flwWebhook({ event: 'charge.completed', data: { id, tx_ref: 'FLW-never-initialized', status: 'failed' } });
     expect(res.status).toBe(200);
@@ -408,7 +515,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     expect(row?.failureReason).toContain('ignored');
   });
 
-  timed('lands a successful charge delivered ONLY by webhook (the out-of-band path)', async () => {
+  webhookTest('lands a successful charge delivered ONLY by webhook (the out-of-band path)', async () => {
     const deal = await sendDeal(a.accessToken, 4_000_000);
     const init = await initialize(deal.shareToken);
     const reference = (init.body.data as { reference: string }).reference;
@@ -425,7 +532,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     expect(row?.failureReason).toBeNull();
   });
 
-  timed('a duplicate delivery is acknowledged without reprocessing', async () => {
+  webhookTest('a duplicate delivery is acknowledged without reprocessing', async () => {
     const deal = await sendDeal(a.accessToken, 4_000_000);
     const init = await initialize(deal.shareToken);
     const reference = (init.body.data as { reference: string }).reference;
@@ -438,7 +545,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     expect(await db.dealPayment.count({ where: { dealId: deal.id } })).toBe(1);
   });
 
-  timed('a second event for an already-landed reference short-circuits (still one payment)', async () => {
+  webhookTest('a second event for an already-landed reference short-circuits (still one payment)', async () => {
     const deal = await sendDeal(a.accessToken, 4_000_000);
     const init = await initialize(deal.shareToken);
     const reference = (init.body.data as { reference: string }).reference;
@@ -450,7 +557,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     expect(tx?.verifiedAt).not.toBeNull();
   });
 
-  timed('an unknown reference is marked processed with a failure reason (no retry loop)', async () => {
+  webhookTest('an unknown reference is marked processed with a failure reason (no retry loop)', async () => {
     const id = webhookSeq();
     const res = await flwWebhook({ event: 'charge.completed', data: { id, tx_ref: 'FLW-DEAL-000-DEPOSIT-deadbeef', status: 'successful' } });
     expect(res.status).toBe(200);
@@ -461,7 +568,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     expect(row?.failureReason).toContain('PAYMENT_NOT_FOUND');
   });
 
-  timed('an amount-mismatch webhook is held for review, not retried', async () => {
+  webhookTest('an amount-mismatch webhook is held for review, not retried', async () => {
     const deal = await sendDeal(a.accessToken, 4_000_000);
     const init = await initialize(deal.shareToken);
     const reference = (init.body.data as { reference: string }).reference;
@@ -481,10 +588,18 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     }
   });
 
-  timed('a structurally malformed payload (after signature) is 400', async () => {
+  webhookTest('a structurally malformed payload (after signature) is 400', async () => {
     const res = await flwWebhook({ event: 'charge.completed', data: { nope: true } });
     expect(res.status).toBe(400);
     expect(res.body.error?.code).toBe('WEBHOOK_PAYLOAD_INVALID');
+  });
+
+  timed('an oversized webhook is rejected before signature or business processing', async () => {
+    const maxBytes = app.get(ConfigService).maxJsonBodyKb * 1024;
+    const res = await call('POST', '/api/v1/webhooks/flutterwave', { padding: 'x'.repeat(maxBytes) }, undefined, {
+      'verif-hash': process.env.FLW_WEBHOOK_SECRET_HASH ?? 'missing',
+    });
+    expect(res.status).toBe(413);
   });
 
   timed('Paystack webhook is 503 while the rail has no keys', async () => {
@@ -550,7 +665,9 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
 
 // ── Live Flutterwave adapter (no stubs — speaks to the real test-mode rail) ───
 
-describe.skipIf(!dbConfigured || !process.env.FLW_SECRET_KEY)('FlutterwaveGateway (live adapter smoke)', () => {
+describe.skipIf(process.env.RUN_LIVE_GATEWAY_TESTS !== 'true' || !dbConfigured || !process.env.FLW_SECRET_KEY)(
+  'FlutterwaveGateway (live adapter smoke)',
+  () => {
   it('mints a hosted link and reports an unknown reference as pending', async () => {
     const app = await createApp();
     try {
@@ -575,4 +692,5 @@ describe.skipIf(!dbConfigured || !process.env.FLW_SECRET_KEY)('FlutterwaveGatewa
       await app.close();
     }
   }, 45_000);
-});
+  },
+);

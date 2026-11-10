@@ -43,8 +43,13 @@ const EMPTY_BOOKING = {
 type BookingForm = typeof EMPTY_BOOKING;
 
 export default function PublicPageScreen({ handle }: { handle: string }) {
-  const [data, setData] = useState<{ creator: PublicCreator; services: Service[] } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{
+    handle: string;
+    data: { creator: PublicCreator; services: Service[] } | null;
+    error: string | null;
+  }>({ handle: "", data: null, error: null });
+  const data = result.handle === handle ? result.data : null;
+  const error = result.handle === handle ? result.error : null;
   const [selected, setSelected] = useState<Service | null>(null);
   const [requestResult, setRequestResult] = useState<{ ref: string } | null>(null);
   const [bookingOpen, setBookingOpen] = useState(false);
@@ -54,14 +59,18 @@ export default function PublicPageScreen({ handle }: { handle: string }) {
 
   useEffect(() => {
     let alive = true;
-    // New handle = fresh view: without this reset a previous lookup's error
-    // (or its creator data) would stay on screen while the new one loads.
-    setData(null);
-    setError(null);
     api
       .publicCreator(handle)
-      .then((d) => alive && setData(d))
-      .catch((err) => alive && setError(err instanceof Error ? err.message : "Creator not found."));
+      .then((loaded) => alive && setResult({ handle, data: loaded, error: null }))
+      .catch(
+        (err) =>
+          alive &&
+          setResult({
+            handle,
+            data: null,
+            error: err instanceof Error ? err.message : "Creator not found.",
+          })
+      );
     return () => {
       alive = false;
     };
@@ -167,7 +176,7 @@ export default function PublicPageScreen({ handle }: { handle: string }) {
               {[
                 [`${creator.name} reviews your request`, "They'll go through your project details and may reach out for more info."],
                 ["You'll get a deal", "You'll receive a message with a deal covering scope, timeline and price."],
-                ["Approve to release payment", "Agree, pay safely into escrow, and only release when you're happy."],
+                ["Approve the ledger release", "Agree, pay through the provider, and approve only when you're happy."],
               ].map(([title, desc], i) => (
                 <li key={title} className="flex gap-3">
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-extrabold text-primary">
@@ -281,7 +290,7 @@ export default function PublicPageScreen({ handle }: { handle: string }) {
               <CalendarDays className="mr-2 h-4.5 w-4.5" /> Book a session
             </Button>
             <p className="mt-3 flex items-center justify-center gap-1.5 text-xs font-semibold text-emerald-100">
-              <ShieldCheck className="h-4 w-4" /> Payments protected by DEAL escrow
+              <ShieldCheck className="h-4 w-4" /> Payments verified and recorded by DEAL
             </p>
           </div>
         </div>
@@ -415,7 +424,7 @@ export default function PublicPageScreen({ handle }: { handle: string }) {
                   {[
                     `${creator.name} reviews the request and confirms the slot`,
                     "You'll get a confirmation with the details",
-                    "Any payments happen securely through DEAL escrow",
+                    "Payments happen on a supported provider's secure checkout",
                   ].map((step, i) => (
                     <li key={step} className="flex gap-2.5">
                       <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-extrabold text-primary">
@@ -622,8 +631,8 @@ function PublicFrame({
         </header>
         <main className="flex flex-1 flex-col">{children}</main>
         <p className="px-4 pb-6 text-center text-[11px] font-semibold text-muted-foreground">
-          {creator.name.split(" ")[0]} uses DEAL for agreements, escrow payments and protected
-          delivery.
+          {creator.name.split(" ")[0]} uses DEAL for agreements, verified payment records and
+          protected delivery.
         </p>
         <div className="pb-[env(safe-area-inset-bottom)]" />
       </div>

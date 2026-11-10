@@ -8,8 +8,10 @@
  * refreshes an expired access token (single-flight) before retrying once.
  *
  * Base URL resolution:
- * - NEXT_PUBLIC_API_URL  — absolute backend origin in production
- *   (e.g. https://api.deal.ng/api/v1). Empty/unset = same-origin "/api/v1".
+ * - Empty/unset NEXT_PUBLIC_API_URL uses same-origin "/api/v1", which Next
+ *   proxies to the server-only DEAL_API_ORIGIN. This is the preferred cookie-
+ *   safe deployment model.
+ * - NEXT_PUBLIC_API_URL is an optional direct browser-to-API override.
  * - NEXT_PUBLIC_API_PORT — sandbox-only: when set, every request appends
  *   `XTransformPort=<port>` so the preview gateway forwards it to the backend
  *   port. Leave unset in production.
@@ -41,20 +43,20 @@ interface ErrorEnvelope {
 /* ---- token plumbing (injected by session.ts to avoid a circular import) ---- */
 
 let readAccessToken: () => string | null = () => null;
-let readRefreshToken: () => string | null = () => null;
-let persistTokens: (access: string, refresh: string) => void = () => undefined;
+let readLegacyRefreshToken: () => string | null = () => null;
+let persistAccessToken: (access: string) => void = () => undefined;
 let dropSession: () => void = () => undefined;
 
 /** session.ts registers its storage-backed callbacks at import time. */
 export function bindTokenStore(store: {
   getAccessToken: () => string | null;
-  getRefreshToken: () => string | null;
-  saveTokens: (access: string, refresh: string) => void;
+  getLegacyRefreshToken: () => string | null;
+  saveAccessToken: (access: string) => void;
   clearSession: () => void;
 }): void {
   readAccessToken = store.getAccessToken;
-  readRefreshToken = store.getRefreshToken;
-  persistTokens = store.saveTokens;
+  readLegacyRefreshToken = store.getLegacyRefreshToken;
+  persistAccessToken = store.saveAccessToken;
   dropSession = store.clearSession;
 }
 
@@ -63,21 +65,22 @@ export function bindTokenStore(store: {
 let refreshInFlight: Promise<boolean> | null = null;
 
 async function refreshSession(): Promise<boolean> {
-  const refreshToken = readRefreshToken();
-  if (!refreshToken) return false;
+  const legacyRefreshToken = readLegacyRefreshToken();
 
   const res = await fetch(`${API_BASE_URL}/auth/refresh${portQuery()}`, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken }),
+    // Old sessions can migrate once by presenting their localStorage token;
+    // new sessions authenticate exclusively through the HttpOnly cookie.
+    body: JSON.stringify(legacyRefreshToken ? { refreshToken: legacyRefreshToken } : {}),
   });
   if (!res.ok) return false;
   const payload = (await res.json().catch(() => null)) as
-    | { data?: { accessToken: string; refreshToken: string } }
+    | { data?: { accessToken: string } }
     | null;
-  if (!payload?.data?.accessToken || !payload.data.refreshToken) return false;
-  // Rotation: the old refresh token is dead — persist the new pair.
-  persistTokens(payload.data.accessToken, payload.data.refreshToken);
+  if (!payload?.data?.accessToken) return false;
+  persistAccessToken(payload.data.accessToken);
   return true;
 }
 
@@ -94,6 +97,11 @@ function portQuery(): string {
   return API_PORT ? `?XTransformPort=${encodeURIComponent(API_PORT)}` : "";
 }
 
+/** URL for raw (non-envelope) API responses such as protected image bytes. */
+export function rawApiUrl(path: string): string {
+  return `${API_BASE_URL}${path}${portQuery()}`;
+}
+
 /* ---- core request ---- */
 
 async function requestOnce<T>(path: string, init: RequestInit): Promise<T> {
@@ -106,7 +114,13 @@ async function requestOnce<T>(path: string, init: RequestInit): Promise<T> {
 
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}${path}${portQuery()}`, { ...init, headers });
+    res = await fetch(`${API_BASE_URL}${path}${portQuery()}`, {
+      ...init,
+      headers,
+      // Required when the API is hosted on a different origin; the refresh
+      // cookie remains constrained by Secure + SameSite + its auth-only path.
+      credentials: "include",
+    });
   } catch {
     throw new ApiError("NETWORK_ERROR", "Can't reach DEAL right now. Check your connection.", 0);
   }

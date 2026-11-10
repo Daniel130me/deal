@@ -1,6 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from './test-api';
 import type { INestApplication } from '@nestjs/common';
-import { SignJWT } from 'jose';
 import { createApp } from '../src/app';
 
 /**
@@ -13,7 +12,8 @@ import { createApp } from '../src/app';
  * refresh reuse (family revocation), logout invalidation, hash-leak scan.
  */
 
-const dbConfigured = typeof process.env.NEON_DATABASE_URL === 'string';
+const dbConfigured =
+  process.env.RUN_DATABASE_TESTS === 'true' && typeof process.env.NEON_DATABASE_URL === 'string';
 const secretConfigured =
   typeof process.env.JWT_ACCESS_SECRET === 'string' && process.env.JWT_ACCESS_SECRET.length >= 32;
 
@@ -29,20 +29,27 @@ interface Envelope<T> {
 interface SessionData {
   user: { id: string; email: string | null; role: string };
   accessToken: string;
-  refreshToken: string;
 }
 
 describe.skipIf(!dbConfigured || !secretConfigured)('auth sessions (integration, e2e)', () => {
   let app: INestApplication;
   let baseUrl: string;
+  let setupComplete = false;
 
-  const post = async (path: string, body: unknown): Promise<{ status: number; body: Envelope<unknown> }> => {
+  const post = async (path: string, body: unknown) => {
     const res = await fetch(`${baseUrl}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    return { status: res.status, body: (await res.json()) as Envelope<unknown> };
+    return { status: res.status, body: (await res.json()) as Envelope<unknown>, headers: res.headers };
+  };
+
+  const refreshTokenFrom = (headers: Headers): string => {
+    const cookie = headers.get('set-cookie')?.split(';', 1)[0];
+    const token = cookie?.slice(cookie.indexOf('=') + 1);
+    if (!token) throw new Error('response did not set the refresh cookie');
+    return decodeURIComponent(token);
   };
 
   const get = async (path: string, token?: string): Promise<{ status: number; body: Envelope<unknown> }> => {
@@ -56,10 +63,12 @@ describe.skipIf(!dbConfigured || !secretConfigured)('auth sessions (integration,
     app = await createApp();
     await app.listen(0); // ephemeral port
     baseUrl = await app.getUrl();
+    setupComplete = true;
   });
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
+    if (!setupComplete) return;
     // Cleanup the test identity (refresh tokens cascade with the user row).
     const { PrismaClient } = await import('@prisma/client');
     const db = new PrismaClient({ datasources: { db: { url: process.env.NEON_DATABASE_URL } } });
@@ -83,8 +92,8 @@ describe.skipIf(!dbConfigured || !secretConfigured)('auth sessions (integration,
     }
   });
 
-  it('signs up, returns safe user + both tokens, never leaks the hash', async () => {
-    const { status, body } = await post('/api/v1/auth/signup', { email: EMAIL, password: PASSWORD });
+  it('signs up, returns a safe user + access token, and keeps secrets out of JSON', async () => {
+    const { status, body, headers } = await post('/api/v1/auth/signup', { email: EMAIL, password: PASSWORD });
     expect(status).toBe(201);
     expect(body.success).toBe(true);
     expect(JSON.stringify(body)).not.toContain('passwordHash');
@@ -93,7 +102,8 @@ describe.skipIf(!dbConfigured || !secretConfigured)('auth sessions (integration,
     expect(data.user.email).toBe(EMAIL);
     expect(data.user.role).toBe('CLIENT');
     expect(data.accessToken.length).toBeGreaterThan(20);
-    expect(data.refreshToken.length).toBeGreaterThan(20);
+    expect(JSON.stringify(body)).not.toContain('refreshToken');
+    expect(refreshTokenFrom(headers).length).toBeGreaterThan(20);
   });
 
   it('rejects duplicate signup with 409 EMAIL_TAKEN', async () => {
@@ -127,11 +137,33 @@ describe.skipIf(!dbConfigured || !secretConfigured)('auth sessions (integration,
     expect(JSON.stringify(body)).not.toContain('passwordHash');
   });
 
+  it('sets an HttpOnly refresh cookie and makes it authoritative over a stale legacy body token', async () => {
+    const login = await fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: EMAIL, password: PASSWORD }),
+    });
+    const setCookie = login.headers.get('set-cookie') ?? '';
+    expect(setCookie).toContain('deal_refresh_token=');
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('SameSite=Strict');
+    expect(setCookie).toContain('Path=/api/v1/auth');
+
+    const cookie = setCookie.split(';', 1)[0]!;
+    const refresh = await fetch(`${baseUrl}/api/v1/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ refreshToken: 'stale-local-token' }),
+    });
+    expect(refresh.status).toBe(201);
+    expect(refresh.headers.get('set-cookie')).toContain('deal_refresh_token=');
+  });
+
   // ── GET /me ───────────────────────────────────────────────────────────────
 
   it('serves /me for a valid access token', async () => {
-    const login = (await post('/api/v1/auth/login', { identifier: EMAIL, password: PASSWORD })).body
-      .data as SessionData;
+    const loginResponse = await post('/api/v1/auth/login', { identifier: EMAIL, password: PASSWORD });
+    const login = loginResponse.body.data as SessionData;
     const { status, body } = await get('/api/v1/auth/me', login.accessToken);
     expect(status).toBe(200);
     const data = body.data as { id: string; email: string };
@@ -139,6 +171,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('auth sessions (integration,
   });
 
   it('rejects /me without a token and with a forged token', async () => {
+    const { SignJWT } = await import('jose');
     const missing = await get('/api/v1/auth/me');
     expect(missing.status).toBe(401);
     expect(missing.body.error?.code).toBe('TOKEN_INVALID');
@@ -158,8 +191,9 @@ describe.skipIf(!dbConfigured || !secretConfigured)('auth sessions (integration,
   });
 
   it('rejects an EXPIRED access token with TOKEN_EXPIRED', async () => {
-    const login = (await post('/api/v1/auth/login', { identifier: EMAIL, password: PASSWORD })).body
-      .data as SessionData;
+    const { SignJWT } = await import('jose');
+    const loginResponse = await post('/api/v1/auth/login', { identifier: EMAIL, password: PASSWORD });
+    const login = loginResponse.body.data as SessionData;
 
     const key = new TextEncoder().encode(process.env.JWT_ACCESS_SECRET);
     const nowSec = Math.floor(Date.now() / 1000);
@@ -180,14 +214,16 @@ describe.skipIf(!dbConfigured || !secretConfigured)('auth sessions (integration,
   // ── Refresh rotation & reuse ──────────────────────────────────────────────
 
   it('rotates on refresh: new pair, old token becomes unusable, reuse kills the family', async () => {
-    const login = (await post('/api/v1/auth/login', { identifier: EMAIL, password: PASSWORD })).body
-      .data as SessionData;
+    const loginResponse = await post('/api/v1/auth/login', { identifier: EMAIL, password: PASSWORD });
+    const login = loginResponse.body.data as SessionData;
+    const loginRefreshToken = refreshTokenFrom(loginResponse.headers);
 
     // 1st refresh: succeeds, issues a child token.
-    const first = await post('/api/v1/auth/refresh', { refreshToken: login.refreshToken });
+    const first = await post('/api/v1/auth/refresh', { refreshToken: loginRefreshToken });
     expect(first.status).toBe(201);
     const child = first.body.data as SessionData;
-    expect(child.refreshToken).not.toBe(login.refreshToken);
+    const childRefreshToken = refreshTokenFrom(first.headers);
+    expect(childRefreshToken).not.toBe(loginRefreshToken);
     expect(child.accessToken).not.toBe(login.accessToken);
 
     // An access token is not a refresh token — lookup misses.
@@ -196,12 +232,12 @@ describe.skipIf(!dbConfigured || !secretConfigured)('auth sessions (integration,
     expect(wrongKind.body.error?.code).toBe('TOKEN_INVALID');
 
     // 2nd refresh with the SAME (now revoked) token: reuse detected.
-    const reuse = await post('/api/v1/auth/refresh', { refreshToken: login.refreshToken });
+    const reuse = await post('/api/v1/auth/refresh', { refreshToken: loginRefreshToken });
     expect(reuse.status).toBe(401);
     expect(reuse.body.error?.code).toBe('TOKEN_REUSE');
 
     // Family revocation: the child issued by the first refresh is dead too.
-    const childAfter = await post('/api/v1/auth/refresh', { refreshToken: child.refreshToken });
+    const childAfter = await post('/api/v1/auth/refresh', { refreshToken: childRefreshToken });
     expect(childAfter.status).toBe(401);
     expect(childAfter.body.error?.code).toBe('TOKEN_REUSE');
   });
@@ -209,20 +245,22 @@ describe.skipIf(!dbConfigured || !secretConfigured)('auth sessions (integration,
   // ── Logout ────────────────────────────────────────────────────────────────
 
   it('logout revokes the presented refresh token (idempotent), refresh after logout fails', async () => {
-    const login = (await post('/api/v1/auth/login', { identifier: EMAIL, password: PASSWORD })).body
-      .data as SessionData;
+    const loginResponse = await post('/api/v1/auth/login', { identifier: EMAIL, password: PASSWORD });
+    const loginRefreshToken = refreshTokenFrom(loginResponse.headers);
 
-    const out = await post('/api/v1/auth/logout', { refreshToken: login.refreshToken });
+    const out = await post('/api/v1/auth/logout', { refreshToken: loginRefreshToken });
     expect(out.status).toBe(201);
     expect((out.body.data as { revoked: boolean }).revoked).toBe(true);
+    expect(out.headers.get('set-cookie')).toContain('deal_refresh_token=;');
+    expect(out.headers.get('set-cookie')).toContain('Path=/api/v1/auth');
 
-    const after = await post('/api/v1/auth/refresh', { refreshToken: login.refreshToken });
+    const after = await post('/api/v1/auth/refresh', { refreshToken: loginRefreshToken });
     expect(after.status).toBe(401);
     // Strict reuse semantics: presenting ANY revoked token (here: logged out)
     // is treated as replay/theft and revokes the whole family.
     expect(after.body.error?.code).toBe('TOKEN_REUSE');
 
-    const again = await post('/api/v1/auth/logout', { refreshToken: login.refreshToken });
+    const again = await post('/api/v1/auth/logout', { refreshToken: loginRefreshToken });
     expect(again.status).toBe(201);
     expect((again.body.data as { revoked: boolean }).revoked).toBe(false);
   });
@@ -231,6 +269,6 @@ describe.skipIf(!dbConfigured || !secretConfigured)('auth sessions (integration,
     const { status, body } = await post('/api/v1/auth/login', { identifier: EMAIL, password: PASSWORD });
     expect(status).toBe(201);
     const data = body.data as SessionData;
-    expect(data.refreshToken).toBeTruthy();
+    expect(data.accessToken).toBeTruthy();
   });
 });

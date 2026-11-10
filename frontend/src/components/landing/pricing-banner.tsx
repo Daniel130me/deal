@@ -29,11 +29,11 @@ export function PricingBanner() {
 
           <span className="relative inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1.5 text-[13px] font-bold text-emerald-300">
             <BadgePercent className="h-4 w-4" />
-            Simple pricing
+            Straightforward access
           </span>
           <h2 className="relative mx-auto mt-5 max-w-2xl text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-            No monthly fees.{" "}
-            <span className="text-emerald-400">Pay only when you get paid.</span>
+            No monthly subscription.{" "}
+            <span className="text-emerald-400">Create and manage agreements.</span>
           </h2>
           <p className="relative mt-4 flex flex-wrap items-center justify-center gap-2.5 text-[13px] font-semibold text-slate-400">
             Payments powered by
@@ -54,9 +54,8 @@ export function PricingBanner() {
             />
           </p>
           <p className="relative mx-auto mt-4 max-w-xl text-base leading-relaxed text-slate-300">
-            Create and send deals for free. When a deal completes, a small
-            service fee is taken from the payment — never from your pocket
-            upfront.
+            Create an account and send agreements without a subscription. Your
+            configured payment provider may apply its own processing and settlement fees.
           </p>
           <div className="relative mt-8">
             <Button

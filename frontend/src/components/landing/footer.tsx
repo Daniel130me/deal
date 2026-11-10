@@ -1,7 +1,5 @@
 "use client";
 
-import { Instagram, Linkedin, Twitter } from "lucide-react";
-import { toast } from "sonner";
 import { Logo } from "@/components/landing/logo";
 import { scrollToId } from "@/components/landing/landing";
 import { useApp } from "@/components/app/context";
@@ -18,12 +16,9 @@ const COMPANY_LINKS = [
   { label: "FAQ", id: "faq" },
 ];
 
-const LEGAL_LINKS = ["Terms of Service", "Privacy Policy"];
-
-const SOCIALS = [
-  { label: "DEAL on Instagram", href: "#", icon: Instagram },
-  { label: "DEAL on X (Twitter)", href: "#", icon: Twitter },
-  { label: "DEAL on LinkedIn", href: "#", icon: Linkedin },
+const LEGAL_LINKS = [
+  { label: "Terms of Service", href: "/terms" },
+  { label: "Privacy Policy", href: "/privacy" },
 ];
 
 export function SiteFooter() {
@@ -61,19 +56,6 @@ export function SiteFooter() {
               deposits and installments, deliver with confidence — built for
               African creatives.
             </p>
-            <div className="mt-5 flex items-center gap-2">
-              {SOCIALS.map((social) => (
-                <button
-                  key={social.label}
-                  type="button"
-                  aria-label={social.label}
-                  onClick={() => toast.info("Social pages are coming soon")}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-slate-300 transition-colors hover:bg-primary hover:text-white"
-                >
-                  <social.icon className="h-4 w-4" />
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Link columns */}
@@ -119,12 +101,12 @@ export function SiteFooter() {
                 </li>
               ))}
               <li>
-                <button
-                  onClick={() => toast.info("Reach us at hello@deal.ng")}
+                <a
+                  href="mailto:hello@deal.ng"
                   className="text-sm font-semibold text-slate-300 transition-colors hover:text-emerald-400"
                 >
                   Contact
-                </button>
+                </a>
               </li>
             </ul>
           </nav>
@@ -134,13 +116,13 @@ export function SiteFooter() {
               Legal
             </h3>
             <ul className="mt-4 space-y-2.5">
-              {LEGAL_LINKS.map((label) => (
-                <li key={label}>
+              {LEGAL_LINKS.map((link) => (
+                <li key={link.label}>
                   <button
-                    onClick={() => toast.info("Legal pages are coming soon")}
+                    onClick={() => navigate(link.href)}
                     className="text-sm font-semibold text-slate-300 transition-colors hover:text-emerald-400"
                   >
-                    {label}
+                    {link.label}
                   </button>
                 </li>
               ))}

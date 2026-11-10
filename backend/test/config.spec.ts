@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from './test-api';
 import { parseEnv, parseOrigins } from '../src/config/env';
 
 const VALID_ENV = {
@@ -11,20 +11,30 @@ const VALID_ENV = {
   FLW_SECRET_KEY: 'FLWSECK_TEST-unit',
 };
 
+const VALID_PRODUCTION_ENV = {
+  ...VALID_ENV,
+  NODE_ENV: 'production',
+  FRONTEND_URL: 'https://deal.ng',
+  NEON_DATABASE_URL: 'postgresql://user:pass@ep-example.neon.tech/deal?sslmode=require',
+  FLW_SECRET_KEY: 'FLWSECK_LIVE-unit',
+  FLW_WEBHOOK_SECRET_HASH: 'production-webhook-secret',
+  PAYSTACK_SECRET_KEY: 'sk_live_unit',
+};
+
 describe('env config', () => {
   it('applies safe defaults when optional variables are absent', () => {
     const parsed = parseEnv(VALID_ENV);
     expect(parsed.NODE_ENV).toBe('development');
     expect(parsed.PORT).toBe(3001);
+    expect(parsed.MAX_JSON_BODY_KB).toBe(100);
+    expect(parsed.TRUST_PROXY_HOPS).toBe(0);
     expect(parsed.FRONTEND_URL).toBe('http://localhost:3000');
   });
 
   it('coerces and accepts explicit values', () => {
     const parsed = parseEnv({
-      ...VALID_ENV,
-      NODE_ENV: 'production',
+      ...VALID_PRODUCTION_ENV,
       PORT: '8080',
-      FRONTEND_URL: 'https://deal.ng',
     });
     expect(parsed.NODE_ENV).toBe('production');
     expect(parsed.PORT).toBe(8080);
@@ -33,6 +43,8 @@ describe('env config', () => {
 
   it('fails fast with readable issues on invalid values', () => {
     expect(() => parseEnv({ ...VALID_ENV, PORT: 'not-a-port' })).toThrow(/PORT/);
+    expect(() => parseEnv({ ...VALID_ENV, MAX_JSON_BODY_KB: '0' })).toThrow(/MAX_JSON_BODY_KB/);
+    expect(() => parseEnv({ ...VALID_ENV, TRUST_PROXY_HOPS: '4' })).toThrow(/TRUST_PROXY_HOPS/);
     expect(() => parseEnv({ ...VALID_ENV, NODE_ENV: 'staging' })).toThrow(/NODE_ENV/);
   });
 
@@ -64,8 +76,18 @@ describe('env config', () => {
       parseEnv({ ...VALID_ENV, NODE_ENV: 'production', FRONTEND_URL: 'http://localhost:3000' }),
     ).toThrow(/FRONTEND_URL/);
     expect(
-      parseEnv({ ...VALID_ENV, NODE_ENV: 'production', FRONTEND_URL: 'https://deal.ng' }).FRONTEND_URL,
+      parseEnv(VALID_PRODUCTION_ENV).FRONTEND_URL,
     ).toBe('https://deal.ng');
+    expect(() =>
+      parseEnv({
+        ...VALID_ENV,
+        NODE_ENV: 'production',
+        FRONTEND_URL: 'https://deal.ng,http://admin.deal.ng',
+      }),
+    ).toThrow(/FRONTEND_URL/);
+    expect(() =>
+      parseEnv({ ...VALID_ENV, NODE_ENV: 'production', FRONTEND_URL: 'https://deal.ng/callback' }),
+    ).toThrow(/FRONTEND_URL/);
   });
 
   it('treats R2_PUBLIC_BASE_URL as optional but validated when present', () => {
@@ -92,6 +114,25 @@ describe('env config', () => {
   it('keeps Paystack dormant unless a secret key is supplied', () => {
     expect(parseEnv(VALID_ENV).PAYSTACK_SECRET_KEY).toBeUndefined();
     expect(parseEnv({ ...VALID_ENV, PAYSTACK_SECRET_KEY: 'sk_test_x' }).PAYSTACK_SECRET_KEY).toBe('sk_test_x');
+  });
+
+  it('requires live payment credentials, webhook verification and database TLS in production', () => {
+    expect(parseEnv(VALID_PRODUCTION_ENV).NODE_ENV).toBe('production');
+    expect(() => parseEnv({ ...VALID_PRODUCTION_ENV, FLW_WEBHOOK_SECRET_HASH: undefined })).toThrow(
+      /FLW_WEBHOOK_SECRET_HASH/,
+    );
+    expect(() => parseEnv({ ...VALID_PRODUCTION_ENV, FLW_SECRET_KEY: 'FLWSECK_TEST-unit' })).toThrow(
+      /FLW_SECRET_KEY/,
+    );
+    expect(() => parseEnv({ ...VALID_PRODUCTION_ENV, PAYSTACK_SECRET_KEY: 'sk_test_unit' })).toThrow(
+      /PAYSTACK_SECRET_KEY/,
+    );
+    expect(() =>
+      parseEnv({
+        ...VALID_PRODUCTION_ENV,
+        NEON_DATABASE_URL: 'postgresql://user:pass@ep-example.neon.tech/deal',
+      }),
+    ).toThrow(/NEON_DATABASE_URL/);
   });
 });
 

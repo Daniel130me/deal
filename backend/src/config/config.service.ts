@@ -22,6 +22,14 @@ export class ConfigService {
     return this.values.PORT;
   }
 
+  get maxJsonBodyKb(): number {
+    return this.values.MAX_JSON_BODY_KB;
+  }
+
+  get trustProxyHops(): number {
+    return this.values.TRUST_PROXY_HOPS;
+  }
+
   get corsOrigins(): string[] {
     return parseOrigins(this.values.FRONTEND_URL);
   }
@@ -59,6 +67,9 @@ export class ConfigService {
    * paying user's browser lands. Phase 10's share page lives at /shared/:token.
    */
   get paymentRedirectBase(): string {
-    return this.values.FRONTEND_URL;
+    // FRONTEND_URL may contain multiple comma-separated CORS origins. Hosted
+    // checkout accepts one return origin, so the first configured origin is
+    // the explicit primary frontend (documented in .env.example).
+    return this.corsOrigins[0]!;
   }
 }

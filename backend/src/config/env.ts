@@ -11,6 +11,14 @@ import { z } from 'zod';
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+  /** Maximum parsed JSON/form body size. Webhooks are signature-verified, but
+   *  bounding bytes before verification also limits parser and HMAC work. */
+  MAX_JSON_BODY_KB: z.coerce.number().int().min(1).max(1024).default(100),
+  /** Number of trusted reverse-proxy hops in front of the API. Zero is the
+   *  secure default: trusting X-Forwarded-For on a directly exposed server
+   *  lets clients forge rate-limit identities. Set to 1 only when exactly one
+   *  controlled gateway always sits in front of the process. */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(0),
   /** Browser origin(s) allowed by CORS. Comma-separated; never a wildcard in production.
    *  In production this is REQUIRED and must be https:// — it feeds both the
    *  CORS allowlist and the hosted-checkout redirect base, so a silent
@@ -52,9 +60,8 @@ const EnvSchema = z.object({
    *  credential (Phase 10 frontend) and is deliberately not read here. */
   FLW_SECRET_KEY: z.string().min(1),
   /** Shared secret Flutterwave echoes in the `verif-hash` header of every webhook.
-   *  Optional UNTIL the user configures webhooks in their dashboard: when absent
-   *  the webhook endpoint refuses every delivery (503) instead of processing
-   *  unverified payloads. Set the SAME value in the FLW dashboard and here. */
+   *  Development may omit it (deliveries are then refused), but production
+   *  requires it so asynchronous payment confirmation cannot be disabled. */
   FLW_WEBHOOK_SECRET_HASH: z.string().min(16).optional(),
   /** Paystack secret key — the adapter is implemented (plan Phase 8) but the
    *  rail stays dormant until keys are supplied: initializing via Paystack then
@@ -64,15 +71,71 @@ const EnvSchema = z.object({
   // Production has no safe default for the browser origin: without it CORS
   // allowlists localhost and checkout redirects point off-origin. Dev/test
   // keep the localhost default for friction-free boot.
-  if (values.NODE_ENV === 'production') {
-    const url = values.FRONTEND_URL?.trim();
-    if (!url || !url.startsWith('https://')) {
+  const origins = parseOrigins(values.FRONTEND_URL);
+  if (origins.length === 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['FRONTEND_URL'],
+      message: 'must contain at least one browser origin',
+    });
+  }
+  for (const origin of origins) {
+    let parsed: URL;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      ctx.addIssue({ code: 'custom', path: ['FRONTEND_URL'], message: `contains an invalid URL: ${origin}` });
+      continue;
+    }
+    const allowedProtocol = values.NODE_ENV === 'production' ? parsed.protocol === 'https:' : ['http:', 'https:'].includes(parsed.protocol);
+    if (!allowedProtocol || parsed.origin !== origin) {
       ctx.addIssue({
         code: 'custom',
         path: ['FRONTEND_URL'],
-        message: 'is required in production and must start with https://',
+        message:
+          values.NODE_ENV === 'production'
+            ? `must contain exact https origins without paths: ${origin}`
+            : `must contain exact http(s) origins without paths: ${origin}`,
       });
     }
+  }
+
+  if (values.NODE_ENV !== 'production') return;
+
+  if (!values.FLW_WEBHOOK_SECRET_HASH) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['FLW_WEBHOOK_SECRET_HASH'],
+      message: 'is required in production',
+    });
+  }
+  if (/test/i.test(values.FLW_SECRET_KEY)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['FLW_SECRET_KEY'],
+      message: 'must be a live Flutterwave key in production',
+    });
+  }
+  if (!values.PAYSTACK_SECRET_KEY?.startsWith('sk_live_')) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['PAYSTACK_SECRET_KEY'],
+      message: 'must be a Paystack sk_live_ secret in production',
+    });
+  }
+
+  try {
+    const databaseUrl = new URL(values.NEON_DATABASE_URL);
+    const sslMode = databaseUrl.searchParams.get('sslmode');
+    if (!['require', 'verify-full'].includes(sslMode ?? '')) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['NEON_DATABASE_URL'],
+        message: 'must set sslmode=require or sslmode=verify-full in production',
+      });
+    }
+  } catch {
+    // The base schema reports malformed database URLs.
   }
 });
 

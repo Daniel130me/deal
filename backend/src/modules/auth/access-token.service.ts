@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import type { UserRole } from '@prisma/client';
-import { jwtVerify, SignJWT, errors as joseErrors } from 'jose';
 import { ConfigService } from '../../config/config.service';
 import { ACCESS_TOKEN_TTL_SECONDS, JWT_AUDIENCE, JWT_ISSUER } from './auth.constants';
 
@@ -21,12 +20,16 @@ export interface AccessTokenClaims {
 @Injectable()
 export class AccessTokenService {
   private readonly secret: Uint8Array;
+  // jose is ESM-only. Dynamic import keeps the compiled CommonJS Nest app
+  // compatible with Node while the module promise is cached after first use.
+  private readonly jose = import('jose');
 
   constructor(config: ConfigService) {
     this.secret = new TextEncoder().encode(config.jwtAccessSecret);
   }
 
   async signAccessToken(claims: AccessTokenClaims): Promise<string> {
+    const { SignJWT } = await this.jose;
     return new SignJWT({ role: claims.role })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject(claims.sub)
@@ -40,6 +43,7 @@ export class AccessTokenService {
   /** Verifies signature, expiry, issuer and audience; maps failures to API codes. */
   async verifyAccessToken(token: string): Promise<AccessTokenClaims> {
     try {
+      const { jwtVerify } = await this.jose;
       const { payload } = await jwtVerify(token, this.secret, {
         issuer: JWT_ISSUER,
         audience: JWT_AUDIENCE,
@@ -49,6 +53,7 @@ export class AccessTokenService {
       }
       return { sub: payload.sub, role: payload.role as UserRole };
     } catch (error) {
+      const { errors: joseErrors } = await this.jose;
       if (error instanceof joseErrors.JWTExpired) {
         throw new HttpException({ code: 'TOKEN_EXPIRED', message: 'Access token expired' }, HttpStatus.UNAUTHORIZED);
       }

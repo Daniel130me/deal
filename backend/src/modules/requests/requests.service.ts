@@ -1,7 +1,8 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, RequestStatus, type ClientRequest, type Service } from '@prisma/client';
-import { retryOnUniqueViolation, nextSequentialRef } from '../../common/ids/ref.util';
+import { formatRef, retryOnUniqueViolation } from '../../common/ids/ref.util';
 import { PrismaService } from '../../database/prisma.service';
+import { calendarDateToUtc } from '../../common/validation/calendar-date.validator';
 import { NOTIFICATION_TYPES } from '../notifications/notifications.constants';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ServicesService } from '../services/services.service';
@@ -66,19 +67,31 @@ export class RequestsService {
   }
 
   async act(creatorId: string, requestId: string, dto: RequestActionDto): Promise<RequestWithService> {
-    const request = await this.getOwned(creatorId, requestId);
-    const allowed = REQUEST_TRANSITIONS[request.status] ?? [];
-    if (!allowed.includes(ACTION_TO_STATUS[dto.action])) {
+    const target = ACTION_TO_STATUS[dto.action];
+    const allowedSources = Object.entries(REQUEST_TRANSITIONS)
+      .filter(([, targets]) => targets?.includes(target))
+      .map(([status]) => status as RequestStatus);
+
+    // Status belongs in the write predicate: two racing actions cannot both
+    // validate an old snapshot and overwrite one another.
+    const updated = await this.prisma.clientRequest.updateMany({
+      where: { id: requestId, creatorId, status: { in: allowedSources } },
+      data: { status: target },
+    });
+    const request = await this.prisma.clientRequest.findFirst({
+      where: { id: requestId, creatorId },
+      include: { service: true },
+    });
+    if (!request) {
+      throw new HttpException({ code: 'REQUEST_NOT_FOUND', message: 'Request not found' }, HttpStatus.NOT_FOUND);
+    }
+    if (updated.count === 0) {
       throw new HttpException(
         { code: 'INVALID_REQUEST_TRANSITION', message: `A ${request.status.toLowerCase()} request cannot be ${dto.action}d` },
         HttpStatus.CONFLICT,
       );
     }
-    return this.prisma.clientRequest.update({
-      where: { id: request.id },
-      data: { status: ACTION_TO_STATUS[dto.action] },
-      include: { service: true },
-    });
+    return request;
   }
 
   /**
@@ -158,7 +171,7 @@ export class RequestsService {
           serviceId: dto.serviceId,
           clientName: dto.clientName,
           clientContact: dto.clientContact,
-          eventDate: dto.eventDate ? new Date(`${dto.eventDate}T00:00:00Z`) : null,
+          eventDate: dto.eventDate ? calendarDateToUtc(dto.eventDate) : null,
           location: dto.location ?? null,
           budgetMinMinor: dto.budgetMinMinor ?? null,
           budgetMaxMinor: dto.budgetMaxMinor ?? null,
@@ -171,10 +184,9 @@ export class RequestsService {
   }
 
   private async nextRef(prefix: string): Promise<string> {
-    const rows = await this.prisma.clientRequest.findMany({
-      where: { ref: { startsWith: `${prefix}-` } },
-      select: { ref: true },
-    });
-    return nextSequentialRef(prefix, rows.map((row) => row.ref));
+    const [row] = await this.prisma.$queryRaw<{ value: bigint }[]>`
+      SELECT nextval('client_request_ref_seq') AS value
+    `;
+    return formatRef(prefix, row!.value);
   }
 }

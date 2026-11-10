@@ -56,7 +56,7 @@ export function Audience() {
           transition={{ duration: 0.4, delay: 0.3, ease: "easeOut" }}
           className="mt-7 text-center text-sm font-semibold text-muted-foreground"
         >
-          Focus is the feature — every agreement, escrow rule and file handoff
+          Focus is the feature — every agreement, payment record and file handoff
           is designed for your kind of work.
         </motion.p>
       </div>

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma, User } from '@prisma/client';
+import { UserRole, UserStatus, type Prisma, type User } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 
 /**
@@ -67,11 +67,16 @@ export class UsersService {
   }
 
   /**
-   * Role changes (Phase 5 onboarding promotes CLIENT -> CREATOR). Accepts an
-   * optional transaction client so callers can keep role + domain writes atomic.
+   * Authoritative onboarding transition. The access token may be up to fifteen
+   * minutes old, so role and suspension state are re-checked in the write that
+   * promotes the account. Admins and suspended/deleted users cannot be
+   * accidentally converted into creators.
    */
-  async setRole(id: string, role: User['role'], client?: Prisma.TransactionClient): Promise<void> {
-    const db = client ?? this.prisma;
-    await db.user.update({ where: { id }, data: { role } });
+  async promoteActiveClientToCreator(id: string, client: Prisma.TransactionClient): Promise<boolean> {
+    const result = await client.user.updateMany({
+      where: { id, role: UserRole.CLIENT, status: UserStatus.ACTIVE },
+      data: { role: UserRole.CREATOR },
+    });
+    return result.count === 1;
   }
 }

@@ -5,6 +5,7 @@ import { StorageModule } from '../../integrations/storage/storage.module';
 import { FilesController } from './files.controller';
 import { FilesService } from './files.service';
 import { SharedFilesController } from './shared-files.controller';
+import { PreviewGenerator } from './preview-generator';
 
 /**
  * Files domain boundary (implemented in Phase 7).
@@ -22,7 +23,7 @@ import { SharedFilesController } from './shared-files.controller';
 @Module({
   imports: [CreatorsModule, DealsModule, StorageModule],
   controllers: [FilesController, SharedFilesController],
-  providers: [FilesService],
+  providers: [FilesService, PreviewGenerator],
   exports: [FilesService],
 })
 export class FilesModule {}

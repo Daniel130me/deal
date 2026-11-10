@@ -3,8 +3,8 @@
  *
  * Shaped for @nestjs/throttler v6 ({ name: { limit, ttl } }); ttl is
  * milliseconds. Counters are in-memory per instance and keyed per client IP
- * (Express `trust proxy` is set to one hop, so behind the sandbox gateway /
- * any single reverse proxy the real client IP is used, not the proxy's).
+ * (`TRUST_PROXY_HOPS` must match the controlled deployment topology so the
+ * real client IP is used without trusting attacker-supplied forwarding data).
  *
  * Deliberately controller-scoped, not global: only the brute-forceable
  * session endpoints and the anonymous submission surface are limited today
@@ -29,7 +29,7 @@ export const RATE_LIMITS = {
     dealRead: { default: { limit: 30, ttl: 60_000 } },
     /**
      * Capability-link file reads: the share page lists files and mints a
-     * presigned URL per preview render, so the budget mirrors dealRead.
+     * derivative stream per preview render, so the budget mirrors dealRead.
      * Downloading via a signed URL does NOT hit the API again (the store
      * serves it), so this only bounds URL minting.
      */

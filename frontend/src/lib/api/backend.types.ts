@@ -21,7 +21,6 @@ export interface SafeUserDto {
 export interface AuthPayload {
   user: SafeUserDto;
   accessToken: string;
-  refreshToken: string;
 }
 
 /* ---- creators ---- */

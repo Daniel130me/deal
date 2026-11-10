@@ -13,9 +13,9 @@ import { SectionHeading } from "@/components/landing/section-heading";
 
 const FEATURES = [
   {
-    title: "Protected payments",
+    title: "Verified payment records",
     description:
-      "Clients pay by card, transfer or USSD via Flutterwave or Paystack — straight into DEAL escrow before you start. You're covered before you move a pixel.",
+      "Client charges are initialized on Flutterwave or Paystack and verified server-side before DEAL updates the agreement record.",
     icon: ShieldCheck,
     iconClass: "text-primary",
     tileClass: "bg-accent",
@@ -29,9 +29,9 @@ const FEATURES = [
     tileClass: "bg-accent",
   },
   {
-    title: "Less chasing",
+    title: "Clear payment schedule",
     description:
-      "Milestones, reminders and balance collection are built in. DEAL follows up so you don't have to.",
+      "Deposits, installments and balances stay tied to the agreement and their provider references.",
     icon: BellRing,
     iconClass: "text-primary",
     tileClass: "bg-accent",
@@ -45,9 +45,9 @@ const FEATURES = [
     tileClass: "bg-amber-50",
   },
   {
-    title: "Escrow that releases on approval",
+    title: "Approval-controlled ledger",
     description:
-      "Every payment sits in DEAL escrow — not the gateway's. Money moves only when your client approves the work, then it's yours automatically.",
+      "DEAL records provider-confirmed charges and client approval as separate, auditable events.",
     icon: Unlock,
     iconClass: "text-violet-600",
     tileClass: "bg-violet-50",
@@ -55,7 +55,7 @@ const FEATURES = [
   {
     title: "Protected file delivery",
     description:
-      "Clients get watermarked, reduced-quality previews until the deal is fully paid — full-quality files unlock on approval + full payment.",
+      "Clients get watermarked, reduced-quality review copies until the deal is fully paid — full-quality files unlock on approval + full payment.",
     icon: FileLock,
     iconClass: "text-teal-600",
     tileClass: "bg-teal-50",
@@ -68,8 +68,8 @@ export function Features() {
       <div className="container-page">
         <SectionHeading
           eyebrow="Why DEAL"
-          title="Everything between “yes” and payment, handled"
-          subtitle="Getting the client is not the hard part — managing the job and getting paid safely is. DEAL fixes that part."
+          title="Everything between “yes” and delivery, organized"
+          subtitle="Keep the agreement, provider-verified charges, approvals and protected file handoff in one workflow."
         />
 
         <div className="mt-12 grid gap-4 sm:grid-cols-2 sm:mt-14 lg:grid-cols-3 lg:gap-5">

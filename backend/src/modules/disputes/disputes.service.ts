@@ -164,7 +164,7 @@ export class DisputesService {
             {
               type: DealEventType.DISPUTE_RESOLVED,
               actor: ActorType.SYSTEM,
-              label: 'Dispute resolved — the work stands, escrow released to the creator',
+               label: 'Dispute resolved — the work stands, escrow released in the DEAL ledger',
               metadata: this.outcomeMetadata(dispute, 'resolved', dto.note),
             },
             tx,
@@ -178,7 +178,7 @@ export class DisputesService {
         await this.notifyCreator(
           dispute.deal.creatorId,
           NOTIFICATION_TYPES.DISPUTE_RESOLVED,
-          `The dispute on ${dispute.deal.ref} was resolved in your favor — escrow has been released`,
+          `The dispute on ${dispute.deal.ref} was resolved in your favor — DEAL recorded the ledger release`,
           { dealId: dispute.deal.id, dealRef: dispute.deal.ref },
         );
         break;

@@ -7,13 +7,12 @@ import {
   IsOptional,
   IsString,
   Length,
-  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 import { LOCATION_MAX, MAX_MONEY_MINOR } from '../../creators/creators.constants';
-import { DATE_PATTERN } from '../../requests/dto/request.dto';
+import { IsCalendarDate } from '../../../common/validation/calendar-date.validator';
 import {
   DEAL_TEXT_MAX,
   DEAL_TITLE_MAX,
@@ -111,15 +110,15 @@ export class UpdateDealDto {
 
   /** Plain calendar dates (yyyy-mm-dd) — day-granular in the UI. null clears. */
   @IsOptional()
-  @Matches(DATE_PATTERN, { message: 'Event date must be yyyy-mm-dd' })
+  @IsCalendarDate({ message: 'Event date must be a real yyyy-mm-dd calendar date' })
   eventDate?: string | null;
 
   @IsOptional()
-  @Matches(DATE_PATTERN, { message: 'Start date must be yyyy-mm-dd' })
+  @IsCalendarDate({ message: 'Start date must be a real yyyy-mm-dd calendar date' })
   startDate?: string | null;
 
   @IsOptional()
-  @Matches(DATE_PATTERN, { message: 'Due date must be yyyy-mm-dd' })
+  @IsCalendarDate({ message: 'Due date must be a real yyyy-mm-dd calendar date' })
   dueDate?: string | null;
 
   @IsOptional()

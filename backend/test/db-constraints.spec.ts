@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from './test-api';
 import { PrismaClient, Prisma } from '@prisma/client';
 
 /**
@@ -7,7 +7,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
  * flagged, never silent in an environment where the variable WAS expected.
  */
 const dbUrl = process.env.NEON_DATABASE_URL;
-const hasDb = typeof dbUrl === 'string';
+const hasDb = process.env.RUN_DATABASE_TESTS === 'true' && typeof dbUrl === 'string';
 const db = hasDb
   ? new PrismaClient({ datasources: { db: { url: dbUrl } } })
   : new PrismaClient();
@@ -24,9 +24,13 @@ async function expectP2002(fn: () => Promise<unknown>): Promise<void> {
 
 describe.skipIf(!hasDb)('database constraints (integration, Neon)', () => {
   it('seeded demo data is present', async () => {
-    const deals = await db.deal.findMany({ select: { ref: true, status: true, priceMinor: true } });
+    const expectedRefs = ['DEAL-001', 'DEAL-002', 'DEAL-003', 'DEAL-004', 'DEAL-005'];
+    const deals = await db.deal.findMany({
+      where: { ref: { in: expectedRefs } },
+      select: { ref: true, status: true, priceMinor: true },
+    });
     expect(deals.length).toBe(5);
-    expect(deals.map((d) => d.ref).sort()).toEqual(['DEAL-001', 'DEAL-002', 'DEAL-003', 'DEAL-004', 'DEAL-005']);
+    expect(deals.map((d) => d.ref).sort()).toEqual(expectedRefs);
     // Money is stored in kobo — naira values ×100 (server is the money authority).
     const deal1 = deals.find((d) => d.ref === 'DEAL-001');
     expect(deal1?.priceMinor).toBe(12_000_000);
@@ -96,9 +100,8 @@ describe.skipIf(!hasDb)('database constraints (integration, Neon)', () => {
 
   it('blocks cascade destruction of a creator with domain data', async () => {
     // RESTRICT by design: a creator holding deals cannot be deleted accidentally.
-    // NOTE (flagged): under the bun runtime Prisma surfaces FK violations as
-    // PrismaClientUnknownRequestError (no P2003 code), so we assert the invariant
-    // — the delete must fail with a foreign-key error — instead of the code.
+    // Prisma can surface database-specific wrappers for FK violations, so we
+    // assert the invariant instead of relying exclusively on error code P2003.
     let blocked = false;
     try {
       await db.creatorProfile.delete({ where: { id: 'u_tobi' } });

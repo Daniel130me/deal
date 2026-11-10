@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: deal
+          POSTGRES_PASSWORD: deal_ci
+          POSTGRES_DB: deal
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U deal -d deal"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      RUN_DATABASE_TESTS: true
+      FRONTEND_URL: http://localhost:3000
+      MAX_JSON_BODY_KB: 100
+      TRUST_PROXY_HOPS: 1
+      NEON_DATABASE_URL: postgresql://deal:deal_ci@localhost:5432/deal
+      NEON_DIRECT_URL: postgresql://deal:deal_ci@localhost:5432/deal
+      JWT_ACCESS_SECRET: ci-only-secret-that-is-longer-than-thirty-two-characters
+      R2_BUCKET: ci-private-bucket
+      R2_ACCESS_KEY_ID: ci-access-key
+      R2_SECRET_ACCESS_KEY: ci-secret-key
+      R2_S3_ENDPOINT: https://ci-r2.invalid
+      FLW_SECRET_KEY: FLWSECK_TEST-ci-only
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Apply database migrations
+        run: npm --workspace @deal/backend run db:deploy
+      - name: Seed integration-test fixtures
+        run: npm --workspace @deal/backend run db:seed
+      - name: Verify application
+        run: npm run verify

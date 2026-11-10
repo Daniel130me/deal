@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { PaymentProvider, Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { ConfigService } from '../../config/config.service';
@@ -69,7 +69,7 @@ export class WebhooksService {
     private readonly config: ConfigService,
     private readonly payments: PaymentsService,
     private readonly flutterwave: FlutterwaveGateway,
-    private readonly paystack: PaystackGateway | null,
+    @Inject(PaystackGateway) private readonly paystack: PaystackGateway | null,
   ) {}
 
   async handleFlutterwave(headers: WebhookHeaders, rawBody: Buffer | undefined, payload: unknown) {

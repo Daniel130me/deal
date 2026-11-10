@@ -1,7 +1,7 @@
 /**
  * DEAL demo seed — ports the prototype records (prisma/seed-data.ts) into Neon PostgreSQL.
  *
- * Run: `bun run db:seed` (or `prisma db seed`).
+ * Run: `npm run db:seed` (or `prisma db seed`).
  *
  * ⚠️ WIPES every domain table before inserting. Guarded against production —
  * demo/dev databases only. The demo credential created here (tobi@deal.ng /
@@ -260,6 +260,32 @@ async function seed(): Promise<void> {
 
   // Reviews reference deals — seeded after the deal loop (FK order).
   await db.review.createMany({ data: DEMO_REVIEWS });
+
+  // The reference-sequence migration may run before this seed on a fresh
+  // database. Fixed demo refs therefore need to advance the allocators before
+  // application/test writes begin. `false` means the next nextval() returns
+  // the computed value itself rather than skipping it.
+  await db.$queryRaw`
+    SELECT setval(
+      'client_request_ref_seq',
+      COALESCE(MAX((regexp_match("ref", '([0-9]+)$'))[1]::bigint), 0) + 1,
+      false
+    ) FROM "ClientRequest"
+  `;
+  await db.$queryRaw`
+    SELECT setval(
+      'booking_ref_seq',
+      COALESCE(MAX((regexp_match("ref", '([0-9]+)$'))[1]::bigint), 0) + 1,
+      false
+    ) FROM "Booking"
+  `;
+  await db.$queryRaw`
+    SELECT setval(
+      'deal_ref_seq',
+      COALESCE(MAX((regexp_match("ref", '([0-9]+)$'))[1]::bigint), 0) + 1,
+      false
+    ) FROM "Deal"
+  `;
 
   const counts = {
     users: await db.user.count(),

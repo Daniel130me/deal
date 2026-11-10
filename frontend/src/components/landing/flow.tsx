@@ -19,11 +19,11 @@ const CREATOR_STEPS = [
   "Choose your deposit + installment plan",
   "Share the link via ANY channel — WhatsApp, IG, Telegram, email…",
   "Client reviews & accepts the agreement",
-  "Client pays the deposit via Flutterwave or Paystack — DEAL escrow holds it until approval",
-  "Client pays installments anytime — every payment held in DEAL escrow",
+  "Client pays via Flutterwave or Paystack — DEAL verifies and records the charge",
+  "Client pays installments anytime — every payment is tracked in the DEAL ledger",
   "You create the work and deliver",
-  "Client approves → ALL DEAL escrow releases to you automatically",
-  "Payments made after approval are released to you instantly",
+  "Client approves → DEAL records the release decision",
+  "DEAL records the provider reference and approval decision",
   "Upload final files once the deal is fully paid",
 ];
 
@@ -33,8 +33,8 @@ const CLIENT_STEPS = [
   "Accept & pay the deposit — choose Flutterwave or Paystack at checkout: card, transfer or USSD",
   "Optionally pay installments as the work progresses",
   "Review the delivery",
-  "Approve — escrow releases to the creator",
-  "Pay any balance — it lands instantly",
+  "Approve — DEAL records the ledger release",
+  "Pay any balance — the verified charge is recorded",
   "Final files unlock when fully paid",
 ];
 
@@ -52,7 +52,7 @@ const RECORD_ITEMS = [
   },
   {
     title: "What was delivered",
-    description: "Each submission, preview and revision — timestamped against the deadline.",
+    description: "Each submission, review copy and revision — timestamped against the deadline.",
     icon: FolderOutput,
   },
   {
@@ -88,7 +88,7 @@ export function Flow() {
         <SectionHeading
           eyebrow="One flow, both sides"
           title="A deal both sides can trust"
-          subtitle="Creators send clear agreements. Clients pay via Flutterwave or Paystack into DEAL escrow with confidence. DEAL keeps the record of everything in between."
+          subtitle="Creators send clear agreements. Clients pay through Flutterwave or Paystack, and DEAL keeps a verified record of the project workflow."
         />
 
         <motion.div
@@ -157,8 +157,8 @@ export function Flow() {
                       Your client always knows what's next
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      A simple link — no account needed — and every naira sits
-                      in DEAL escrow until the work is approved.
+                      A simple link — no account needed — with each verified
+                      charge recorded against the agreement.
                     </p>
                   </div>
                 </div>

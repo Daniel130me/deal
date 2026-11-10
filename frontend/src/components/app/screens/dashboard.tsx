@@ -326,14 +326,14 @@ export default function DashboardScreen() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3 lg:gap-4">
                   <MoneyTile
-                    label="In escrow"
+                    label="Awaiting approval"
                     value={formatNaira(data.money.inEscrow)}
-                    sub="Held until clients approve"
+                    sub="Verified charges on active work"
                     icon={Lock}
                     tone="violet"
                   />
                   <MoneyTile
-                    label="Released all-time"
+                    label="Approved all-time"
                     value={formatNaira(data.money.releasedAllTime)}
                     sub={<ProviderMark provider={provider} />}
                     icon={Wallet}
@@ -350,9 +350,8 @@ export default function DashboardScreen() {
                 <p className="mt-3 flex items-start gap-2 rounded-xl bg-secondary p-3.5 text-xs font-semibold leading-relaxed text-muted-foreground">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                   <span>
-                    <span className="font-bold text-foreground">DEAL escrow</span> releases to your
-                    payout account the moment your client approves the completed work — Flutterwave
-                    and Paystack only process the charges.
+                    <span className="font-bold text-foreground">DEAL&rsquo;s payment record</span> tracks
+                    provider-verified charges and project approval separately.
                   </span>
                 </p>
               </section>

@@ -23,8 +23,7 @@ import {
 import type { PayMethod } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-/* Gateway brand colors — used ONLY as a subtle accent (selected borders, check icons).
-   Escrow is DEAL's, so escrow boxes stay in the app's green. No purple. */
+/* Gateway brand colors are used only for selected borders and check icons. */
 const BRAND: Record<PaymentProvider, { base: string; ink: string }> = {
   flutterwave: { base: "#FF9B00", ink: "#8A5300" },
   paystack: { base: "#00C3F7", ink: "#02516B" },
@@ -53,7 +52,7 @@ interface PaymentCheckoutProps {
   creatorName: string;
   /** The rail the creator prefers — preselected in step 1. */
   preferredProvider: PaymentProvider;
-  escrowNote?: string;
+  paymentNote?: string;
   /** Parent mints the hosted-checkout link (records the payment attempt first). */
   onPay: (method: PayMethod, provider: PaymentProvider) => Promise<{ link: string }>;
 }
@@ -69,7 +68,7 @@ export default function PaymentCheckout({
   dealRef,
   creatorName,
   preferredProvider,
-  escrowNote,
+  paymentNote,
   onPay,
 }: PaymentCheckoutProps) {
   const [phase, setPhase] = useState<Phase>("rail");
@@ -81,9 +80,9 @@ export default function PaymentCheckout({
   const provider: PaymentProvider = choice ?? preferredProvider;
   const meta = PROVIDER_META[provider];
   const brand = BRAND[provider];
-  const escrowCopy =
-    escrowNote ??
-    `Funds are held in DEAL escrow — ${creatorName} only receives this payment when you approve the completed work.`;
+  const paymentCopy =
+    paymentNote ??
+    `The provider processes this charge. DEAL verifies it and records it against your agreement with ${creatorName}.`;
 
   function resetState() {
     setPhase("rail");
@@ -153,11 +152,11 @@ export default function PaymentCheckout({
                 {dealTitle} · for {creatorName}
               </p>
 
-              {/* escrow explainer — DEAL's, not the gateway's */}
+              {/* Clear payment-role disclosure. */}
               <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-secondary p-3">
                 <Lock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <p className="text-[12px] font-semibold leading-relaxed text-foreground">
-                  {escrowCopy}
+                  {paymentCopy}
                 </p>
               </div>
 
@@ -215,7 +214,7 @@ export default function PaymentCheckout({
                 })}
               </div>
               <p className="mt-2.5 text-center text-[11px] font-semibold text-muted-foreground">
-                Your choice — DEAL escrow protects your money either way.
+                Your payment is completed on the selected provider&rsquo;s secure checkout.
               </p>
 
               <Button
@@ -263,11 +262,11 @@ export default function PaymentCheckout({
                 </p>
               </div>
 
-              {/* escrow explainer */}
+              {/* Clear payment-role disclosure. */}
               <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-secondary p-3">
                 <Lock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <p className="text-[12px] font-semibold leading-relaxed text-foreground">
-                  {escrowCopy}
+                  {paymentCopy}
                 </p>
               </div>
 
@@ -355,8 +354,8 @@ export default function PaymentCheckout({
           <footer className="border-t border-border bg-white px-5 py-3 text-center">
             <p className="text-[10px] font-bold text-muted-foreground">
               {phase === "rail"
-                ? "Powered by Flutterwave & Paystack · Escrow managed by DEAL"
-                : `Powered by ${meta.label} · Escrow managed by DEAL · PCI-DSS secured`}
+                ? "Checkout provided by Flutterwave & Paystack"
+                : `Checkout provided by ${meta.label} · Card details never touch DEAL`}
             </p>
           </footer>
         </div>
