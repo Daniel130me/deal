@@ -113,7 +113,9 @@ export default function OnboardingScreen() {
   const [craftOpen, setCraftOpen] = useState(false);
   const [handleTouched, setHandleTouched] = useState(false);
   const [provider, setProvider] = useState<PaymentProvider>(
-    user?.preferredProvider === "paystack" ? "paystack" : "flutterwave"
+    user?.preferredProvider && PROVIDERS.includes(user.preferredProvider)
+      ? user.preferredProvider
+      : PROVIDERS[0]!
   );
 
   // channels state — "How clients reach you"

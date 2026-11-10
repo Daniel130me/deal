@@ -15,6 +15,7 @@ import {
   isApproved,
   paymentSchedule,
   remainingBalance,
+  PROVIDERS,
   PROVIDER_META,
   type Booking,
   type Deal,
@@ -81,22 +82,25 @@ export function ProviderMark({
   );
 }
 
-/** Both rails side by side — "payments powered by Flutterwave & Paystack". */
+/** Payment rails enabled for this deployment. */
 export function GatewayMarks({ white = false, className }: { white?: boolean; className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-3", className)}>
-      <img src="/flutterwave/logo.svg" alt="Flutterwave" className={cn("h-4 w-auto", white && "hidden")} />
-      <img
-        src="/flutterwave/logo-white.svg"
-        alt="Flutterwave"
-        className={cn("h-4 w-auto", !white && "hidden")}
-      />
-      <span className="text-[10px] font-extrabold text-muted-foreground/60">&</span>
-      <img
-        src={white ? "/paystack/logo-white.svg" : "/paystack/logo.svg"}
-        alt="Paystack"
-        className="h-4 w-auto"
-      />
+      {PROVIDERS.map((provider, index) => {
+        const meta = PROVIDER_META[provider];
+        return (
+          <span key={provider} className="contents">
+            {index > 0 ? (
+              <span className="text-[10px] font-extrabold text-muted-foreground/60">&</span>
+            ) : null}
+            <img
+              src={white ? meta.logoWhite : meta.logo}
+              alt={meta.label}
+              className="h-4 w-auto"
+            />
+          </span>
+        );
+      })}
     </span>
   );
 }

@@ -77,7 +77,12 @@ export default function PaymentCheckout({
   const [method, setMethod] = useState<PayMethod>("card");
   const [error, setError] = useState<string | null>(null);
 
-  const provider: PaymentProvider = choice ?? preferredProvider;
+  // Existing profiles can reference a rail disabled in this deployment.
+  // Fall back to the first configured rail before rendering or initializing.
+  const availablePreferredProvider = PROVIDERS.includes(preferredProvider)
+    ? preferredProvider
+    : PROVIDERS[0]!;
+  const provider: PaymentProvider = choice ?? availablePreferredProvider;
   const meta = PROVIDER_META[provider];
   const brand = BRAND[provider];
   const paymentCopy =
@@ -185,7 +190,7 @@ export default function PaymentCheckout({
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-1.5">
                           <span className="text-[14px] font-extrabold text-foreground">{pm.label}</span>
-                          {p === preferredProvider ? (
+                          {p === availablePreferredProvider ? (
                             <span className="rounded-full bg-accent px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-accent-foreground">
                               Preferred by {creatorName}
                             </span>

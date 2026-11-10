@@ -18,6 +18,12 @@ export class ConfigService {
     return this.values.NODE_ENV === 'production';
   }
 
+  /** Credential environment. Development defaults to sandbox; production
+   * must declare this explicitly during environment validation. */
+  get paymentMode(): 'test' | 'live' {
+    return this.values.PAYMENT_MODE ?? 'test';
+  }
+
   get port(): number {
     return this.values.PORT;
   }

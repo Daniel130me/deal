@@ -10,6 +10,11 @@ import { z } from 'zod';
  */
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  /** Selects provider credentials independently of NODE_ENV. Render still runs
+   *  optimized production builds when a staging deployment uses test money. In
+   *  production NODE_ENV this value must be explicit so a service can never
+   *  drift between sandbox and live charging because of an implicit default. */
+  PAYMENT_MODE: z.enum(['test', 'live']).optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   /** Maximum parsed JSON/form body size. Webhooks are signature-verified, but
    *  bounding bytes before verification also limits parser and HMAC work. */
@@ -60,13 +65,13 @@ const EnvSchema = z.object({
    *  credential (Phase 10 frontend) and is deliberately not read here. */
   FLW_SECRET_KEY: z.string().min(1),
   /** Shared secret Flutterwave echoes in the `verif-hash` header of every webhook.
-   *  Development may omit it (deliveries are then refused), but production
-   *  requires it so asynchronous payment confirmation cannot be disabled. */
-  FLW_WEBHOOK_SECRET_HASH: z.string().min(16).optional(),
+   *  Test mode may omit it (deliveries are then refused), but live mode requires
+   *  it so asynchronous payment confirmation cannot be disabled. */
+  FLW_WEBHOOK_SECRET_HASH: optionalSecret(16),
   /** Paystack secret key — the adapter is implemented (plan Phase 8) but the
    *  rail stays dormant until keys are supplied: initializing via Paystack then
    *  answers 503 PAYMENT_PROVIDER_UNAVAILABLE, nothing silently falls back. */
-  PAYSTACK_SECRET_KEY: z.string().min(1).optional(),
+  PAYSTACK_SECRET_KEY: optionalSecret(1),
 }).superRefine((values, ctx) => {
   // Production has no safe default for the browser origin: without it CORS
   // allowlists localhost and checkout redirects point off-origin. Dev/test
@@ -102,26 +107,53 @@ const EnvSchema = z.object({
 
   if (values.NODE_ENV !== 'production') return;
 
-  if (!values.FLW_WEBHOOK_SECRET_HASH) {
+  if (!values.PAYMENT_MODE) {
     ctx.addIssue({
       code: 'custom',
-      path: ['FLW_WEBHOOK_SECRET_HASH'],
-      message: 'is required in production',
+      path: ['PAYMENT_MODE'],
+      message: 'must be explicitly set to test or live in production',
     });
   }
-  if (/test/i.test(values.FLW_SECRET_KEY)) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['FLW_SECRET_KEY'],
-      message: 'must be a live Flutterwave key in production',
-    });
+
+  if (values.PAYMENT_MODE === 'test') {
+    if (!values.FLW_SECRET_KEY.startsWith('FLWSECK_TEST')) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['FLW_SECRET_KEY'],
+        message: 'must be a Flutterwave test key when PAYMENT_MODE=test',
+      });
+    }
+    if (values.PAYSTACK_SECRET_KEY && !values.PAYSTACK_SECRET_KEY.startsWith('sk_test_')) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PAYSTACK_SECRET_KEY'],
+        message: 'must be a Paystack test key when PAYMENT_MODE=test',
+      });
+    }
   }
-  if (!values.PAYSTACK_SECRET_KEY?.startsWith('sk_live_')) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['PAYSTACK_SECRET_KEY'],
-      message: 'must be a Paystack sk_live_ secret in production',
-    });
+
+  if (values.PAYMENT_MODE === 'live') {
+    if (!values.FLW_WEBHOOK_SECRET_HASH) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['FLW_WEBHOOK_SECRET_HASH'],
+        message: 'is required when PAYMENT_MODE=live',
+      });
+    }
+    if (!values.FLW_SECRET_KEY.startsWith('FLWSECK') || values.FLW_SECRET_KEY.startsWith('FLWSECK_TEST')) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['FLW_SECRET_KEY'],
+        message: 'must be a live Flutterwave key when PAYMENT_MODE=live',
+      });
+    }
+    if (values.PAYSTACK_SECRET_KEY && !values.PAYSTACK_SECRET_KEY.startsWith('sk_live_')) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PAYSTACK_SECRET_KEY'],
+        message: 'must be a Paystack live key when PAYMENT_MODE=live',
+      });
+    }
   }
 
   try {
@@ -138,6 +170,15 @@ const EnvSchema = z.object({
     // The base schema reports malformed database URLs.
   }
 });
+
+/** Dashboard bulk imports commonly preserve blank optional entries. Normalize
+ * those to absence so an intentionally disabled integration remains dormant. */
+function optionalSecret(minLength: number) {
+  return z.preprocess(
+    (value) => (typeof value === 'string' && value.trim().length === 0 ? undefined : value),
+    z.string().min(minLength).optional(),
+  );
+}
 
 export type Env = z.infer<typeof EnvSchema>;
 

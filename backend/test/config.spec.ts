@@ -14,6 +14,7 @@ const VALID_ENV = {
 const VALID_PRODUCTION_ENV = {
   ...VALID_ENV,
   NODE_ENV: 'production',
+  PAYMENT_MODE: 'live',
   FRONTEND_URL: 'https://deal.ng',
   NEON_DATABASE_URL: 'postgresql://user:pass@ep-example.neon.tech/deal?sslmode=require',
   FLW_SECRET_KEY: 'FLWSECK_LIVE-unit',
@@ -37,6 +38,7 @@ describe('env config', () => {
       PORT: '8080',
     });
     expect(parsed.NODE_ENV).toBe('production');
+    expect(parsed.PAYMENT_MODE).toBe('live');
     expect(parsed.PORT).toBe(8080);
     expect(parsed.FRONTEND_URL).toBe('https://deal.ng');
   });
@@ -113,11 +115,14 @@ describe('env config', () => {
 
   it('keeps Paystack dormant unless a secret key is supplied', () => {
     expect(parseEnv(VALID_ENV).PAYSTACK_SECRET_KEY).toBeUndefined();
+    expect(parseEnv({ ...VALID_ENV, PAYSTACK_SECRET_KEY: '' }).PAYSTACK_SECRET_KEY).toBeUndefined();
     expect(parseEnv({ ...VALID_ENV, PAYSTACK_SECRET_KEY: 'sk_test_x' }).PAYSTACK_SECRET_KEY).toBe('sk_test_x');
   });
 
-  it('requires live payment credentials, webhook verification and database TLS in production', () => {
+  it('requires an explicit payment mode and live credentials in live production', () => {
     expect(parseEnv(VALID_PRODUCTION_ENV).NODE_ENV).toBe('production');
+    const { PAYMENT_MODE: _paymentMode, ...withoutPaymentMode } = VALID_PRODUCTION_ENV;
+    expect(() => parseEnv(withoutPaymentMode)).toThrow(/PAYMENT_MODE/);
     expect(() => parseEnv({ ...VALID_PRODUCTION_ENV, FLW_WEBHOOK_SECRET_HASH: undefined })).toThrow(
       /FLW_WEBHOOK_SECRET_HASH/,
     );
@@ -133,6 +138,22 @@ describe('env config', () => {
         NEON_DATABASE_URL: 'postgresql://user:pass@ep-example.neon.tech/deal',
       }),
     ).toThrow(/NEON_DATABASE_URL/);
+  });
+
+  it('allows production runtime optimizations with deliberate test payment credentials', () => {
+    const testDeployment = {
+      ...VALID_PRODUCTION_ENV,
+      PAYMENT_MODE: 'test',
+      FLW_SECRET_KEY: 'FLWSECK_TEST-unit',
+      FLW_WEBHOOK_SECRET_HASH: undefined,
+      PAYSTACK_SECRET_KEY: undefined,
+    };
+
+    expect(parseEnv(testDeployment).PAYMENT_MODE).toBe('test');
+    expect(() => parseEnv({ ...testDeployment, FLW_SECRET_KEY: 'FLWSECK_LIVE-unit' })).toThrow(/FLW_SECRET_KEY/);
+    expect(() => parseEnv({ ...testDeployment, PAYSTACK_SECRET_KEY: 'sk_live_unit' })).toThrow(
+      /PAYSTACK_SECRET_KEY/,
+    );
   });
 });
 

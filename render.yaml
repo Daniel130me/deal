@@ -23,6 +23,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Production-optimized staging: provider calls use sandbox credentials
+      # and can never charge real money.
+      - key: PAYMENT_MODE
+        value: test
       - key: TRUST_PROXY_HOPS
         value: 1
       - key: MAX_JSON_BODY_KB
@@ -48,10 +52,6 @@ services:
         sync: false
       - key: FLW_SECRET_KEY
         sync: false
-      - key: FLW_WEBHOOK_SECRET_HASH
-        sync: false
-      - key: PAYSTACK_SECRET_KEY
-        sync: false
 
   - type: web
     name: deal-web
@@ -73,6 +73,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Match the backend's configured rails so an unavailable provider is not
+      # offered during checkout or onboarding.
+      - key: NEXT_PUBLIC_PAYMENT_PROVIDERS
+        value: flutterwave
       # Free web services cannot receive Render private-network traffic. Keep
       # browser requests same-origin, but let the Next server proxy them to the
       # API's public TLS origin instead.

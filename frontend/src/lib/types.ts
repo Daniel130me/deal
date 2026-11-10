@@ -114,10 +114,32 @@ export type PaymentMethod = "card" | "transfer" | "ussd";
 /** Payment rails DEAL supports. They process the charge; escrow is managed by DEAL itself. */
 export type PaymentProvider = "flutterwave" | "paystack";
 
-export const PROVIDERS: PaymentProvider[] = ["flutterwave", "paystack"];
+const ALL_PAYMENT_PROVIDERS: readonly PaymentProvider[] = ["flutterwave", "paystack"];
+
+/** Build-time allow-list for deployments that intentionally enable only a
+ * subset of payment rails. Invalid configuration fails the build instead of
+ * silently exposing a provider whose server credentials are unavailable. */
+export const PROVIDERS: PaymentProvider[] = paymentProvidersFromEnv(
+  process.env.NEXT_PUBLIC_PAYMENT_PROVIDERS
+);
 
 export function isPaymentProvider(value: unknown): value is PaymentProvider {
   return value === "flutterwave" || value === "paystack";
+}
+
+function paymentProvidersFromEnv(raw: string | undefined): PaymentProvider[] {
+  if (raw === undefined) return [...ALL_PAYMENT_PROVIDERS];
+
+  const entries = raw.split(",").map((provider) => provider.trim().toLowerCase());
+  const invalid = entries.filter((provider) => !isPaymentProvider(provider));
+  if (invalid.length > 0 || entries.length === 0) {
+    throw new Error("NEXT_PUBLIC_PAYMENT_PROVIDERS must contain flutterwave and/or paystack");
+  }
+
+  return entries.filter(
+    (provider, index, providers): provider is PaymentProvider =>
+      isPaymentProvider(provider) && providers.indexOf(provider) === index
+  );
 }
 
 export const PROVIDER_META: Record<

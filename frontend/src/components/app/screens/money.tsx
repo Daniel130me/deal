@@ -97,9 +97,9 @@ export default function MoneyScreen() {
   const [switching, setSwitching] = useState(false);
 
   // Preferred rail — guard older localStorage users missing the field.
-  const provider: PaymentProvider = isPaymentProvider(user?.preferredProvider)
+  const provider: PaymentProvider = isPaymentProvider(user?.preferredProvider) && PROVIDERS.includes(user.preferredProvider)
     ? user.preferredProvider
-    : "flutterwave";
+    : PROVIDERS[0]!;
 
   useEffect(() => {
     if (!user) return;
