@@ -12,7 +12,6 @@ services:
     # prevents the API from accepting traffic.
     startCommand: npm --workspace @deal/backend run db:deploy && npm --workspace @deal/backend run start
     healthCheckPath: /health/ready
-    maxShutdownDelaySeconds: 30
     buildFilter:
       paths:
         - backend/**
@@ -61,7 +60,6 @@ services:
     buildCommand: npm ci && npm --workspace @deal/frontend run build
     startCommand: npm --workspace @deal/frontend run start
     healthCheckPath: /
-    maxShutdownDelaySeconds: 30
     buildFilter:
       paths:
         - frontend/**
