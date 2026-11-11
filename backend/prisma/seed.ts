@@ -117,6 +117,7 @@ async function wipe(): Promise<void> {
   await db.dealDelivery.deleteMany();
   await db.dealDeliverable.deleteMany();
   await db.dealPayment.deleteMany();
+  await db.dealContractRevision.deleteMany();
   await db.deal.deleteMany();
   await db.booking.deleteMany();
   await db.clientRequest.deleteMany();

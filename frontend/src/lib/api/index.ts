@@ -269,6 +269,8 @@ export interface CreateDealInput {
 }
 
 export interface UpdateDealInput {
+  expectedVersion?: number;
+  changeNote?: string;
   title?: string;
   serviceTitle?: string;
   summary?: string;
@@ -290,6 +292,8 @@ export interface UpdateDealInput {
 
 function updateDealBody(body: UpdateDealInput) {
   return {
+    ...(body.expectedVersion !== undefined ? { expectedVersion: body.expectedVersion } : {}),
+    ...(body.changeNote !== undefined ? { changeNote: body.changeNote } : {}),
     ...(body.title !== undefined ? { title: body.title } : {}),
     ...(body.serviceTitle !== undefined ? { serviceTitle: body.serviceTitle } : {}),
     ...(body.summary !== undefined ? { summary: body.summary } : {}),
@@ -333,6 +337,14 @@ export const deals = {
 
   async update(id: string, body: UpdateDealInput) {
     const data = await transport.patch<{ deal: DealDetailDto }>(`/deals/${id}`, updateDealBody(body));
+    return { deal: mapDeal(data.deal) };
+  },
+
+  async revertContract(id: string, revisionId: string, expectedVersion: number) {
+    const data = await transport.post<{ deal: DealDetailDto }>(
+      `/deals/${id}/contract-revisions/${revisionId}/revert`,
+      { expectedVersion },
+    );
     return { deal: mapDeal(data.deal) };
   },
 
@@ -564,6 +576,7 @@ export const api = {
   deals: deals.list,
   deal: deals.detail,
   updateDeal: deals.update,
+  revertDealContract: deals.revertContract,
   dealAction: deals.act,
   // shared client surface
   sharedDeal: shared.deal,

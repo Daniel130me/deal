@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, Loader2, Lock, Mail, User } from "lucide-react";
+import { ArrowRight, Check, FileCheck2, Loader2, Lock, Mail, ShieldCheck, User, WalletCards } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/landing/logo";
 import { Button } from "@/components/ui/button";
@@ -63,8 +63,42 @@ export default function AuthScreen({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#edf3ef]">
-      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col bg-background px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-6">
+    <div className="min-h-screen bg-[#edf3ef] p-0 lg:p-6">
+      <main className="mx-auto grid min-h-screen w-full max-w-7xl overflow-hidden bg-background lg:min-h-[calc(100vh-3rem)] lg:grid-cols-[1.05fr_0.95fr] lg:rounded-[2rem] lg:shadow-[0_28px_80px_-36px_rgba(14,31,51,0.28)]">
+        <section className="relative hidden overflow-hidden bg-[#0b3d2b] px-12 py-12 text-white lg:flex lg:flex-col lg:justify-between">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 opacity-35"
+            style={{
+              backgroundImage:
+                "radial-gradient(36rem 24rem at 15% 5%, rgba(65,196,126,.45), transparent 60%), radial-gradient(28rem 20rem at 90% 95%, rgba(16,185,129,.28), transparent 60%)",
+            }}
+          />
+          <div className="relative">
+            <Logo wordmarkClassName="text-white" />
+            <p className="mt-20 max-w-xl text-5xl font-extrabold leading-[1.04] tracking-[-0.045em] text-balance">
+              Clear terms before the work starts.
+            </p>
+            <p className="mt-5 max-w-lg text-lg font-medium leading-relaxed text-emerald-100/90">
+              Put scope, payment stages and delivery records in one place your client can review.
+            </p>
+          </div>
+          <div className="relative grid gap-3 sm:grid-cols-3">
+            {[
+              [FileCheck2, "Written scope", "Everyone sees the same agreement."] as const,
+              [WalletCards, "Payment record", "Provider-confirmed charges stay attached."] as const,
+              [ShieldCheck, "Protected files", "Review copies stay separate from originals."] as const,
+            ].map(([Icon, title, copy]) => (
+              <div key={String(title)} className="rounded-2xl border border-white/12 bg-white/8 p-4 backdrop-blur-sm">
+                <Icon className="h-5 w-5 text-emerald-200" />
+                <p className="mt-4 text-sm font-extrabold">{String(title)}</p>
+                <p className="mt-1 text-xs font-medium leading-relaxed text-emerald-100/75">{String(copy)}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="flex min-h-screen flex-col px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-6 sm:px-12 lg:min-h-0 lg:px-16 lg:py-12">
         <button
           type="button"
           onClick={() => navigate("/")}
@@ -74,19 +108,19 @@ export default function AuthScreen({
           <Logo />
         </button>
 
-        <div className="mt-10">
-          <h1 className="text-[26px] font-extrabold leading-tight tracking-tight text-foreground">
+        <div className="my-auto w-full max-w-xl py-10 lg:py-16">
+          <div>
+          <p className="mb-3 inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-[0.14em] text-primary">
+            <Check className="h-3.5 w-3.5" /> Creator workspace
+          </p>
+          <h1 className="text-4xl font-extrabold leading-[1.06] tracking-[-0.04em] text-foreground sm:text-5xl">
             {mode === "signup" ? (
               <>
-                Create your free
-                <br />
-                <span className="text-primary">DEAL account</span>
+                Create your <span className="text-primary">DEAL account</span>
               </>
             ) : (
               <>
-                Welcome back to
-                <br />
-                <span className="text-primary">DEAL</span>
+                Welcome back to <span className="text-primary">DEAL</span>
               </>
             )}
           </h1>
@@ -95,9 +129,9 @@ export default function AuthScreen({
               ? "Send clear agreements, get paid in milestones and deliver with confidence."
               : "Log in to manage your deals, requests and payment records."}
           </p>
-        </div>
+          </div>
 
-        <form onSubmit={submit} className="mt-7 space-y-3.5">
+        <form onSubmit={submit} className="mt-8 space-y-4">
           {mode === "signup" && (
             <div className="relative">
               <User className="pointer-events-none absolute left-3.5 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-muted-foreground" />
@@ -151,7 +185,7 @@ export default function AuthScreen({
           </Button>
         </form>
 
-        <p className="mt-5 text-center text-sm font-semibold text-muted-foreground">
+        <p className="mt-6 text-center text-sm font-semibold text-muted-foreground">
           {mode === "signup" ? (
             <>
               Already have an account?{" "}
@@ -168,8 +202,9 @@ export default function AuthScreen({
             </>
           )}
         </p>
-
-      </div>
+        </div>
+        </section>
+      </main>
     </div>
   );
 }

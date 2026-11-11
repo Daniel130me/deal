@@ -618,8 +618,8 @@ function PublicFrame({
 }) {
   return (
     <div className="min-h-screen bg-[#edf3ef]">
-      <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col bg-background shadow-[0_0_60px_rgba(14,31,51,0.10)] lg:max-w-4xl">
-        <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur-md sm:px-6">
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col bg-background shadow-[0_0_60px_rgba(14,31,51,0.08)]">
+        <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur-md sm:px-8 lg:px-12">
           <Logo />
           <button
             type="button"

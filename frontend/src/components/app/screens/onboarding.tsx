@@ -249,10 +249,14 @@ export default function OnboardingScreen() {
     () => `${typeof window !== "undefined" ? window.location.origin : ""}/#/u/${user?.handle ?? ""}`,
     [user?.handle]
   );
+  const publicPathPrefix = useMemo(
+    () => `${typeof window !== "undefined" ? window.location.host : ""}/#/u/`,
+    [],
+  );
 
   return (
     <div className="flex min-h-screen flex-col bg-[#edf3ef]">
-      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col bg-background px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-5">
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col bg-background px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-5 sm:px-8 lg:px-14 lg:pt-8">
         <div className="flex items-center justify-between">
           <Logo />
           <button
@@ -346,7 +350,7 @@ export default function OnboardingScreen() {
                 <label className="text-[13px] font-extrabold text-foreground">Your deal link</label>
                 <div className="mt-1.5 flex items-center overflow-hidden rounded-xl border border-input bg-muted/60">
                   <span className="border-r border-border bg-white px-3 py-3.5 text-[13px] font-semibold text-muted-foreground">
-                    deal.ng/#/u/
+                    {publicPathPrefix}
                   </span>
                   <Input
                     value={handle}
@@ -735,7 +739,7 @@ export default function OnboardingScreen() {
             <div className="mt-2 flex items-center gap-2 rounded-xl border border-border bg-card p-2 pl-3">
               <Link2 className="h-4 w-4 shrink-0 text-muted-foreground" />
               <p className="min-w-0 flex-1 truncate text-sm font-bold text-foreground">
-                deal.ng/{user?.handle}
+                {publicLink.replace(/^https?:\/\//, "")}
               </p>
               <Button
                 type="button"

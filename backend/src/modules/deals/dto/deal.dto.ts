@@ -70,6 +70,20 @@ export class CreateDealDto {
  * (priceMinor); there is no naira float anywhere in the API.
  */
 export class UpdateDealDto {
+  /** Optional optimistic lock. First-party clients always send this value. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion?: number;
+
+  /** Short owner-facing explanation recorded with the immutable revision. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  @Transform(trim)
+  changeNote?: string;
+
   @IsOptional()
   @IsString()
   @Length(1, DEAL_TITLE_MAX, { message: 'Title must be between 1 and 200 characters' })
@@ -167,6 +181,13 @@ export class UpdateDealDto {
   @Length(3, 120, { message: 'A reachable email or phone is required' })
   @Transform(trim)
   clientContact?: string;
+}
+
+export class RevertDealContractDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
 }
 
 /** POST /deals/:id/actions — creator lifecycle actions (send / deliver / release-files). */

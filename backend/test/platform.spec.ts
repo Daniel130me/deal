@@ -196,6 +196,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('platform: disputes / review
     await db.dealDeliverable.deleteMany({ where: { deal: { creator: { handle: { in: handles } } } } });
     await db.dealDelivery.deleteMany({ where: { deal: { creator: { handle: { in: handles } } } } });
     await db.dispute.deleteMany({ where: { deal: { creator: { handle: { in: handles } } } } });
+    await db.dealContractRevision.deleteMany({ where: { deal: { creator: { handle: { in: handles } } } } });
     await db.deal.deleteMany({ where: { creator: { handle: { in: handles } } } });
     await db.clientRequest.deleteMany({ where: { creator: { handle: { in: handles } } } });
     await db.service.deleteMany({ where: { creator: { handle: { in: handles } } } });

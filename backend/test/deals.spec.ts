@@ -133,6 +133,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('deal engine (integration, e
     // FK-safe cleanup: deal children first, then deals, requests, services,
     // then the users (which cascade away profiles/channels/refresh tokens).
     await db.dealPayment.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
+    await db.dealContractRevision.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
     await db.dealEvent.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
     await db.dealDeliverable.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
     await db.dealDelivery.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
@@ -292,7 +293,13 @@ describe.skipIf(!dbConfigured || !secretConfigured)('deal engine (integration, e
 
   timed('refuses a double send, then loops via changes_requested -> re-send', async () => {
     const deal = await draftDeal(a.accessToken);
-    await call('PATCH', `/api/v1/deals/${deal.id}`, { clientName: 'Loop Client', priceMinor: 2_000_000 }, a.accessToken);
+    const prepared = await call(
+      'PATCH',
+      `/api/v1/deals/${deal.id}`,
+      { clientName: 'Loop Client', priceMinor: 2_000_000 },
+      a.accessToken,
+    );
+    const preparedDeal = (prepared.body.data as { deal: { contractVersion: number } }).deal;
     await call('POST', `/api/v1/deals/${deal.id}/actions`, { action: 'send' }, a.accessToken);
 
     const resend = await call('POST', `/api/v1/deals/${deal.id}/actions`, { action: 'send' }, a.accessToken);
@@ -305,8 +312,40 @@ describe.skipIf(!dbConfigured || !secretConfigured)('deal engine (integration, e
     expect(changes.status).toBe(200);
     expect((changes.body.data as { deal: { status: string } }).deal.status).toBe('CHANGES_REQUESTED');
 
-    const edit = await call('PATCH', `/api/v1/deals/${deal.id}`, { priceMinor: 1_500_000 }, a.accessToken);
+    const edit = await call(
+      'PATCH',
+      `/api/v1/deals/${deal.id}`,
+      { priceMinor: 1_500_000, expectedVersion: preparedDeal.contractVersion, changeNote: 'Client budget adjustment' },
+      a.accessToken,
+    );
     expect(edit.status).toBe(200); // CHANGES_REQUESTED re-opens the edit window
+    const edited = (edit.body.data as {
+      deal: { contractVersion: number; contractRevisions: Array<{ id: string; version: number }> };
+    }).deal;
+
+    // Unsaved negotiation changes never leak to the capability-link surface.
+    const stillPublished = await call('GET', `/api/v1/shared/${share.shareToken}`);
+    expect((stillPublished.body.data as { amounts: { totalMinor: number } }).amounts.totalMinor).toBe(2_000_000);
+
+    const baseline = edited.contractRevisions.find((revision) => revision.version === preparedDeal.contractVersion);
+    expect(baseline).toBeTruthy();
+    const reverted = await call(
+      'POST',
+      `/api/v1/deals/${deal.id}/contract-revisions/${baseline!.id}/revert`,
+      { expectedVersion: edited.contractVersion },
+      a.accessToken,
+    );
+    expect(reverted.status).toBe(200);
+    const restored = (reverted.body.data as { deal: { priceMinor: number; contractVersion: number } }).deal;
+    expect(restored.priceMinor).toBe(2_000_000);
+
+    const finalEdit = await call(
+      'PATCH',
+      `/api/v1/deals/${deal.id}`,
+      { priceMinor: 1_500_000, expectedVersion: restored.contractVersion },
+      a.accessToken,
+    );
+    expect(finalEdit.status).toBe(200);
 
     const resent = await call('POST', `/api/v1/deals/${deal.id}/actions`, { action: 'send' }, a.accessToken);
     expect(resent.status).toBe(200);

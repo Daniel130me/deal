@@ -7,7 +7,8 @@ import { FINAL_RELEASED_STATUSES, PREVIEW_VISIBLE_STATUSES } from '../files/file
 import { NOTIFICATION_TYPES, type NotificationType } from '../notifications/notifications.constants';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ReviewsService } from '../reviews/reviews.service';
-import { formatNairaMinor } from './deal-money';
+import { dealAmounts, formatNairaMinor } from './deal-money';
+import { parseContractSnapshot, snapshotContract } from './deal-contract';
 import { DealStateService } from './deal-state.service';
 import { DealEscrowService, type EscrowReleaseResult } from './deal-escrow.service';
 import { DealsService } from './deals.service'; // value import: injected class (Nest DI)
@@ -103,24 +104,32 @@ export class SharedDealsService {
       // (deals RESTRICT profile deletion), guarded for defence in depth.
       throw this.fail('DEAL_NOT_FOUND', 'Deal not found. Check your link.', HttpStatus.NOT_FOUND);
     }
+    // A requested-change draft is private until the creator explicitly
+    // resends it. Legacy rows without a published snapshot safely fall back
+    // to their current terms.
+    const visibleContract =
+      deal.status === DealStatus.CHANGES_REQUESTED && deal.publishedContract
+        ? parseContractSnapshot(deal.publishedContract)
+        : snapshotContract(deal);
+    const visibleAmounts = dealAmounts(deal.status, visibleContract, deal.payments);
     return {
       deal: {
         ref: deal.ref,
-        title: deal.title,
-        serviceTitle: deal.serviceTitle,
-        clientName: deal.clientName,
+        title: visibleContract.title,
+        serviceTitle: visibleContract.serviceTitle,
+        clientName: visibleContract.clientName,
         status: deal.status,
-        summary: deal.summary,
-        scope: deal.scope,
-        message: deal.message,
-        eventDate: deal.eventDate,
-        location: deal.location,
-        deliverables: deal.deliverables.map((d) => d.name),
-        revisions: deal.revisions,
-        depositPercent: deal.depositPercent,
-        installmentsCount: deal.installmentsCount,
-        startDate: deal.startDate,
-        dueDate: deal.dueDate,
+        summary: visibleContract.summary,
+        scope: visibleContract.scope,
+        message: visibleContract.message,
+        eventDate: visibleContract.eventDate ? new Date(visibleContract.eventDate) : null,
+        location: visibleContract.location,
+        deliverables: visibleContract.deliverables,
+        revisions: visibleContract.revisions,
+        depositPercent: visibleContract.depositPercent,
+        installmentsCount: visibleContract.installmentsCount,
+        startDate: visibleContract.startDate ? new Date(visibleContract.startDate) : null,
+        dueDate: visibleContract.dueDate ? new Date(visibleContract.dueDate) : null,
         createdAt: deal.createdAt,
         sentAt: deal.sentAt,
         acceptedAt: deal.acceptedAt,
@@ -129,12 +138,17 @@ export class SharedDealsService {
         approvedAt: deal.approvedAt,
         filesReleasedAt: deal.filesReleasedAt,
         completedAt: deal.completedAt,
-        events: deal.events.map((event) => ({
-          type: event.type,
-          actor: event.actor,
-          label: event.label,
-          createdAt: event.createdAt,
-        })),
+        events: deal.events
+          .filter(
+            (event) =>
+              event.type !== DealEventType.CONTRACT_UPDATED && event.type !== DealEventType.CONTRACT_REVERTED,
+          )
+          .map((event) => ({
+            type: event.type,
+            actor: event.actor,
+            label: event.label,
+            createdAt: event.createdAt,
+          })),
         deliveries: deal.deliveries.map((delivery) => ({
           note: delivery.note,
           submittedAt: delivery.submittedAt,
@@ -160,7 +174,7 @@ export class SharedDealsService {
         })),
       },
       creator: this.creators.toPublicProfile(profile),
-      amounts: deal.amounts,
+      amounts: visibleAmounts,
     };
   }
 

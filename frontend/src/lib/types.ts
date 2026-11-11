@@ -104,7 +104,9 @@ export interface DealEvent {
     | "declined"
     | "disputed"
     | "review"
-    | "dispute_resolved";
+    | "dispute_resolved"
+    | "contract_updated"
+    | "contract_reverted";
   label: string;
   actor: "creator" | "client" | "system" | "admin";
 }
@@ -241,6 +243,8 @@ export interface Deal {
   startDate: string;
   dueDate: string;
   revisions: number;
+  contractVersion: number;
+  contractHistory: DealContractRevision[];
   status: DealStatus;
   events: DealEvent[];
   payments: DealPayment[];
@@ -256,6 +260,16 @@ export interface Deal {
   filesReleasedAt?: string;
   paymentReleasedAt?: string;
   completedAt?: string;
+}
+
+export interface DealContractRevision {
+  id: string;
+  version: number;
+  reason: string;
+  createdAt: string;
+  title: string;
+  price: number;
+  dueDate: string;
 }
 
 export interface DB {

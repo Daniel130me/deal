@@ -180,6 +180,7 @@ describe.skipIf(!dbConfigured || !secretConfigured || !r2Configured)('file stora
     await db.dealDelivery.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
     await db.fileAsset.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
     await db.dispute.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
+    await db.dealContractRevision.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
     await db.deal.deleteMany({ where: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } });
     await db.user.deleteMany({ where: { email: { in: [EMAIL_A, EMAIL_B] } } });
     await db.$disconnect();

@@ -170,6 +170,8 @@ const EVENT_TYPES = new Set([
   "disputed",
   "review",
   "dispute_resolved",
+  "contract_updated",
+  "contract_reverted",
 ]);
 
 function mapEvent(event: { type: string; actor: string; label: string; createdAt: string }): DealEvent {
@@ -240,6 +242,16 @@ export function mapDeal(row: DealDetailDto): Deal {
     startDate: toDateString(row.startDate),
     dueDate: toDateString(row.dueDate),
     revisions: row.revisions,
+    contractVersion: row.contractVersion,
+    contractHistory: (row.contractRevisions ?? []).map((revision) => ({
+      id: revision.id,
+      version: revision.version,
+      reason: revision.reason ?? "Previous contract terms",
+      createdAt: revision.createdAt,
+      title: revision.snapshot.title,
+      price: toNaira(revision.snapshot.priceMinor),
+      dueDate: toDateString(revision.snapshot.dueDate),
+    })),
     status: lowerStatus(row.status) as DealStatus,
     events: (row.events ?? []).map(mapEvent),
     payments: row.payments.map(mapPayment),
@@ -361,6 +373,8 @@ export function mapSharedProjection(data: SharedProjectionDto): SharedData {
       startDate: toDateString(deal.startDate),
       dueDate: toDateString(deal.dueDate),
       revisions: deal.revisions,
+      contractVersion: 0,
+      contractHistory: [],
       status: lowerStatus(deal.status) as DealStatus,
       events: deal.events.map(mapEvent),
       payments: [],

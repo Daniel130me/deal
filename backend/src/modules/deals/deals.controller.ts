@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, UseGua
 import { CurrentCreator } from '../creators/decorators/current-creator.decorator';
 import { CreatorProfileGuard, type CreatorRef } from '../creators/guards/creator-profile.guard';
 import { DealsService } from './deals.service';
-import { CreateDealDto, DealActionDto, UpdateDealDto } from './dto/deal.dto';
+import { CreateDealDto, DealActionDto, RevertDealContractDto, UpdateDealDto } from './dto/deal.dto';
 
 /**
  * Creator's deal surface — "me"-scoped, resolved from the bearer token.
@@ -32,6 +32,17 @@ export class DealsController {
   @Patch(':id')
   async update(@CurrentCreator() creator: CreatorRef, @Param('id') id: string, @Body() dto: UpdateDealDto) {
     return { deal: await this.deals.update(creator.id, id, dto) };
+  }
+
+  @Post(':id/contract-revisions/:revisionId/revert')
+  @HttpCode(HttpStatus.OK)
+  async revertContract(
+    @CurrentCreator() creator: CreatorRef,
+    @Param('id') id: string,
+    @Param('revisionId') revisionId: string,
+    @Body() dto: RevertDealContractDto,
+  ) {
+    return { deal: await this.deals.revertContract(creator.id, id, revisionId, dto.expectedVersion) };
   }
 
   @Post(':id/actions')

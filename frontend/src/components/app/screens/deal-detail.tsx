@@ -11,9 +11,12 @@ import {
   FileWarning,
   Loader2,
   MapPin,
+  History,
   PartyPopper,
+  PencilLine,
   Plus,
   RefreshCw,
+  RotateCcw,
   Send,
   ShieldCheck,
   Wallet,
@@ -416,6 +419,26 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
     toast.success(`Nudge sent to ${deal.client.name} — they'll review it now.`);
   };
 
+  const revertContract = async (revisionId: string) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const { deal: restored } = await api.revertDealContract(
+        deal.id,
+        revisionId,
+        deal.contractVersion,
+      );
+      setDeal(restored);
+      toast.success("Previous contract restored", {
+        description: "The restored terms are private until you resend the deal.",
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't restore that version.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const latestRevisionNote =
     [...deal.events].reverse().find((e) => e.type === "changes_requested")?.label ??
     "The client requested some changes.";
@@ -754,6 +777,14 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
           <div ref={agreementRef} className="scroll-mt-24 space-y-5 lg:space-y-6">
             <AgreementSummary deal={deal} />
             <PaymentSummary deal={deal} />
+            {(deal.status === "draft" || deal.status === "changes_requested") ? (
+              <Button asChild variant="outline" className="w-full rounded-xl font-bold">
+                <HashLink href={`#/deals/${deal.id}/edit`}>
+                  <PencilLine className="mr-2 h-4 w-4" />
+                  {deal.status === "changes_requested" ? "Adjust requested terms" : "Edit agreement"}
+                </HashLink>
+              </Button>
+            ) : null}
             {deal.status === "draft" ? (
               <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-primary/40 bg-accent/60 p-4 sm:flex-row sm:items-center sm:justify-between lg:p-5">
                 <p className="text-[13px] font-bold text-accent-foreground">
@@ -770,6 +801,47 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
               </div>
             ) : null}
           </div>
+
+          {deal.contractHistory.length > 0 ? (
+            <SectionCard
+              title="Contract history"
+              right={<History className="h-4 w-4 text-muted-foreground" />}
+            >
+              <p className="mb-4 text-xs font-medium leading-relaxed text-muted-foreground">
+                DEAL keeps immutable snapshots of client-requested changes. Restoring a version
+                creates a new entry, so the audit trail remains complete.
+              </p>
+              <div className="space-y-3">
+                {deal.contractHistory.map((revision) => (
+                  <div
+                    key={revision.id}
+                    className="flex flex-col gap-3 rounded-xl bg-muted/55 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-extrabold text-foreground">
+                        Version {revision.version} · {formatNaira(revision.price)}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs font-semibold text-muted-foreground">
+                        {revision.reason} · {formatDateTime(revision.createdAt)}
+                      </p>
+                    </div>
+                    {deal.status === "draft" || deal.status === "changes_requested" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => revertContract(revision.id)}
+                        className="shrink-0 rounded-lg font-bold"
+                      >
+                        <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Restore
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          ) : null}
 
           {/* deliveries */}
           {deal.deliveries.length > 0 ? (

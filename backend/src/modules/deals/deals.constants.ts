@@ -33,6 +33,8 @@ export const MAX_INSTALLMENTS = 24;
 export const MAX_REVISIONS = 20;
 export const MAX_DELIVERABLES = 50;
 export const DELIVERABLE_NAME_MAX = 120;
+/** Owner responses keep recent contract history bounded; older rows remain in the audit table. */
+export const CONTRACT_HISTORY_LIMIT = 20;
 
 /** Text field bounds (display-friendly, storage-bounded). */
 export const DEAL_TITLE_MAX = 200;

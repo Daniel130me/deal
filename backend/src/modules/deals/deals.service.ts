@@ -8,6 +8,7 @@ import { RequestsService } from '../requests/requests.service';
 import { dealAmounts, formatNairaMinor, isFullyPaid, type DealAmounts } from './deal-money';
 import { DealStateService } from './deal-state.service';
 import {
+  CONTRACT_HISTORY_LIMIT,
   DEAL_REF_PREFIX,
   DEFAULT_DEAL_TITLE,
   DEFAULT_DELIVERY_NOTE,
@@ -18,6 +19,7 @@ import {
   SHARE_TOKEN_BYTES,
 } from './deals.constants';
 import type { CreateDealDto, UpdateDealDto } from './dto/deal.dto';
+import { contractScalarData, parseContractSnapshot, snapshotContract } from './deal-contract';
 
 /** Deal with the relations every owner-facing response carries. */
 export type DealDetail = Prisma.DealGetPayload<{
@@ -28,6 +30,7 @@ export type DealDetail = Prisma.DealGetPayload<{
     deliveries: { include: { files: true }; orderBy: { submittedAt: 'desc' } };
     request: { select: { ref: true } };
     disputes: { orderBy: { createdAt: 'desc' } };
+    contractRevisions: { orderBy: { createdAt: 'desc' }; take: 20 };
   };
 }>;
 
@@ -99,6 +102,7 @@ export class DealsService {
         deliveries: { include: { files: true }, orderBy: { submittedAt: 'desc' } },
         request: { select: { ref: true } },
         disputes: { orderBy: { createdAt: 'desc' } },
+        contractRevisions: { orderBy: { createdAt: 'desc' }, take: CONTRACT_HISTORY_LIMIT },
       },
     });
     if (!deal) {
@@ -174,7 +178,14 @@ export class DealsService {
       );
     }
 
-    const { deliverables, ...fields } = dto;
+    const { deliverables, expectedVersion, changeNote, ...fields } = dto;
+    const hasScalarChanges = Object.values(fields).some((value) => value !== undefined);
+    if (!hasScalarChanges && deliverables === undefined) {
+      throw this.fail('EMPTY_DEAL_UPDATE', 'Add at least one contract change', HttpStatus.BAD_REQUEST);
+    }
+    if (expectedVersion !== undefined && expectedVersion !== deal.contractVersion) {
+      throw this.fail('STALE_DEAL_VERSION', 'This deal changed in another session. Reload before editing.', HttpStatus.CONFLICT);
+    }
     const dateField = (value: string | null | undefined): Date | null | undefined =>
       value === undefined ? undefined : value === null ? null : calendarDateToUtc(value);
 
@@ -185,8 +196,12 @@ export class DealsService {
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      await tx.deal.update({
-        where: { id: deal.id },
+      // Draft construction has never been exposed to the client, so it does
+      // not need an audit snapshot. Once changes are requested, preserve the
+      // last sent terms before every edit so the creator can safely restore.
+      const shouldRecordRevision = deal.status === DealStatus.CHANGES_REQUESTED;
+      const updateResult = await tx.deal.updateMany({
+        where: { id: deal.id, contractVersion: expectedVersion ?? deal.contractVersion },
         data: {
           ...(fields.title !== undefined ? { title: fields.title } : {}),
           ...(fields.serviceTitle !== undefined ? { serviceTitle: fields.serviceTitle } : {}),
@@ -203,8 +218,22 @@ export class DealsService {
           ...(fields.revisions !== undefined ? { revisions: fields.revisions } : {}),
           ...(fields.clientName !== undefined ? { clientName: fields.clientName } : {}),
           ...(fields.clientContact !== undefined ? { clientContact: fields.clientContact } : {}),
+          contractVersion: { increment: 1 },
         },
       });
+      if (updateResult.count !== 1) {
+        throw this.fail('STALE_DEAL_VERSION', 'This deal changed in another session. Reload before editing.', HttpStatus.CONFLICT);
+      }
+      if (shouldRecordRevision) {
+        await tx.dealContractRevision.create({
+          data: {
+            dealId: deal.id,
+            version: deal.contractVersion,
+            snapshot: snapshotContract(deal) as unknown as Prisma.InputJsonValue,
+            reason: changeNote?.trim() || null,
+          },
+        });
+      }
       if (deliverables !== undefined) {
         await tx.dealDeliverable.deleteMany({ where: { dealId: deal.id } });
         if (deliverables.length > 0) {
@@ -212,6 +241,18 @@ export class DealsService {
             data: deliverables.map((name, position) => ({ dealId: deal.id, name, position })),
           });
         }
+      }
+      if (shouldRecordRevision) {
+        await tx.dealEvent.create({
+          data: {
+            dealId: deal.id,
+            type: DealEventType.CONTRACT_UPDATED,
+            actor: ActorType.CREATOR,
+            actorId: creatorId,
+            label: changeNote?.trim() ? `Contract updated: ${changeNote.trim()}` : 'Contract terms updated',
+            metadata: { fromVersion: deal.contractVersion, toVersion: deal.contractVersion + 1 },
+          },
+        });
       }
       // Return the full detail shape in the same transaction.
       return tx.deal.findUniqueOrThrow({
@@ -223,11 +264,70 @@ export class DealsService {
           deliveries: { include: { files: true }, orderBy: { submittedAt: 'desc' } },
           request: { select: { ref: true } },
           disputes: { orderBy: { createdAt: 'desc' } },
+          contractRevisions: { orderBy: { createdAt: 'desc' }, take: CONTRACT_HISTORY_LIMIT },
         },
       });
     });
 
     return { ...updated, amounts: this.amountsOf(updated) };
+  }
+
+  /** Restore an immutable prior contract while preserving the abandoned draft as history. */
+  async revertContract(
+    creatorId: string,
+    dealId: string,
+    revisionId: string,
+    expectedVersion: number,
+  ): Promise<DealDetail & DealWithAmounts> {
+    const deal = await this.getOwned(creatorId, dealId);
+    if (!EDITABLE_DEAL_STATUSES.includes(deal.status)) {
+      throw this.fail('DEAL_NOT_EDITABLE', 'Only drafts and requested changes can be reverted', HttpStatus.CONFLICT);
+    }
+    if (deal.contractVersion !== expectedVersion) {
+      throw this.fail('STALE_DEAL_VERSION', 'This deal changed in another session. Reload before reverting.', HttpStatus.CONFLICT);
+    }
+    const revision = await this.prisma.dealContractRevision.findFirst({
+      where: { id: revisionId, dealId, deal: { creatorId } },
+    });
+    if (!revision) {
+      throw this.fail('CONTRACT_REVISION_NOT_FOUND', 'Contract revision not found', HttpStatus.NOT_FOUND);
+    }
+    const target = parseContractSnapshot(revision.snapshot);
+
+    await this.prisma.$transaction(async (tx) => {
+      const updateResult = await tx.deal.updateMany({
+        where: { id: deal.id, contractVersion: expectedVersion },
+        data: { ...contractScalarData(target), contractVersion: { increment: 1 } },
+      });
+      if (updateResult.count !== 1) {
+        throw this.fail('STALE_DEAL_VERSION', 'This deal changed in another session. Reload before reverting.', HttpStatus.CONFLICT);
+      }
+      await tx.dealContractRevision.create({
+        data: {
+          dealId: deal.id,
+          version: deal.contractVersion,
+          snapshot: snapshotContract(deal) as unknown as Prisma.InputJsonValue,
+          reason: `Before reverting to version ${revision.version}`,
+        },
+      });
+      await tx.dealDeliverable.deleteMany({ where: { dealId: deal.id } });
+      if (target.deliverables.length > 0) {
+        await tx.dealDeliverable.createMany({
+          data: target.deliverables.map((name, position) => ({ dealId: deal.id, name, position })),
+        });
+      }
+      await tx.dealEvent.create({
+        data: {
+          dealId: deal.id,
+          type: DealEventType.CONTRACT_REVERTED,
+          actor: ActorType.CREATOR,
+          actorId: creatorId,
+          label: `Contract reverted to version ${revision.version}`,
+          metadata: { restoredVersion: revision.version, newVersion: deal.contractVersion + 1 },
+        },
+      });
+    });
+    return this.getOwned(creatorId, deal.id);
   }
 
   /** send: DRAFT|CHANGES_REQUESTED -> SENT, revalidating the offer is complete. */
@@ -237,11 +337,18 @@ export class DealsService {
       // Prototype parity: an offer without a title, client or price cannot go out.
       throw this.fail('DEAL_NOT_READY_TO_SEND', 'Add a title, client and price before sending', HttpStatus.BAD_REQUEST);
     }
-    const updated = await this.state.transition(
-      { id: deal.id, status: deal.status },
-      DealStatus.SENT,
-      { type: DealEventType.SENT, actor: ActorType.CREATOR, actorId: creatorId, label: `Deal sent to ${deal.clientName}` },
-    );
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.deal.update({
+        where: { id: deal.id },
+        data: { publishedContract: snapshotContract(deal) as unknown as Prisma.InputJsonValue },
+      });
+      return this.state.transition(
+        { id: deal.id, status: deal.status },
+        DealStatus.SENT,
+        { type: DealEventType.SENT, actor: ActorType.CREATOR, actorId: creatorId, label: `Deal sent to ${deal.clientName}` },
+        tx,
+      );
+    });
     return this.getOwned(creatorId, updated.id);
   }
 

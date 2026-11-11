@@ -121,6 +121,8 @@ enum DealEventType {
   // Phase 9: dispute closed by platform resolution (resolve or reject) —
   // carries the outcome in its label/metadata while restoring deal status.
   DISPUTE_RESOLVED
+  CONTRACT_UPDATED
+  CONTRACT_REVERTED
 }
 
 enum ActorType {
@@ -303,6 +305,11 @@ model Deal {
   depositPercent    Int
   installmentsCount Int        @default(0)
   revisions         Int        @default(0)
+  // Monotonic optimistic-lock and audit version for commercial terms.
+  contractVersion   Int        @default(1)
+  // Last contract explicitly sent to the client. While changes are being
+  // drafted, the shared page continues to render this immutable snapshot.
+  publishedContract Json?
   startDate         DateTime?
   dueDate           DateTime?
   status            DealStatus @default(DRAFT)
@@ -328,10 +335,28 @@ model Deal {
   events       DealEvent[]
   review       Review?
   disputes     Dispute[]
+  contractRevisions DealContractRevision[]
 
   @@index([creatorId])
   @@index([status])
   @@index([requestId])
+}
+
+// Immutable owner-only snapshots captured before every contract mutation.
+// Reverting restores one snapshot and creates another version; history is
+// never rewritten or deleted by application code.
+model DealContractRevision {
+  id        String   @id @default(cuid())
+  dealId    String
+  version   Int
+  snapshot  Json
+  reason    String?
+  createdAt DateTime @default(now())
+
+  deal Deal @relation(fields: [dealId], references: [id])
+
+  @@unique([dealId, version])
+  @@index([dealId, createdAt])
 }
 
 model DealDeliverable {

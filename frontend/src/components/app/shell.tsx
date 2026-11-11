@@ -157,6 +157,13 @@ function Router() {
       );
     }
     if (parts[1]) {
+      if (parts[2] === "edit") {
+        return (
+          <Suspense fallback={<ScreenLoading />}>
+            <WizardScreen requestParam={null} editDealId={parts[1]} />
+          </Suspense>
+        );
+      }
       return (
         <Suspense fallback={<ScreenLoading />}>
           <DealDetailScreen dealId={parts[1]} />

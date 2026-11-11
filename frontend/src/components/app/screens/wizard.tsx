@@ -123,7 +123,13 @@ function shareHref(type: ChannelType, url: string, text: string) {
   return `mailto:?subject=${encodeURIComponent("A deal for you on DEAL")}&body=${encodeURIComponent(text)}`;
 }
 
-export default function WizardScreen({ requestParam }: { requestParam: string | null }) {
+export default function WizardScreen({
+  requestParam,
+  editDealId = null,
+}: {
+  requestParam: string | null;
+  editDealId?: string | null;
+}) {
   const { user, navigate } = useApp();
   const requestId = requestParam?.startsWith("r-") ? requestParam.slice(2) : null;
 
@@ -133,6 +139,9 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
   const [linkedRequest, setLinkedRequest] = useState<ClientRequest | null>(null);
   const [deliverableDraft, setDeliverableDraft] = useState("");
   const [sentDeal, setSentDeal] = useState<Deal | null>(null);
+  const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
+  const [editLoading, setEditLoading] = useState(Boolean(editDealId));
+  const [changeNote, setChangeNote] = useState("");
 
   const [form, setForm] = useState<WizardState>({
     title: "",
@@ -163,7 +172,39 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
       .then((r) => r.json())
       .then((d) => setServices(d.services ?? []))
       .catch(() => undefined);
-    if (requestId) {
+    if (editDealId) {
+      api
+        .deal(editDealId)
+        .then(({ deal }) => {
+          if (deal.status !== "draft" && deal.status !== "changes_requested") {
+            throw new Error("This agreement can no longer be edited.");
+          }
+          setEditingDeal(deal);
+          setForm({
+            title: deal.title,
+            clientName: deal.client.name,
+            clientContact: deal.client.contact,
+            summary: deal.summary,
+            eventDate: deal.eventDate,
+            location: deal.location,
+            message: deal.message,
+            serviceTitle: deal.serviceTitle,
+            scope: deal.scope,
+            deliverables: deal.deliverables,
+            price: deal.price,
+            depositPercent: deal.depositPercent,
+            installmentsCount: deal.installmentsCount,
+            startDate: deal.startDate,
+            dueDate: deal.dueDate,
+            revisions: deal.revisions,
+          });
+        })
+        .catch((err) => {
+          toast.error(err instanceof Error ? err.message : "Couldn't load this deal.");
+          navigate(`/deals/${editDealId}`);
+        })
+        .finally(() => setEditLoading(false));
+    } else if (requestId) {
       api
         .requestDetail(requestId)
         .then(({ request: req, service }) => {
@@ -184,7 +225,7 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
         })
         .catch(() => undefined);
     }
-  }, [user, requestId]);
+  }, [user, requestId, editDealId, navigate]);
 
   /* craft-aware suggestions: presets for this creator's craft, minus ones already added */
   const craft = user?.craft ?? "";
@@ -248,14 +289,24 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
     }
     setBusy(true);
     try {
-      const { deal } = await api.createDeal({
-        requestId: linkedRequest?.id ?? null,
+      const deal = editingDeal
+        ? editingDeal
+        : (
+            await api.createDeal({
+              requestId: linkedRequest?.id ?? null,
+              title: form.title,
+              serviceTitle: form.serviceTitle,
+              clientName: form.clientName,
+              clientContact: form.clientContact,
+            })
+          ).deal;
+      const { deal: saved } = await api.updateDeal(deal.id, {
+        expectedVersion: deal.contractVersion,
+        changeNote: changeNote.trim() || undefined,
         title: form.title,
         serviceTitle: form.serviceTitle,
         clientName: form.clientName,
         clientContact: form.clientContact,
-      });
-      await api.updateDeal(deal.id, {
         summary: form.summary,
         eventDate: form.eventDate,
         location: form.location,
@@ -270,20 +321,32 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
         revisions: form.revisions,
       });
       if (send) {
-        const { deal: sent } = await api.dealAction(deal.id, { action: "send" });
+        const { deal: sent } = await api.dealAction(saved.id, { action: "send" });
         setSentDeal(sent);
-        toast.success("Deal sent!");
+        toast.success(editingDeal ? "Updated deal sent" : "Deal sent");
       } else {
-        toast.success("Draft saved", {
-          description: "Find it under Projects — you can finish and send it anytime.",
+        toast.success(editingDeal ? "Changes saved privately" : "Draft saved", {
+          description: editingDeal
+            ? "Your client still sees the last version you sent."
+            : "Find it under Projects — you can finish and send it anytime.",
         });
-        navigate("/deals");
+        navigate(editingDeal ? `/deals/${saved.id}` : "/deals");
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't save this deal.");
     } finally {
       setBusy(false);
     }
+  }
+
+  if (editLoading) {
+    return (
+      <AppCanvas backHref={`/deals/${editDealId}`}>
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      </AppCanvas>
+    );
   }
 
   /* ---------------- sent confirmation ---------------- */
@@ -387,10 +450,12 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
 
   /* ---------------- wizard ---------------- */
   return (
-    <AppCanvas backHref="/dashboard">
+    <AppCanvas backHref={editingDeal ? `/deals/${editingDeal.id}` : "/dashboard"}>
       <div className="flex-1 px-5 pb-10 pt-5">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-extrabold tracking-tight text-foreground">Create DEAL</h1>
+          <h1 className="text-xl font-extrabold tracking-tight text-foreground">
+            {editingDeal ? "Adjust agreement" : "Create DEAL"}
+          </h1>
           <p className="text-[13px] font-bold text-muted-foreground">
             Step {step + 1} of 4
           </p>
@@ -877,6 +942,25 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
               </p>
             </div>
 
+            {editingDeal ? (
+              <div className="rounded-2xl border border-border bg-card p-4">
+                <label htmlFor="change-note" className="text-[13px] font-extrabold text-foreground">
+                  What changed?
+                </label>
+                <p className="mt-1 text-xs font-medium text-muted-foreground">
+                  Add a short note so you and your client can identify this version.
+                </p>
+                <Textarea
+                  id="change-note"
+                  value={changeNote}
+                  onChange={(event) => setChangeNote(event.target.value)}
+                  maxLength={240}
+                  placeholder="e.g. Reduced the fee and moved delivery to 18 December"
+                  className="mt-3 min-h-24 rounded-xl bg-muted/60 font-medium"
+                />
+              </div>
+            ) : null}
+
             <div className="flex gap-3">
               <Button
                 type="button"
@@ -885,15 +969,17 @@ export default function WizardScreen({ requestParam }: { requestParam: string | 
                 onClick={() => submit(false)}
                 className="h-13 flex-1 rounded-xl font-bold"
               >
-                Save as draft
+                {editingDeal ? "Save privately" : "Save as draft"}
               </Button>
               <Button type="button" disabled={busy} onClick={() => submit(true)} className="h-13 flex-[1.4] rounded-xl font-bold">
-                {busy ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <>Send deal <PartyPopper className="ml-1 hidden h-4.5 w-4.5" /> <ArrowRight className="ml-1 h-4.5 w-4.5" /></>}
+                {busy ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <>{editingDeal ? "Save & resend" : "Send deal"} <PartyPopper className="ml-1 hidden h-4.5 w-4.5" /> <ArrowRight className="ml-1 h-4.5 w-4.5" /></>}
               </Button>
             </div>
             <p className="flex items-center justify-center gap-1.5 text-center text-xs font-semibold text-muted-foreground">
               <ArrowLeft className="hidden h-3.5 w-3.5" />
-              You can always edit and resend the deal before the client accepts it.
+              {editingDeal
+                ? "Edits stay private until you resend. Previous versions remain available to restore."
+                : "You can revise the deal after the client requests changes."}
             </p>
           </div>
         )}

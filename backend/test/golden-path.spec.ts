@@ -110,6 +110,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('golden path (integration, e
     await db.dealDelivery.deleteMany({ where: { deal: { creator: { handle: HANDLE } } } });
     await db.dealEvent.deleteMany({ where: { deal: { creator: { handle: HANDLE } } } });
     await db.dealDeliverable.deleteMany({ where: { deal: { creator: { handle: HANDLE } } } });
+    await db.dealContractRevision.deleteMany({ where: { deal: { creator: { handle: HANDLE } } } });
     await db.deal.deleteMany({ where: { creator: { handle: HANDLE } } });
     await db.clientRequest.deleteMany({ where: { creator: { handle: HANDLE } } });
     await db.service.deleteMany({ where: { creator: { handle: HANDLE } } });

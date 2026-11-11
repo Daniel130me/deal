@@ -197,6 +197,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     await db.dealEvent.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
     await db.dealDeliverable.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
     await db.dispute.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
+    await db.dealContractRevision.deleteMany({ where: { deal: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } } });
     await db.deal.deleteMany({ where: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } });
     await db.clientRequest.deleteMany({ where: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } });
     await db.service.deleteMany({ where: { creator: { handle: { in: [HANDLE_A, HANDLE_B] } } } });

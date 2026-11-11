@@ -218,6 +218,7 @@ export interface DealDetailDto {
   depositPercent: number;
   installmentsCount: number;
   revisions: number;
+  contractVersion: number;
   startDate: string | null;
   dueDate: string | null;
   status: DealStatusDto;
@@ -239,6 +240,26 @@ export interface DealDetailDto {
   events?: DealEventDto[];
   deliveries?: DealDeliveryDto[];
   request?: { ref: string } | null;
+  contractRevisions?: DealContractRevisionDto[];
+}
+
+export interface DealContractRevisionDto {
+  id: string;
+  version: number;
+  reason: string | null;
+  createdAt: string;
+  snapshot: {
+    title: string;
+    serviceTitle: string;
+    clientName: string;
+    summary: string | null;
+    priceMinor: number;
+    depositPercent: number;
+    installmentsCount: number;
+    revisions: number;
+    dueDate: string | null;
+    deliverables: string[];
+  };
 }
 
 /** The amounts block the backend computes from stored payments (kobo). */
