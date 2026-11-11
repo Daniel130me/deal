@@ -264,6 +264,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('golden path (integration, e
     const spoofed = await call('POST', `/api/v1/shared/${journey.shareToken}/payments/initialize`, {
       provider: 'FLUTTERWAVE',
       method: 'CARD',
+      customerEmail: EMAIL_CLIENT,
       amountMinor: 1,
     });
     expect(spoofed.status).toBe(400);
@@ -271,6 +272,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('golden path (integration, e
     const init = await call('POST', `/api/v1/shared/${journey.shareToken}/payments/initialize`, {
       provider: 'FLUTTERWAVE',
       method: 'CARD',
+      customerEmail: EMAIL_CLIENT,
     });
     expect(init.status).toBe(201);
     const reference = (init.body.data as { reference: string }).reference;
@@ -302,6 +304,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('golden path (integration, e
     const init = await call('POST', `/api/v1/shared/${journey.shareToken}/payments/initialize`, {
       provider: 'FLUTTERWAVE',
       method: 'CARD',
+      customerEmail: EMAIL_CLIENT,
     });
     const reference = (init.body.data as { reference: string }).reference;
     const verify = await call('POST', `/api/v1/shared/${journey.shareToken}/payments/verify`, { reference });

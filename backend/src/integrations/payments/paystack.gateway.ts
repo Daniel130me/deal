@@ -39,10 +39,9 @@ const API_BASE = 'https://api.paystack.co';
  * Money units: Paystack amounts are already MINOR units (kobo) — no conversion,
  * unlike the Flutterwave adapter.
  *
- * Email: Paystack's initialize API requires a customer email. The capability
- * surface does not collect one today, so the rail needs Phase 10 to pass the
- * client's contact through — the adapter fails loudly rather than fabricating
- * customer data (no invented emails, todo.md C3).
+ * Email: Paystack requires the payer's address. The client checkout collects
+ * and validates it before initialization; the adapter still fails closed if a
+ * non-HTTP caller omits it rather than fabricating customer data.
  */
 export class PaystackGateway implements PaymentGateway {
   readonly provider = 'PAYSTACK' as const;
@@ -51,7 +50,7 @@ export class PaystackGateway implements PaymentGateway {
 
   async initializePayment(input: InitializePaymentInput): Promise<InitializePaymentOutput> {
     if (!input.customerEmail) {
-      throw new Error('Paystack requires a customer email — not collected on this surface yet');
+      throw new Error('Paystack requires a customer email');
     }
     const body = {
       reference: input.reference,

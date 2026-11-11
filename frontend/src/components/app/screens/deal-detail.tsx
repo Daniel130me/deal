@@ -20,6 +20,7 @@ import {
   Send,
   ShieldCheck,
   Wallet,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppCanvas } from "@/components/app/chrome";
@@ -101,6 +102,29 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   zip: "application/zip",
 };
 
+/** Must remain aligned with the backend's explicit upload allowlist. */
+const UPLOAD_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/avif",
+  "image/heic",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "audio/mpeg",
+  "audio/wav",
+  "audio/mp4",
+  "application/pdf",
+  "application/zip",
+] as const;
+
+/** Formats the server can turn into compressed, watermarked review copies. */
+const REVIEW_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"] as const;
+const REVIEW_MAX_FILE_BYTES = 25 * 1024 * 1024;
+const FINAL_MAX_FILE_BYTES = 2_000_000_000;
+
 function mimeFor(file: File): string {
   if (file.type) return file.type;
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -170,16 +194,32 @@ function lifecycleSteps(deal: Deal): Step[] {
   ];
 }
 
-function MiniFileRow({ name, size }: { name: string; size: string }) {
+function fileIdentity(file: File): string {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function MiniFileRow({ file, disabled, onRemove }: { file: File; disabled: boolean; onRemove: () => void }) {
+  const extension = file.name.split(".").pop()?.slice(0, 4).toUpperCase() || "FILE";
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/50 p-3">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-[9px] font-extrabold text-primary">
-        ZIP
+        {extension}
       </span>
-      <div className="min-w-0">
-        <p className="truncate text-[13px] font-bold text-foreground">{name}</p>
-        <p className="text-xs font-semibold text-muted-foreground">{size}</p>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-bold text-foreground">{file.name}</p>
+        <p className="text-xs font-semibold text-muted-foreground">{humanFileSize(file.size)}</p>
       </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 shrink-0 rounded-lg"
+        disabled={disabled}
+        onClick={onRemove}
+        aria-label={`Remove ${file.name}`}
+      >
+        <X className="h-4 w-4" />
+      </Button>
     </div>
   );
 }
@@ -194,6 +234,10 @@ function UploadDialog({
   submitLabel,
   submitting,
   onSubmit,
+  acceptedMimeTypes,
+  formatsLabel,
+  maxSizeLabel,
+  maxSizeBytes,
   children,
 }: {
   open: boolean;
@@ -206,8 +250,14 @@ function UploadDialog({
   submitLabel: string;
   submitting: boolean;
   onSubmit: () => void;
+  acceptedMimeTypes: readonly string[];
+  formatsLabel: string;
+  maxSizeLabel: string;
+  maxSizeBytes: number;
   children?: React.ReactNode;
 }) {
+  const acceptedMimeSet = new Set(acceptedMimeTypes);
+
   return (
     <Dialog
       open={open}
@@ -232,26 +282,49 @@ function UploadDialog({
             <FileUp className="h-5 w-5 text-primary" />
             <span className="text-[13px] font-extrabold text-foreground">Choose files</span>
             <span className="text-[11px] font-medium text-muted-foreground">
-              Up to 200 MB per file · images, video, audio, PDF, ZIP
+              Up to {maxSizeLabel} per file · {formatsLabel}
             </span>
             <input
               type="file"
               multiple
+              accept={acceptedMimeTypes.join(",")}
               className="sr-only"
               disabled={submitting}
               onChange={(e) => {
-                onFilesChange(Array.from(e.target.files ?? []));
+                const selected = Array.from(e.target.files ?? []);
+                const unsupported = selected.filter((file) => !acceptedMimeSet.has(mimeFor(file)));
+                const oversized = selected.filter((file) => file.size > maxSizeBytes);
+                const empty = selected.filter((file) => file.size < 1);
+                const invalid = new Set([...unsupported, ...oversized, ...empty]);
+                const valid = selected.filter((file) => !invalid.has(file));
+                if (unsupported.length > 0) {
+                  toast.error(
+                    `${unsupported.map((file) => file.name).join(", ")} cannot be used here. Choose ${formatsLabel}.`,
+                  );
+                }
+                if (oversized.length > 0) {
+                  toast.error(`${oversized.map((file) => file.name).join(", ")} exceeds the ${maxSizeLabel} limit.`);
+                }
+                if (empty.length > 0) {
+                  toast.error(`${empty.map((file) => file.name).join(", ")} is empty and cannot be uploaded.`);
+                }
+                const known = new Set(files.map(fileIdentity));
+                onFilesChange([...files, ...valid.filter((file) => !known.has(fileIdentity(file)))]);
                 e.target.value = ""; // allow re-picking the same file after a retry
               }}
             />
           </label>
           {files.length > 0 ? (
             <div className="space-y-2.5">
-              {files.map((file, index) => (
+              <p className="text-[11px] font-bold text-muted-foreground">
+                {files.length} file{files.length === 1 ? "" : "s"} ready · choose files again to add more
+              </p>
+              {files.map((file) => (
                 <MiniFileRow
-                  key={`${file.name}-${index}`}
-                  name={file.name}
-                  size={humanFileSize(file.size)}
+                  key={fileIdentity(file)}
+                  file={file}
+                  disabled={submitting}
+                  onRemove={() => onFilesChange(files.filter((item) => fileIdentity(item) !== fileIdentity(file)))}
                 />
               ))}
             </div>
@@ -926,6 +999,10 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
         submitLabel="Submit delivery"
         submitting={busy}
         onSubmit={submitDelivery}
+        acceptedMimeTypes={REVIEW_MIME_TYPES}
+        formatsLabel="JPG, PNG, WebP or AVIF review images"
+        maxSizeLabel="25 MB"
+        maxSizeBytes={REVIEW_MAX_FILE_BYTES}
       >
         <div>
           <label htmlFor="deliver-note" className="text-[13px] font-extrabold text-foreground">
@@ -953,6 +1030,10 @@ export default function DealDetailScreen({ dealId }: { dealId: string }) {
         submitLabel="Upload & release"
         submitting={busy}
         onSubmit={submitRelease}
+        acceptedMimeTypes={UPLOAD_MIME_TYPES}
+        formatsLabel="images, video, audio, PDF or ZIP"
+        maxSizeLabel="2 GB"
+        maxSizeBytes={FINAL_MAX_FILE_BYTES}
       />
     </AppCanvas>
   );

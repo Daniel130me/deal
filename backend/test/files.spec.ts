@@ -208,6 +208,7 @@ describe.skipIf(!dbConfigured || !secretConfigured || !r2Configured)('file stora
       const { status, body } = await call('POST', '/api/v1/files/upload-url', payload, a.accessToken);
       expect(status).toBe(400);
       expect(body.error!.code).toBe('VALIDATION_ERROR');
+      expect(body.error!.message).not.toBe('Validation failed');
     }
 
     const oversized = await call(

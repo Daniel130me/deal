@@ -377,10 +377,14 @@ export const shared = {
   },
 
   /** Mint a hosted-checkout link — the amount is the server-computed next due slot. */
-  async initializePayment(token: string, body: { provider: "flutterwave" | "paystack"; method: PayMethod }) {
+  async initializePayment(
+    token: string,
+    body: { provider: "flutterwave" | "paystack"; method: PayMethod; customerEmail: string },
+  ) {
     const data = await transport.post<PaymentInitiationDto>(`/shared/${token}/payments/initialize`, {
       provider: body.provider.toUpperCase(),
       method: body.method.toUpperCase(),
+      customerEmail: body.customerEmail,
     });
     return {
       reference: data.reference,
@@ -402,6 +406,17 @@ export const shared = {
       reference: data.reference,
       paidAmount: data.payment ? data.payment.amountMinor / 100 : 0,
     };
+  },
+
+  /** Recover recent provider-confirmed attempts while webhooks are not enabled. */
+  async reconcilePayments(token: string) {
+    return transport.post<{
+      checked: number;
+      successful: number;
+      pending: number;
+      failed: number;
+      errors: number;
+    }>(`/shared/${token}/payments/reconcile`, {});
   },
 
   /** Signed, time-limited download URL for one of the deal's files. */
@@ -583,6 +598,7 @@ export const api = {
   sharedAction: shared.act,
   initializeSharedPayment: shared.initializePayment,
   verifySharedPayment: shared.verifyPayment,
+  reconcileSharedPayments: shared.reconcilePayments,
   sharedFileDownloadUrl: shared.fileDownloadUrl,
   sharedFilePreviewUrl: shared.filePreviewUrl,
   // public creator pages

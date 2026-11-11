@@ -38,4 +38,12 @@ export class SharedPaymentsController {
   async verify(@Param('token') token: string, @Body() dto: VerifyPaymentDto) {
     return this.payments.verifySharedPayment(token, dto);
   }
+
+  @Public()
+  @Throttle(RATE_LIMITS.shared.payment)
+  @Post(':token/payments/reconcile')
+  @HttpCode(HttpStatus.OK)
+  async reconcile(@Param('token') token: string) {
+    return this.payments.reconcileSharedPayments(token);
+  }
 }

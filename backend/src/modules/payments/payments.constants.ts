@@ -24,14 +24,10 @@ export const PAYMENT_REF_RANDOM_BYTES = 8;
 /** The only currency the rails are wired for (prototype scope: Nigeria). */
 export const PAYMENT_CURRENCY = 'NGN';
 
-/**
- * Flutterwave's hosted checkout requires a customer email, but the capability
- * surface does not collect the payer's email yet (Phase 10 can pass the real
- * client contact through). Until then every charge carries a stable,
- * platform-scoped address on a RESERVED TLD (.test is never routable), so the
- * rail's contract is met without inventing a deliverable identity for anyone.
- */
-export const PAYMENT_FALLBACK_EMAIL_DOMAIN = 'deal.test';
+/** Bound provider lookups when recovering payments before webhooks are enabled. */
+export const PAYMENT_RECONCILIATION_LIMIT = 3;
+/** Provider-hosted attempts older than this are not polled automatically. */
+export const PAYMENT_RECONCILIATION_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Deal statuses where money may still move. Terminal states (DECLINED,

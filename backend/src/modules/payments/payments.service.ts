@@ -26,7 +26,8 @@ import type { InitializePaymentDto, VerifyPaymentDto } from './dto/payment.dto';
 import {
   PAYABLE_DEAL_STATUSES,
   PAYMENT_CURRENCY,
-  PAYMENT_FALLBACK_EMAIL_DOMAIN,
+  PAYMENT_RECONCILIATION_LIMIT,
+  PAYMENT_RECONCILIATION_WINDOW_MS,
   PAYMENT_REF_PREFIX,
   PAYMENT_REF_RANDOM_BYTES,
 } from './payments.constants';
@@ -59,7 +60,16 @@ type TxInitMeta = Prisma.InputJsonObject & {
   slotType: PaymentType;
   slotLabel: string;
   method: PaymentMethod;
+  customerEmail: string;
 };
+
+export interface PaymentReconciliation {
+  checked: number;
+  successful: number;
+  pending: number;
+  failed: number;
+  errors: number;
+}
 
 /**
  * Payments domain boundary — owning phase 8.
@@ -111,7 +121,12 @@ export class PaymentsService {
 
     const gateway = this.gatewayFor(dto.provider);
     const reference = `${PAYMENT_REF_PREFIX[dto.provider]}-${deal.ref}-${slot.type}-${randomBytes(PAYMENT_REF_RANDOM_BYTES).toString('hex')}`;
-    const meta: TxInitMeta = { slotType: slot.type, slotLabel: slot.label, method: dto.method };
+    const meta: TxInitMeta = {
+      slotType: slot.type,
+      slotLabel: slot.label,
+      method: dto.method,
+      customerEmail: dto.customerEmail,
+    };
 
     // Record the attempt BEFORE talking to the gateway: an initialize that
     // dies mid-flight still leaves an audit row instead of vanishing.
@@ -133,8 +148,8 @@ export class PaymentsService {
         amountMinor: slot.amountMinor,
         currency: PAYMENT_CURRENCY,
         customerName: deal.clientName || undefined,
-        customerEmail: `payments+${deal.ref.toLowerCase()}@${PAYMENT_FALLBACK_EMAIL_DOMAIN}`,
-        redirectUrl: `${this.config.paymentRedirectBase}/shared/${token}`,
+        customerEmail: dto.customerEmail,
+        redirectUrl: this.config.paymentReturnUrl(token),
         title: `DEAL · ${deal.ref}`,
       });
       return {
@@ -180,6 +195,47 @@ export class PaymentsService {
       throw this.fail('PAYMENT_NOT_FOUND', 'No payment attempt with that reference on this deal', HttpStatus.NOT_FOUND);
     }
     return this.resolveTransaction(tx);
+  }
+
+  /**
+   * Temporary no-webhook recovery: re-check a small, recent set of pending
+   * attempts for this capability link. Provider verification remains the only
+   * source of truth, and successful landing is still atomic/idempotent.
+   */
+  async reconcileSharedPayments(token: string): Promise<PaymentReconciliation> {
+    const deal = await this.findDealOr404(token);
+    const cutoff = new Date(Date.now() - PAYMENT_RECONCILIATION_WINDOW_MS);
+    const pendingTransactions = await this.prisma.paymentTransaction.findMany({
+      where: {
+        dealId: deal.id,
+        verifiedAt: null,
+        gatewayStatus: 'pending',
+        createdAt: { gte: cutoff },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: PAYMENT_RECONCILIATION_LIMIT,
+    });
+
+    const summary: PaymentReconciliation = {
+      checked: pendingTransactions.length,
+      successful: 0,
+      pending: 0,
+      failed: 0,
+      errors: 0,
+    };
+    // Sequential checks bound provider pressure and make the behavior easy to
+    // reason about when several abandoned hosted pages exist for one deal.
+    for (const transaction of pendingTransactions) {
+      try {
+        const result = await this.resolveTransaction(transaction);
+        summary[result.status] += 1;
+      } catch {
+        // A transient provider failure must not destroy the pending attempt;
+        // the next page visit can safely retry it.
+        summary.errors += 1;
+      }
+    }
+    return summary;
   }
 
   // ── Webhook entry (called by WebhooksService) ───────────────────────────────

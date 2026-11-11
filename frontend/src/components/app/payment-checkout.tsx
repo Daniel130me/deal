@@ -10,9 +10,11 @@
  * redirects back to the share link, the screen verifies the charge.
  */
 import { useState } from "react";
-import { ArrowLeft, Check, Loader2, Lock } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Lock, Mail } from "lucide-react";
+import { z } from "zod";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { GatewayMarks } from "@/components/app/kit";
 import {
   PROVIDERS,
@@ -54,10 +56,11 @@ interface PaymentCheckoutProps {
   preferredProvider: PaymentProvider;
   paymentNote?: string;
   /** Parent mints the hosted-checkout link (records the payment attempt first). */
-  onPay: (method: PayMethod, provider: PaymentProvider) => Promise<{ link: string }>;
+  onPay: (method: PayMethod, provider: PaymentProvider, customerEmail: string) => Promise<{ link: string }>;
 }
 
 type Phase = "rail" | "method" | "redirect";
+const CUSTOMER_EMAIL_SCHEMA = z.string().trim().email("Enter a valid email for your receipt").max(254);
 
 export default function PaymentCheckout({
   open,
@@ -75,6 +78,7 @@ export default function PaymentCheckout({
   // null = no explicit choice yet → falls back to the creator's preferred rail on every open.
   const [choice, setChoice] = useState<PaymentProvider | null>(null);
   const [method, setMethod] = useState<PayMethod>("card");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   // Existing profiles can reference a rail disabled in this deployment.
@@ -93,6 +97,7 @@ export default function PaymentCheckout({
     setPhase("rail");
     setChoice(null);
     setMethod("card");
+    setCustomerEmail("");
     setError(null);
   }
 
@@ -107,9 +112,14 @@ export default function PaymentCheckout({
   /** Mint the hosted link, then hand the browser to the rail. */
   async function startRedirect() {
     setError(null);
+    const parsedEmail = CUSTOMER_EMAIL_SCHEMA.safeParse(customerEmail);
+    if (!parsedEmail.success) {
+      setError(parsedEmail.error.issues[0]?.message ?? "Enter a valid email for your receipt.");
+      return;
+    }
     setPhase("redirect");
     try {
-      const { link } = await onPay(method, provider);
+      const { link } = await onPay(method, provider, parsedEmail.data);
       window.location.assign(link);
       // Navigation is async — stay on the "redirecting" screen until it happens.
     } catch (err) {
@@ -272,6 +282,31 @@ export default function PaymentCheckout({
                 <Lock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <p className="text-[12px] font-semibold leading-relaxed text-foreground">
                   {paymentCopy}
+                </p>
+              </div>
+
+              <div className="mt-3.5">
+                <label htmlFor="payment-email" className="text-[12px] font-extrabold text-foreground">
+                  Receipt email
+                </label>
+                <div className="relative mt-1.5">
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="payment-email"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    required
+                    maxLength={254}
+                    value={customerEmail}
+                    onChange={(event) => setCustomerEmail(event.target.value)}
+                    placeholder="you@example.com"
+                    className="h-11 rounded-xl bg-white pl-10 font-semibold"
+                    aria-invalid={Boolean(error) && !CUSTOMER_EMAIL_SCHEMA.safeParse(customerEmail).success}
+                  />
+                </div>
+                <p className="mt-1.5 text-[11px] font-medium text-muted-foreground">
+                  {meta.label} uses this for checkout updates and any receipt it sends.
                 </p>
               </div>
 

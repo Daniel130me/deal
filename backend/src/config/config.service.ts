@@ -78,4 +78,15 @@ export class ConfigService {
     // the explicit primary frontend (documented in .env.example).
     return this.corsOrigins[0]!;
   }
+
+  /**
+   * Real HTTP callback understood by Next.js. The callback then moves the
+   * browser into the hash-routed client screen. Payment providers must never
+   * be pointed directly at a hash-only SPA route or an unhandled /shared path.
+   */
+  paymentReturnUrl(shareToken: string): string {
+    const url = new URL(this.paymentRedirectBase);
+    url.pathname = `/payment-return/${encodeURIComponent(shareToken)}`;
+    return url.toString();
+  }
 }

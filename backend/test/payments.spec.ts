@@ -3,7 +3,7 @@ import type { INestApplication } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { ConfigService } from '../src/config/config.service';
 import { FlutterwaveGateway } from '../src/integrations/payments/flutterwave.gateway';
-import type { VerifiedPayment } from '../src/integrations/payments/payment-gateway';
+import type { InitializePaymentInput, VerifiedPayment } from '../src/integrations/payments/payment-gateway';
 import { createApp } from '../src/app';
 import { NOTIFICATION_TYPES } from '../src/modules/notifications/notifications.constants';
 
@@ -49,6 +49,7 @@ const EMAIL_B = `pay-test-${RUN}-b@deal.test`;
 const PASSWORD = 'CorrectHorse1!';
 const HANDLE_A = `payer-${RUN36}`;
 const HANDLE_B = `rail-b-${RUN36}`;
+const RECEIPT_EMAIL = `client-${RUN}@example.com`;
 
 interface Envelope<T> {
   success: boolean;
@@ -86,6 +87,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
   let verifyStatus: VerifiedPayment['status'] = 'successful';
   let verifyAmountOverride: number | null = null;
   let verifyCurrencyOverride: string | null = null;
+  let lastInitializeInput: InitializePaymentInput | null = null;
 
   /** WebhookEvent rows created by this run — for scoped cleanup. */
   const webhookEventIds = new Set<string>();
@@ -136,7 +138,11 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
   };
 
   const initialize = async (shareToken: string, provider = 'FLUTTERWAVE', method = 'CARD') =>
-    call('POST', `/api/v1/shared/${shareToken}/payments/initialize`, { provider, method });
+    call('POST', `/api/v1/shared/${shareToken}/payments/initialize`, {
+      provider,
+      method,
+      customerEmail: RECEIPT_EMAIL,
+    });
 
   const verify = async (shareToken: string, reference: string) =>
     call('POST', `/api/v1/shared/${shareToken}/payments/verify`, { reference });
@@ -158,7 +164,10 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     // adapter instance inside the real app. Everything behind it (pipeline,
     // escrow, state machine, idempotency) runs for real.
     flw = app.get(FlutterwaveGateway);
-    flw.initializePayment = async (input) => ({ link: `https://checkout.flutterwave.test/${input.reference}` });
+    flw.initializePayment = async (input) => {
+      lastInitializeInput = input;
+      return { link: `https://checkout.flutterwave.test/${input.reference}` };
+    };
     flw.verifyPayment = async (reference: string) => {
       const row = await db.paymentTransaction.findUnique({ where: { providerRef: reference } });
       return {
@@ -218,6 +227,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     const spoofedField = await call('POST', `/api/v1/shared/${deal.shareToken}/payments/initialize`, {
       provider: 'FLUTTERWAVE',
       method: 'CARD',
+      customerEmail: RECEIPT_EMAIL,
       amountMinor: 1, // client-supplied amounts are forbidden — server computes
     });
     expect(spoofedField.status).toBe(400);
@@ -225,8 +235,15 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     const bogusRail = await call('POST', `/api/v1/shared/${deal.shareToken}/payments/initialize`, {
       provider: 'PAYPAL',
       method: 'CARD',
+      customerEmail: RECEIPT_EMAIL,
     });
     expect(bogusRail.status).toBe(400);
+    const invalidEmail = await call('POST', `/api/v1/shared/${deal.shareToken}/payments/initialize`, {
+      provider: 'FLUTTERWAVE',
+      method: 'CARD',
+      customerEmail: 'not-an-email',
+    });
+    expect(invalidEmail.status).toBe(400);
   });
 
   timed('refuses payment on a DRAFT deal (terms not yet agreed)', async () => {
@@ -245,9 +262,31 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
     expect(data.amountMinor).toBe(depositOf(4_000_000));
     expect(data.label).toBe('Deposit (50%)');
     expect(data.link).toContain(data.reference);
+    expect(lastInitializeInput?.customerEmail).toBe(RECEIPT_EMAIL);
+    expect(lastInitializeInput?.redirectUrl).toBe(
+      `${new URL(process.env.FRONTEND_URL ?? 'http://localhost:3000').origin}/payment-return/${deal.shareToken}`,
+    );
     const row = await db.paymentTransaction.findUnique({ where: { providerRef: data.reference } });
     expect(row?.gatewayStatus).toBe('pending');
     expect(row?.verifiedAt).toBeNull();
+    expect((row?.raw as { init?: { customerEmail?: string } } | null)?.init?.customerEmail).toBe(RECEIPT_EMAIL);
+  });
+
+  timed('reconciles a recent pending checkout without relying on a webhook', async () => {
+    const deal = await sendDeal(a.accessToken, 4_000_000);
+    const init = await initialize(deal.shareToken);
+    expect(init.status).toBe(201);
+
+    const reconciled = await call('POST', `/api/v1/shared/${deal.shareToken}/payments/reconcile`, {});
+    expect(reconciled.status).toBe(200);
+    expect(reconciled.body.data).toMatchObject({
+      checked: 1,
+      successful: 1,
+      pending: 0,
+      failed: 0,
+      errors: 0,
+    });
+    expect(await db.dealPayment.count({ where: { dealId: deal.id } })).toBe(1);
   });
 
   timed('records an audited failure when the rail refuses the charge (502, tx row failed)', async () => {
@@ -650,7 +689,7 @@ describe.skipIf(!dbConfigured || !secretConfigured)('payment rails + webhook pip
       const res = await fetch(`${baseUrl}/api/v1/shared/${deal.shareToken}/payments/initialize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip },
-        body: JSON.stringify({ provider: 'FLUTTERWAVE', method: 'CARD' }),
+        body: JSON.stringify({ provider: 'FLUTTERWAVE', method: 'CARD', customerEmail: RECEIPT_EMAIL }),
       });
       const body = (await res.json()) as Envelope<Record<string, unknown>>;
       if (res.status === 429) {
@@ -682,7 +721,7 @@ describe.skipIf(process.env.RUN_LIVE_GATEWAY_TESTS !== 'true' || !dbConfigured |
         currency: 'NGN',
         customerEmail: 'smoke@deal.test',
         customerName: 'Smoke Test',
-        redirectUrl: `${config.paymentRedirectBase}/shared/smoke`,
+        redirectUrl: config.paymentReturnUrl('smoke-test-token-1234567890'),
         title: 'DEAL · smoke',
       });
       expect(link.startsWith('https://')).toBe(true);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   BadgeCheck,
@@ -64,6 +64,19 @@ function pendingPaymentKey(token: string) {
   return `deal_pending_payment:${token}`;
 }
 
+const PAYMENT_VERIFY_ATTEMPTS = 6;
+const PAYMENT_VERIFY_DELAY_MS = 2_000;
+
+function paymentReturnReference(): string | null {
+  const search = new URLSearchParams(window.location.search);
+  const direct = search.get("tx_ref") ?? search.get("reference");
+  if (direct) return direct;
+  const hashQuery = window.location.hash.split("?", 2)[1];
+  if (!hashQuery) return null;
+  const hashParams = new URLSearchParams(hashQuery);
+  return hashParams.get("tx_ref") ?? hashParams.get("reference");
+}
+
 export default function ClientDealScreen({ token }: { token: string }) {
   const { user } = useApp();
   const [result, setResult] = useState<{
@@ -82,6 +95,7 @@ export default function ClientDealScreen({ token }: { token: string }) {
   const [approveOpen, setApproveOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<DealFile | null>(null);
   const [rating, setRating] = useState(5);
+  const recoveryTokenRef = useRef<string | null>(null);
 
   /** Released finals use short-lived attachment URLs; previews use the
    * separate server-generated derivative dialog below. */
@@ -149,9 +163,10 @@ export default function ClientDealScreen({ token }: { token: string }) {
   async function pay(
     kind: PayKind,
     method: PayMethod,
-    provider: PaymentProvider
+    provider: PaymentProvider,
+    customerEmail: string,
   ): Promise<{ link: string }> {
-    const init = await api.initializeSharedPayment(token, { provider, method });
+    const init = await api.initializeSharedPayment(token, { provider, method, customerEmail });
     sessionStorage.setItem(pendingPaymentKey(token), JSON.stringify({ reference: init.reference }));
     return { link: init.link };
   }
@@ -164,10 +179,11 @@ export default function ClientDealScreen({ token }: { token: string }) {
    */
   useEffect(() => {
     if (!data) return;
-    const params = new URLSearchParams(window.location.search);
-    const fromUrl = params.get("tx_ref") ?? params.get("reference");
+    if (recoveryTokenRef.current === token) return;
+    recoveryTokenRef.current = token;
+    const fromUrl = paymentReturnReference();
     let reference = fromUrl ?? "";
-    let pending = sessionStorage.getItem(pendingPaymentKey(token));
+    const pending = sessionStorage.getItem(pendingPaymentKey(token));
     if (!reference && pending) {
       try {
         reference = (JSON.parse(pending) as { reference?: string }).reference ?? "";
@@ -175,27 +191,46 @@ export default function ClientDealScreen({ token }: { token: string }) {
         reference = "";
       }
     }
-    if (!reference) return;
-    if (pending) {
-      sessionStorage.removeItem(pendingPaymentKey(token));
-      pending = null;
-    }
-    // Clean the rail's query params out of the address bar (they sit before
-    // the #/c/:token hash, which IS the SPA route).
+    // Normalize either callback shape into the permanent capability URL.
     if (fromUrl) {
-      window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+      window.history.replaceState(null, "", `${window.location.pathname}#/c/${encodeURIComponent(token)}`);
     }
     let alive = true;
     (async () => {
       try {
-        const result = await api.verifySharedPayment(token, reference);
+        if (!reference) {
+          const recovered = await api.reconcileSharedPayments(token);
+          if (!alive || recovered.checked === 0) return;
+          const fresh = await api.sharedDeal(token);
+          if (!alive) return;
+          setResult({ token, data: fresh, error: null });
+          if (recovered.successful > 0) {
+            toast.success("Payment confirmed and restored to this agreement.");
+          } else if (recovered.pending > 0 || recovered.errors > 0) {
+            toast.info("A recent payment is still processing. DEAL will check again when you reopen this link.");
+          }
+          return;
+        }
+
+        let result = await api.verifySharedPayment(token, reference);
+        for (let attempt = 1; alive && result.status === "pending" && attempt < PAYMENT_VERIFY_ATTEMPTS; attempt += 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, PAYMENT_VERIFY_DELAY_MS));
+          if (!alive) return;
+          result = await api.verifySharedPayment(token, reference);
+        }
         if (!alive) return;
         const fresh = await api.sharedDeal(token);
         if (!alive) return;
         setResult({ token, data: fresh, error: null });
-        if (result.status === "successful") toast.success("Payment confirmed — thank you!");
-        else if (result.status === "pending") toast.info("Payment is still processing — check back shortly.");
-        else toast.error("The payment didn't go through — no money was taken.");
+        if (result.status === "successful") {
+          sessionStorage.removeItem(pendingPaymentKey(token));
+          toast.success("Payment confirmed — thank you!");
+        } else if (result.status === "pending") {
+          toast.info("Payment is still processing. Keep this link and check again shortly.");
+        } else {
+          sessionStorage.removeItem(pendingPaymentKey(token));
+          toast.error("The payment didn't go through — no money was taken.");
+        }
       } catch (err) {
         if (!alive) return;
         toast.error(err instanceof Error ? err.message : "Couldn't verify the payment.");
@@ -966,8 +1001,10 @@ export default function ClientDealScreen({ token }: { token: string }) {
             ? "The work is already approved — this payment will be recorded against the completed agreement."
             : undefined
         }
-        onPay={(method, provider) =>
-          payCtx ? pay(payCtx.kind, method, provider) : Promise.reject(new Error("Nothing to pay."))
+        onPay={(method, provider, customerEmail) =>
+          payCtx
+            ? pay(payCtx.kind, method, provider, customerEmail)
+            : Promise.reject(new Error("Nothing to pay."))
         }
       />
 

@@ -1,5 +1,6 @@
 import { PaymentMethod, PaymentProvider } from '@prisma/client';
-import { IsIn, IsString, Length } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsEmail, IsIn, IsString, Length, MaxLength } from 'class-validator';
 
 /**
  * POST /shared/:token/payments/initialize — the client's checkout choices.
@@ -14,6 +15,12 @@ export class InitializePaymentDto {
   /** How the customer intends to pay (card / transfer / USSD) — recorded for the rail's checkout and audit. */
   @IsIn(Object.values(PaymentMethod), { message: 'Unsupported payment method' })
   method!: PaymentMethod;
+
+  /** Real payer address passed to the hosted rail for receipts and support. */
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+  @IsEmail({}, { message: 'Enter a valid email for the payment receipt' })
+  @MaxLength(254, { message: 'Email is too long' })
+  customerEmail!: string;
 }
 
 /**

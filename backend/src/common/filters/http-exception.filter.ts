@@ -38,7 +38,11 @@ function describeError(exception: unknown): DescribedError {
     if (typeof response === 'string') {
       message = response;
     } else if (Array.isArray((response as { message?: unknown }).message)) {
-      message = 'Validation failed';
+      const validationMessages = (response as { message: unknown[] }).message;
+      // class-validator messages are authored server-side and safe to expose.
+      // Returning the first concrete failure lets clients correct the request
+      // instead of receiving the unactionable generic "Validation failed".
+      message = validationMessages.find((item): item is string => typeof item === 'string') ?? 'Validation failed';
     } else {
       const body = response as { message?: string; code?: string };
       message = body.message ?? exception.message;
