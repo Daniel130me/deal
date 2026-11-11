@@ -73,6 +73,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Render must reach Next through every network interface. Without this,
+      # the standalone server may bind to a free-tier instance hostname.
+      - key: HOSTNAME
+        value: 0.0.0.0
       # Match the backend's configured rails so an unavailable provider is not
       # offered during checkout or onboarding.
       - key: NEXT_PUBLIC_PAYMENT_PROVIDERS
