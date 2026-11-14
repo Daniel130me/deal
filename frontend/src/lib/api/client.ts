@@ -19,6 +19,9 @@
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 const API_PORT = process.env.NEXT_PUBLIC_API_PORT;
+const SAME_ORIGIN_API_BASE_URL = "/api/v1";
+const READINESS_CACHE_MS = 30_000;
+const TRANSIENT_UPSTREAM_STATUSES = new Set([502, 503, 504]);
 
 export type ApiErrorCode = string;
 
@@ -63,6 +66,48 @@ export function bindTokenStore(store: {
 /* ---- refresh single-flight: parallel 401s share ONE refresh call ---- */
 
 let refreshInFlight: Promise<boolean> | null = null;
+let readinessInFlight: Promise<void> | null = null;
+let lastReadyAt = 0;
+
+async function probeApiReadiness(): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch("/api/health", {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError("NETWORK_ERROR", "Can't reach DEAL right now. Check your connection.", 0);
+  }
+
+  const body = (await response.json().catch(() => null)) as ErrorEnvelope | null;
+  if (!response.ok) {
+    throw new ApiError(
+      body?.error.code ?? "SERVICE_UNAVAILABLE",
+      body?.error.message ?? "DEAL is unavailable right now. Please try again in a moment.",
+      response.status,
+    );
+  }
+
+  lastReadyAt = Date.now();
+}
+
+/**
+ * Same-origin deployments use a server-side readiness gate to wake a sleeping
+ * API before sending credentials or other mutation bodies. The short cache
+ * avoids adding a health request to every API call during normal use.
+ */
+async function ensureApiReady(): Promise<void> {
+  if (API_BASE_URL !== SAME_ORIGIN_API_BASE_URL) return;
+  if (Date.now() - lastReadyAt < READINESS_CACHE_MS) return;
+
+  if (!readinessInFlight) {
+    readinessInFlight = probeApiReadiness().finally(() => {
+      readinessInFlight = null;
+    });
+  }
+  await readinessInFlight;
+}
 
 async function refreshSession(): Promise<boolean> {
   const legacyRefreshToken = readLegacyRefreshToken();
@@ -133,14 +178,21 @@ async function requestOnce<T>(path: string, init: RequestInit): Promise<T> {
   if (res.ok && body && body.success) return body.data;
 
   const error = body && !body.success ? body.error : undefined;
+  if (TRANSIENT_UPSTREAM_STATUSES.has(res.status)) {
+    lastReadyAt = 0;
+  }
   throw new ApiError(
     error?.code ?? `HTTP_${res.status}`,
-    error?.message ?? "Something went wrong. Please try again.",
+    error?.message ??
+      (TRANSIENT_UPSTREAM_STATUSES.has(res.status)
+        ? "DEAL is temporarily unavailable. Please try again in a moment."
+        : "Something went wrong. Please try again."),
     res.status,
   );
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  await ensureApiReady();
   try {
     return await requestOnce<T>(path, init);
   } catch (err) {
