@@ -21,6 +21,8 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 const API_PORT = process.env.NEXT_PUBLIC_API_PORT;
 const SAME_ORIGIN_API_BASE_URL = "/api/v1";
 const READINESS_CACHE_MS = 30_000;
+const READINESS_PROBE_TIMEOUT_MS = 12_000;
+const READINESS_RETRY_DELAY_MS = 4_000;
 const TRANSIENT_UPSTREAM_STATUSES = new Set([502, 503, 504]);
 
 export type ApiErrorCode = string;
@@ -69,27 +71,67 @@ let refreshInFlight: Promise<boolean> | null = null;
 let readinessInFlight: Promise<void> | null = null;
 let lastReadyAt = 0;
 
-async function probeApiReadiness(): Promise<void> {
-  let response: Response;
-  try {
-    response = await fetch("/api/health", {
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ApiError("NETWORK_ERROR", "Can't reach DEAL right now. Check your connection.", 0);
-  }
+export interface ApiReadinessSnapshot {
+  phase: "idle" | "checking" | "waking";
+  startedAt: number | null;
+  attempt: number;
+}
 
-  const body = (await response.json().catch(() => null)) as ErrorEnvelope | null;
-  if (!response.ok) {
-    throw new ApiError(
-      body?.error.code ?? "SERVICE_UNAVAILABLE",
-      body?.error.message ?? "DEAL is unavailable right now. Please try again in a moment.",
-      response.status,
-    );
-  }
+const IDLE_READINESS: ApiReadinessSnapshot = {
+  phase: "idle",
+  startedAt: null,
+  attempt: 0,
+};
 
-  lastReadyAt = Date.now();
+let readinessSnapshot = IDLE_READINESS;
+const readinessListeners = new Set<() => void>();
+
+export function getApiReadinessSnapshot(): ApiReadinessSnapshot {
+  return readinessSnapshot;
+}
+
+export function subscribeToApiReadiness(listener: () => void): () => void {
+  readinessListeners.add(listener);
+  return () => readinessListeners.delete(listener);
+}
+
+function publishReadiness(snapshot: ApiReadinessSnapshot): void {
+  readinessSnapshot = snapshot;
+  readinessListeners.forEach((listener) => listener());
+}
+
+function readinessDelay(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, READINESS_RETRY_DELAY_MS));
+}
+
+async function waitForApiReadiness(): Promise<void> {
+  const startedAt = Date.now();
+  let attempt = 0;
+  publishReadiness({ phase: "checking", startedAt, attempt });
+
+  // A free service may be paused for an extended period. Each individual
+  // probe is bounded so the UI stays responsive, but the overall wait is not.
+  for (;;) {
+    attempt += 1;
+    try {
+      const response = await fetch("/api/health", {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(READINESS_PROBE_TIMEOUT_MS),
+      });
+      if (response.ok) {
+        lastReadyAt = Date.now();
+        publishReadiness(IDLE_READINESS);
+        return;
+      }
+    } catch {
+      // Network recovery and service wake-up use the same bounded retry path.
+    }
+
+    publishReadiness({ phase: "waking", startedAt, attempt });
+    await readinessDelay();
+    publishReadiness({ phase: "checking", startedAt, attempt });
+  }
 }
 
 /**
@@ -102,7 +144,7 @@ async function ensureApiReady(): Promise<void> {
   if (Date.now() - lastReadyAt < READINESS_CACHE_MS) return;
 
   if (!readinessInFlight) {
-    readinessInFlight = probeApiReadiness().finally(() => {
+    readinessInFlight = waitForApiReadiness().finally(() => {
       readinessInFlight = null;
     });
   }

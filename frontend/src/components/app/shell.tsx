@@ -2,6 +2,7 @@
 
 import { Component, Suspense, lazy } from "react";
 import { AppProvider, useApp } from "@/components/app/context";
+import { ServiceWakeOverlay } from "@/components/app/service-wake-overlay";
 import { Landing } from "@/components/landing/landing";
 import { Loader2 } from "lucide-react";
 
@@ -184,6 +185,7 @@ function Router() {
 export function AppShell() {
   return (
     <AppProvider>
+      <ServiceWakeOverlay />
       <RouteErrorBoundary>
         <Router />
       </RouteErrorBoundary>

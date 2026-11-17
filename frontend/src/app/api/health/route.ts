@@ -3,21 +3,15 @@ import { NextResponse } from "next/server";
 import { dealApiOrigin } from "@/lib/server/deal-api-origin";
 
 const READINESS_PATH = "/health/ready";
-const MAX_READINESS_ATTEMPTS = 7;
 const READINESS_ATTEMPT_TIMEOUT_MS = 5_000;
-const READINESS_RETRY_DELAY_MS = 1_000;
 const READY_CACHE_MS = 30_000;
-const UNAVAILABLE_CACHE_MS = 5_000;
+const UNAVAILABLE_CACHE_MS = 2_000;
 
 let readinessCheckInFlight: Promise<boolean> | null = null;
 let lastReadinessResult = false;
 let lastReadinessCheckAt = 0;
 
 export const dynamic = "force-dynamic";
-
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
 
 async function isApiReady(origin: string): Promise<boolean> {
   try {
@@ -32,26 +26,16 @@ async function isApiReady(origin: string): Promise<boolean> {
   }
 }
 
-async function runReadinessChecks(origin: string): Promise<boolean> {
-  for (let attempt = 1; attempt <= MAX_READINESS_ATTEMPTS; attempt += 1) {
-    if (await isApiReady(origin)) return true;
-    if (attempt < MAX_READINESS_ATTEMPTS) {
-      await delay(READINESS_RETRY_DELAY_MS);
-    }
-  }
-  return false;
-}
-
 async function ensureUpstreamReady(origin: string): Promise<boolean> {
   const cacheLifetime = lastReadinessResult ? READY_CACHE_MS : UNAVAILABLE_CACHE_MS;
   if (Date.now() - lastReadinessCheckAt < cacheLifetime) {
     return lastReadinessResult;
   }
 
-  // Collapse concurrent browser requests into one bounded upstream probe loop.
+  // Collapse concurrent browser requests into one bounded upstream probe.
   // This protects the API from a thundering herd while a free instance wakes.
   if (!readinessCheckInFlight) {
-    readinessCheckInFlight = runReadinessChecks(origin)
+    readinessCheckInFlight = isApiReady(origin)
       .then((ready) => {
         lastReadinessResult = ready;
         lastReadinessCheckAt = Date.now();
@@ -84,7 +68,7 @@ export async function GET(): Promise<NextResponse> {
       success: false,
       error: {
         code: "SERVICE_UNAVAILABLE",
-        message: "DEAL is taking longer than expected to start. Please try again in a moment.",
+        message: "DEAL is still starting. This page will keep checking automatically.",
       },
     },
     {
